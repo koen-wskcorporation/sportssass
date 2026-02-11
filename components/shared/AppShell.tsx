@@ -17,6 +17,10 @@ type AppShellProps = {
 export function AppShell({ orgContext, children }: AppShellProps) {
   const pathname = usePathname();
   const tools = getToolsForRole(orgContext.membershipRole);
+  const encodedOrgSlug = encodeURIComponent(orgContext.orgSlug);
+  const workspaceHref = `/app/sponsors/manage?org=${encodedOrgSlug}`;
+  const settingsHref = `/org/${orgContext.orgSlug}/settings`;
+  const brandingHref = `${settingsHref}/branding`;
 
   const toolsByGroup = tools.reduce<Record<string, typeof tools>>((groupMap, tool) => {
     groupMap[tool.navGroup] = groupMap[tool.navGroup] ?? [];
@@ -27,7 +31,7 @@ export function AppShell({ orgContext, children }: AppShellProps) {
   return (
     <div className="min-h-screen md:grid md:grid-cols-[260px_1fr]">
       <aside className="sticky top-0 hidden h-screen flex-col border-r bg-surface p-4 md:flex">
-        <Link className="rounded-md px-2 py-1 font-display text-xl font-bold" href={`/app/org/${orgContext.orgSlug}`}>
+        <Link className="rounded-md px-2 py-1 font-display text-xl font-bold" href={workspaceHref}>
           Platform
         </Link>
         <div className="mt-5 rounded-md border bg-surface-alt p-3">
@@ -43,21 +47,21 @@ export function AppShell({ orgContext, children }: AppShellProps) {
             <Link
               className={cn(
                 "block rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-surface-alt",
-                pathname === `/app/org/${orgContext.orgSlug}` && "bg-surface-alt"
+                pathname.startsWith("/app/sponsors/manage") && "bg-surface-alt"
               )}
-              href={`/app/org/${orgContext.orgSlug}`}
+              href={workspaceHref}
             >
-              Overview
+              Sponsorships
             </Link>
             {hasPermissions(orgContext.membershipRole, ["org.branding.read"]) ? (
               <Link
                 className={cn(
                   "mt-1 block rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-surface-alt",
-                  pathname === `/app/org/${orgContext.orgSlug}/settings/branding` && "bg-surface-alt"
+                  pathname.startsWith(settingsHref) && "bg-surface-alt"
                 )}
-                href={`/app/org/${orgContext.orgSlug}/settings/branding`}
+                href={brandingHref}
               >
-                Branding Settings
+                Settings
               </Link>
             ) : null}
           </div>
@@ -68,7 +72,8 @@ export function AppShell({ orgContext, children }: AppShellProps) {
               <div className="space-y-1">
                 {groupedTools.map((tool) => {
                   const href = resolveToolRoute(tool.routes.appBase, orgContext.orgSlug);
-                  const isActive = pathname.startsWith(href);
+                  const toolPath = href.split("?")[0];
+                  const isActive = pathname.startsWith(toolPath);
 
                   return (
                     <Link

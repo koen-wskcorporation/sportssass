@@ -4,19 +4,18 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Textarea } from "@/components/ui/textarea";
-import { resolvePublicOrg } from "@/lib/tenancy/resolveOrg";
+import type { PublicOrgContext } from "@/lib/tenancy/types";
 import { submitSponsorInterestAction } from "@/modules/sponsors/actions";
 
-export async function PublicSponsorPage({ orgSlug }: { orgSlug: string }) {
-  const org = await resolvePublicOrg(orgSlug);
-  const submitAction = submitSponsorInterestAction.bind(null, orgSlug);
+export function PublicSponsorPage({ orgContext }: { orgContext: PublicOrgContext }) {
+  const submitAction = submitSponsorInterestAction.bind(null, orgContext.orgSlug);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
       <div className="space-y-6">
         <PageHeader
           description="Submit sponsorship details for review by the organization team."
-          title={`Sponsorship Interest - ${org.orgName}`}
+          title={`Sponsorship Interest - ${orgContext.orgName}`}
         />
         <Card>
           <CardHeader>

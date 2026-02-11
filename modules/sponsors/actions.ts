@@ -1,8 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { resolveOrg, resolvePublicOrg } from "@/lib/tenancy/resolveOrg";
-import { requireOrgRole } from "@/lib/tenancy/requireOrgRole";
+import { getOrgContext } from "@/lib/tenancy/getOrgContext";
+import { requirePermission } from "@/lib/auth/requirePermission";
 import {
   createSponsorSubmission,
   getSponsorSubmission,
@@ -28,7 +28,7 @@ function stringField(value: FormDataEntryValue | null) {
 }
 
 export async function submitSponsorInterestAction(orgSlug: string, formData: FormData) {
-  const org = await resolvePublicOrg(orgSlug);
+  const org = await getOrgContext(orgSlug, "public");
 
   const companyName = stringField(formData.get("companyName"));
   const contactName = stringField(formData.get("contactName"));
@@ -68,12 +68,12 @@ export async function submitSponsorInterestAction(orgSlug: string, formData: For
     actorUserId: undefined
   });
 
-  redirect(`/org/${orgSlug}/sponsor/success`);
+  redirect(`/app/sponsors/form/success?org=${encodeURIComponent(orgSlug)}`);
 }
 
 export async function updateSponsorStatusAction(orgSlug: string, submissionId: string, formData: FormData) {
-  const org = await resolveOrg(orgSlug);
-  requireOrgRole(org.membershipRole, "manager");
+  const org = await getOrgContext(orgSlug, "auth");
+  requirePermission(org.membershipRole, "sponsors.write");
 
   const statusValue = stringField(formData.get("status"));
 
@@ -92,31 +92,31 @@ export async function updateSponsorStatusAction(orgSlug: string, submissionId: s
     status
   });
 
-  redirect(`/app/org/${orgSlug}/sponsors/${submissionId}?statusUpdated=1`);
+  redirect(`/app/sponsors/manage/${submissionId}?org=${encodeURIComponent(orgSlug)}&statusUpdated=1`);
 }
 
 export async function updateSponsorNotesAction(orgSlug: string, submissionId: string, formData: FormData) {
-  const org = await resolveOrg(orgSlug);
-  requireOrgRole(org.membershipRole, "manager");
+  const org = await getOrgContext(orgSlug, "auth");
+  requirePermission(org.membershipRole, "sponsors.write");
 
   const notes = stringField(formData.get("internalNotes"));
   const submission = await getSponsorSubmission(org.orgId, submissionId);
 
   await updateSponsorSubmissionNotes(org.orgId, submission.id, notes || null);
 
-  await emitSponsorSubmissionAssetUploaded({
+  await emitSponsorSubmissionNotesUpdated({
     orgId: org.orgId,
     submissionId: submission.id,
     companyName: submission.company_name,
     actorUserId: org.userId
   });
 
-  redirect(`/app/org/${orgSlug}/sponsors/${submissionId}?notesSaved=1`);
+  redirect(`/app/sponsors/manage/${submissionId}?org=${encodeURIComponent(orgSlug)}&notesSaved=1`);
 }
 
 export async function uploadSponsorAssetAction(orgSlug: string, submissionId: string, formData: FormData) {
-  const org = await resolveOrg(orgSlug);
-  requireOrgRole(org.membershipRole, "manager");
+  const org = await getOrgContext(orgSlug, "auth");
+  requirePermission(org.membershipRole, "sponsors.write");
 
   const logo = formData.get("logo");
 
@@ -128,12 +128,12 @@ export async function uploadSponsorAssetAction(orgSlug: string, submissionId: st
   const logoPath = await uploadSponsorLogo(org.orgId, submission.id, logo);
   await updateSponsorSubmissionLogoPath(org.orgId, submission.id, logoPath);
 
-  await emitSponsorSubmissionNotesUpdated({
+  await emitSponsorSubmissionAssetUploaded({
     orgId: org.orgId,
     submissionId: submission.id,
     companyName: submission.company_name,
     actorUserId: org.userId
   });
 
-  redirect(`/app/org/${orgSlug}/sponsors/${submissionId}?assetUploaded=1`);
+  redirect(`/app/sponsors/manage/${submissionId}?org=${encodeURIComponent(orgSlug)}&assetUploaded=1`);
 }

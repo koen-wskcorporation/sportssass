@@ -47,7 +47,7 @@ export async function SponsorDetailPage({
     <div className="space-y-6">
       <PageHeader
         actions={
-          <Link className={buttonVariants({ variant: "ghost" })} href={`/app/org/${orgContext.orgSlug}/sponsors`}>
+          <Link className={buttonVariants({ variant: "ghost" })} href={`/app/sponsors/manage?org=${encodeURIComponent(orgContext.orgSlug)}`}>
             Back to list
           </Link>
         }

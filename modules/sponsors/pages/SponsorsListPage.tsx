@@ -66,7 +66,7 @@ export async function SponsorsListPage({ orgContext, updated = false }: Sponsors
                     <TableCell className="text-right">
                       <Link
                         className={buttonVariants({ size: "sm", variant: "ghost" })}
-                        href={`/app/org/${orgContext.orgSlug}/sponsors/${submission.id}`}
+                        href={`/app/sponsors/manage/${submission.id}?org=${encodeURIComponent(orgContext.orgSlug)}`}
                       >
                         Review
                       </Link>
@@ -80,7 +80,7 @@ export async function SponsorsListPage({ orgContext, updated = false }: Sponsors
       </Card>
 
       <div className="flex justify-end">
-        <Link className={buttonVariants({ variant: "secondary" })} href={`/org/${orgContext.orgSlug}/sponsor`}>
+        <Link className={buttonVariants({ variant: "secondary" })} href={`/app/sponsors/form?org=${encodeURIComponent(orgContext.orgSlug)}`}>
           View Public Form
         </Link>
       </div>

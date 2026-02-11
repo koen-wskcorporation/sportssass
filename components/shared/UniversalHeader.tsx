@@ -3,18 +3,35 @@ import { headers } from "next/headers";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import { AccountMenu } from "@/components/shared/AccountMenu";
-import { getOrgContext } from "@/lib/tenancy/getOrgContext";
+import { getOrgContext, getOrgSlugFromSearchParams } from "@/lib/tenancy/getOrgContext";
 import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
 
-function getOrgRoute(pathname: string | null): { orgSlug: string; mode: "public" | "auth" } | null {
+function getOrgRoute(pathname: string | null, search: string | null): { orgSlug: string; mode: "public" | "auth" } | null {
   if (!pathname) {
     return null;
+  }
+
+  const searchParams = new URLSearchParams(search ?? "");
+  const queryOrgSlug = getOrgSlugFromSearchParams(searchParams);
+
+  if (pathname.startsWith("/app/sponsors/manage") && queryOrgSlug) {
+    return { orgSlug: queryOrgSlug, mode: "auth" };
+  }
+
+  if (pathname.startsWith("/app/sponsors/form") && queryOrgSlug) {
+    return { orgSlug: queryOrgSlug, mode: "public" };
   }
 
   const appMatch = /^\/app\/org\/([^/]+)/.exec(pathname);
 
   if (appMatch) {
     return { orgSlug: appMatch[1], mode: "auth" };
+  }
+
+  const settingsMatch = /^\/org\/([^/]+)\/settings(?:\/|$)/.exec(pathname);
+
+  if (settingsMatch) {
+    return { orgSlug: settingsMatch[1], mode: "auth" };
   }
 
   const publicMatch = /^\/org\/([^/]+)/.exec(pathname);
@@ -29,7 +46,7 @@ function getOrgRoute(pathname: string | null): { orgSlug: string; mode: "public"
 export async function UniversalHeader() {
   const currentUser = await getCurrentUser();
   const requestHeaders = await headers();
-  const orgRoute = getOrgRoute(requestHeaders.get("x-pathname"));
+  const orgRoute = getOrgRoute(requestHeaders.get("x-pathname"), requestHeaders.get("x-search"));
   const homeHref = currentUser ? "/app" : "/";
   const orgContext = orgRoute
     ? orgRoute.mode === "auth"

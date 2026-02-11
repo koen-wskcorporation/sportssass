@@ -13,11 +13,12 @@ type MobileShellProps = {
 export function MobileShell({ orgContext }: MobileShellProps) {
   const pathname = usePathname();
   const tools = getToolsForRole(orgContext.membershipRole);
+  const workspaceHref = `/app/sponsors/manage?org=${encodeURIComponent(orgContext.orgSlug)}`;
 
   return (
     <div className="border-b bg-surface md:hidden">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        <Link className="font-display text-lg font-bold" href={`/app/org/${orgContext.orgSlug}`}>
+        <Link className="font-display text-lg font-bold" href={workspaceHref}>
           {orgContext.orgName}
         </Link>
         <span className="text-xs uppercase tracking-wide text-muted-foreground">{orgContext.membershipRole}</span>
@@ -26,15 +27,16 @@ export function MobileShell({ orgContext }: MobileShellProps) {
         <Link
           className={cn(
             "rounded-md border px-3 py-1.5 text-xs font-semibold",
-            pathname === `/app/org/${orgContext.orgSlug}` ? "bg-surface-alt" : "bg-surface"
+            pathname.startsWith("/app/sponsors/manage") ? "bg-surface-alt" : "bg-surface"
           )}
-          href={`/app/org/${orgContext.orgSlug}`}
+          href={workspaceHref}
         >
-          Overview
+          Sponsorships
         </Link>
         {tools.map((tool) => {
           const href = resolveToolRoute(tool.routes.appBase, orgContext.orgSlug);
-          const isActive = pathname.startsWith(href);
+          const toolPath = href.split("?")[0];
+          const isActive = pathname.startsWith(toolPath);
 
           return (
             <Link

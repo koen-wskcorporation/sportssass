@@ -17,6 +17,30 @@ export type OrgContextAuth = OrgContextBase & {
   membershipRole: OrgRole;
 };
 
+type SearchParamsLike = URLSearchParams | Record<string, string | string[] | undefined>;
+
+function sanitizeOrgSlug(rawValue: string | string[] | undefined): string | null {
+  if (typeof rawValue !== "string") {
+    return null;
+  }
+
+  const trimmed = rawValue.trim().toLowerCase();
+
+  if (!trimmed || !/^[a-z0-9-]+$/.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+export function getOrgSlugFromSearchParams(searchParams: SearchParamsLike, key = "org"): string | null {
+  if (searchParams instanceof URLSearchParams) {
+    return sanitizeOrgSlug(searchParams.get(key) ?? undefined);
+  }
+
+  return sanitizeOrgSlug(searchParams[key]);
+}
+
 function mapBranding(org: {
   logo_path?: string | null;
   icon_path?: string | null;
@@ -102,4 +126,24 @@ export function getOrgContext(orgSlug: string, mode: "public"): Promise<OrgConte
 export function getOrgContext(orgSlug: string, mode: "auth"): Promise<OrgContextAuth>;
 export function getOrgContext(orgSlug: string, mode: "public" | "auth") {
   return getOrgContextCached(orgSlug, mode);
+}
+
+export function getOrgContextFromSearchParams(searchParams: SearchParamsLike, mode: "public"): Promise<OrgContextBase>;
+export function getOrgContextFromSearchParams(searchParams: SearchParamsLike, mode: "auth"): Promise<OrgContextAuth>;
+export function getOrgContextFromSearchParams(searchParams: SearchParamsLike, mode: "public" | "auth") {
+  const orgSlug = getOrgSlugFromSearchParams(searchParams);
+
+  if (!orgSlug) {
+    if (mode === "auth") {
+      redirect("/app?error=org_required");
+    }
+
+    notFound();
+  }
+
+  if (mode === "auth") {
+    return getOrgContext(orgSlug, "auth");
+  }
+
+  return getOrgContext(orgSlug, "public");
 }
