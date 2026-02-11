@@ -27,7 +27,7 @@ export function AppShell({ orgContext, children }: AppShellProps) {
   return (
     <div className="min-h-screen md:grid md:grid-cols-[260px_1fr]">
       <aside className="sticky top-0 hidden h-screen flex-col border-r bg-surface p-4 md:flex">
-        <Link className="rounded-md px-2 py-1 font-display text-xl font-bold" href={`/app/o/${orgContext.orgSlug}`}>
+        <Link className="rounded-md px-2 py-1 font-display text-xl font-bold" href={`/app/org/${orgContext.orgSlug}`}>
           Platform
         </Link>
         <div className="mt-5 rounded-md border bg-surface-alt p-3">
@@ -43,9 +43,9 @@ export function AppShell({ orgContext, children }: AppShellProps) {
             <Link
               className={cn(
                 "block rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-surface-alt",
-                pathname === `/app/o/${orgContext.orgSlug}` && "bg-surface-alt"
+                pathname === `/app/org/${orgContext.orgSlug}` && "bg-surface-alt"
               )}
-              href={`/app/o/${orgContext.orgSlug}`}
+              href={`/app/org/${orgContext.orgSlug}`}
             >
               Overview
             </Link>
@@ -53,9 +53,9 @@ export function AppShell({ orgContext, children }: AppShellProps) {
               <Link
                 className={cn(
                   "mt-1 block rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-surface-alt",
-                  pathname === `/app/o/${orgContext.orgSlug}/settings/branding` && "bg-surface-alt"
+                  pathname === `/app/org/${orgContext.orgSlug}/settings/branding` && "bg-surface-alt"
                 )}
-                href={`/app/o/${orgContext.orgSlug}/settings/branding`}
+                href={`/app/org/${orgContext.orgSlug}/settings/branding`}
               >
                 Branding Settings
               </Link>

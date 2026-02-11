@@ -7,7 +7,7 @@ export async function generateMetadata({ params }: { params: Promise<{ orgSlug: 
 
   return {
     icons: {
-      icon: `/o/${orgSlug}/icon`
+      icon: `/org/${orgSlug}/icon`
     }
   };
 }

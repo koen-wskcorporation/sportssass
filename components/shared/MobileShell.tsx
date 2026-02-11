@@ -17,7 +17,7 @@ export function MobileShell({ orgContext }: MobileShellProps) {
   return (
     <div className="border-b bg-surface md:hidden">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        <Link className="font-display text-lg font-bold" href={`/app/o/${orgContext.orgSlug}`}>
+        <Link className="font-display text-lg font-bold" href={`/app/org/${orgContext.orgSlug}`}>
           {orgContext.orgName}
         </Link>
         <span className="text-xs uppercase tracking-wide text-muted-foreground">{orgContext.membershipRole}</span>
@@ -26,9 +26,9 @@ export function MobileShell({ orgContext }: MobileShellProps) {
         <Link
           className={cn(
             "rounded-md border px-3 py-1.5 text-xs font-semibold",
-            pathname === `/app/o/${orgContext.orgSlug}` ? "bg-surface-alt" : "bg-surface"
+            pathname === `/app/org/${orgContext.orgSlug}` ? "bg-surface-alt" : "bg-surface"
           )}
-          href={`/app/o/${orgContext.orgSlug}`}
+          href={`/app/org/${orgContext.orgSlug}`}
         >
           Overview
         </Link>

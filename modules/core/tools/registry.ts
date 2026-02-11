@@ -22,8 +22,8 @@ export const toolRegistry: ToolDefinition[] = [
     description: "Review and manage sponsorship pipeline activity.",
     navGroup: "Revenue",
     routes: {
-      appBase: "/app/o/[orgSlug]/sponsors",
-      publicBase: "/o/[orgSlug]/sponsor"
+      appBase: "/app/org/[orgSlug]/sponsors",
+      publicBase: "/org/[orgSlug]/sponsor"
     },
     permissions: ["sponsors.read"],
     status: "active"

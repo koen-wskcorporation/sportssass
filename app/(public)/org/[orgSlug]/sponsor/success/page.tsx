@@ -19,7 +19,7 @@ export default async function PublicSponsorSuccessPage({ params }: { params: Pro
               Our team has your submission and will follow up with next steps shortly.
             </p>
             <div className="flex gap-3">
-              <Link className={buttonVariants()} href={`/o/${orgSlug}/sponsor`}>
+              <Link className={buttonVariants()} href={`/org/${orgSlug}/sponsor`}>
                 Submit Another
               </Link>
               <Link className={buttonVariants({ variant: "ghost" })} href="/app">

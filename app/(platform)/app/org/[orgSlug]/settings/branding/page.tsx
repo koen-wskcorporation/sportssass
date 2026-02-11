@@ -39,7 +39,7 @@ export default async function OrgBrandingSettingsPage({
     <div className="space-y-6">
       <PageHeader
         actions={
-          <Link className={buttonVariants({ variant: "ghost" })} href={`/app/o/${orgSlug}`}>
+          <Link className={buttonVariants({ variant: "ghost" })} href={`/app/org/${orgSlug}`}>
             Back to workspace
           </Link>
         }

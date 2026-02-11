@@ -68,7 +68,7 @@ export async function submitSponsorInterestAction(orgSlug: string, formData: For
     actorUserId: undefined
   });
 
-  redirect(`/o/${orgSlug}/sponsor/success`);
+  redirect(`/org/${orgSlug}/sponsor/success`);
 }
 
 export async function updateSponsorStatusAction(orgSlug: string, submissionId: string, formData: FormData) {
@@ -92,7 +92,7 @@ export async function updateSponsorStatusAction(orgSlug: string, submissionId: s
     status
   });
 
-  redirect(`/app/o/${orgSlug}/sponsors/${submissionId}?statusUpdated=1`);
+  redirect(`/app/org/${orgSlug}/sponsors/${submissionId}?statusUpdated=1`);
 }
 
 export async function updateSponsorNotesAction(orgSlug: string, submissionId: string, formData: FormData) {
@@ -111,7 +111,7 @@ export async function updateSponsorNotesAction(orgSlug: string, submissionId: st
     actorUserId: org.userId
   });
 
-  redirect(`/app/o/${orgSlug}/sponsors/${submissionId}?notesSaved=1`);
+  redirect(`/app/org/${orgSlug}/sponsors/${submissionId}?notesSaved=1`);
 }
 
 export async function uploadSponsorAssetAction(orgSlug: string, submissionId: string, formData: FormData) {
@@ -135,5 +135,5 @@ export async function uploadSponsorAssetAction(orgSlug: string, submissionId: st
     actorUserId: org.userId
   });
 
-  redirect(`/app/o/${orgSlug}/sponsors/${submissionId}?assetUploaded=1`);
+  redirect(`/app/org/${orgSlug}/sponsors/${submissionId}?assetUploaded=1`);
 }

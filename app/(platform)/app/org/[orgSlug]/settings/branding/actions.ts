@@ -18,11 +18,11 @@ export async function saveOrgBrandingAction(orgSlug: string, formData: FormData)
   const secondaryColor = getField(formData, "brandSecondary");
 
   if (primaryColor && !isValidHexColor(primaryColor)) {
-    redirect(`/app/o/${orgSlug}/settings/branding?error=invalid_primary`);
+    redirect(`/app/org/${orgSlug}/settings/branding?error=invalid_primary`);
   }
 
   if (secondaryColor && !isValidHexColor(secondaryColor)) {
-    redirect(`/app/o/${orgSlug}/settings/branding?error=invalid_secondary`);
+    redirect(`/app/org/${orgSlug}/settings/branding?error=invalid_secondary`);
   }
 
   const logoFile = formData.get("logo");
@@ -50,15 +50,15 @@ export async function saveOrgBrandingAction(orgSlug: string, formData: FormData)
       });
     }
   } catch {
-    redirect(`/app/o/${orgSlug}/settings/branding?error=upload_failed`);
+    redirect(`/app/org/${orgSlug}/settings/branding?error=upload_failed`);
   }
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("orgs").update(updates).eq("id", orgContext.orgId);
 
   if (error) {
-    redirect(`/app/o/${orgSlug}/settings/branding?error=save_failed`);
+    redirect(`/app/org/${orgSlug}/settings/branding?error=save_failed`);
   }
 
-  redirect(`/app/o/${orgSlug}/settings/branding?saved=1`);
+  redirect(`/app/org/${orgSlug}/settings/branding?saved=1`);
 }

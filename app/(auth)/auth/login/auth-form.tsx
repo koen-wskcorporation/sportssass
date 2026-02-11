@@ -84,7 +84,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
         )}
 
         <div className="flex items-center justify-between text-sm">
-          <Link className="text-muted-foreground underline-offset-2 hover:underline" href="/o/demo/sponsor">
+          <Link className="text-muted-foreground underline-offset-2 hover:underline" href="/org/demo/sponsor">
             Public sponsor form
           </Link>
           <Link className="text-muted-foreground underline-offset-2 hover:underline" href="/app">

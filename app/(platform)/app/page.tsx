@@ -38,7 +38,7 @@ export default async function AppLandingPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Link className={buttonVariants({ variant: "secondary" })} href="/o/demo/sponsor">
+                <Link className={buttonVariants({ variant: "secondary" })} href="/org/demo/sponsor">
                   Open Public Sponsor Form
                 </Link>
               </CardContent>

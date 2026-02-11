@@ -1,6 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
-import Image from "next/image";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { Button } from "@/components/ui/button";
@@ -9,32 +6,18 @@ import { AccountMenu } from "@/components/shared/AccountMenu";
 import { getOrgContext } from "@/lib/tenancy/getOrgContext";
 import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
 
-function resolveLogoSrc() {
-  const svgPath = path.join(process.cwd(), "public", "brand", "logo.svg");
-  if (fs.existsSync(svgPath)) {
-    return "/brand/logo.svg";
-  }
-
-  const pngPath = path.join(process.cwd(), "public", "brand", "logo.png");
-  if (fs.existsSync(pngPath)) {
-    return "/brand/logo.png";
-  }
-
-  return null;
-}
-
 function getOrgRoute(pathname: string | null): { orgSlug: string; mode: "public" | "auth" } | null {
   if (!pathname) {
     return null;
   }
 
-  const appMatch = /^\/app\/o\/([^/]+)/.exec(pathname);
+  const appMatch = /^\/app\/org\/([^/]+)/.exec(pathname);
 
   if (appMatch) {
     return { orgSlug: appMatch[1], mode: "auth" };
   }
 
-  const publicMatch = /^\/o\/([^/]+)/.exec(pathname);
+  const publicMatch = /^\/org\/([^/]+)/.exec(pathname);
 
   if (publicMatch) {
     return { orgSlug: publicMatch[1], mode: "public" };
@@ -47,7 +30,6 @@ export async function UniversalHeader() {
   const currentUser = await getCurrentUser();
   const requestHeaders = await headers();
   const orgRoute = getOrgRoute(requestHeaders.get("x-pathname"));
-  const logoSrc = resolveLogoSrc();
   const homeHref = currentUser ? "/app" : "/";
   const orgContext = orgRoute
     ? orgRoute.mode === "auth"
@@ -61,11 +43,10 @@ export async function UniversalHeader() {
       <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4 md:px-8">
         <div className="inline-flex items-center gap-2">
           <Link className="inline-flex items-center gap-2" href={homeHref}>
-            {logoSrc ? (
-              <Image alt="Platform logo" height={28} priority src={logoSrc} width={92} />
-            ) : (
-              <span className="font-display text-lg font-bold">Platform</span>
-            )}
+            <picture>
+              <source srcSet="/brand/logo.svg" type="image/svg+xml" />
+              <img alt="Platform logo" className="h-7 w-auto" src="/brand/logo.png" />
+            </picture>
           </Link>
 
           {orgLogoSignedUrl ? (
