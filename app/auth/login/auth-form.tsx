@@ -27,11 +27,9 @@ export function AuthForm({ initialMode }: AuthFormProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{mode === "signin" ? "Staff Sign In" : "Create Staff Account"}</CardTitle>
+        <CardTitle>{mode === "signin" ? "Sign In" : "Create Account"}</CardTitle>
         <CardDescription>
-          {mode === "signin"
-            ? "Use your staff credentials to access organization workspaces."
-            : "Create a staff account, then access your organization workspaces."}
+          {mode === "signin" ? "Use your credentials to access your organizations." : "Create an account to get started."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -84,10 +82,7 @@ export function AuthForm({ initialMode }: AuthFormProps) {
         )}
 
         <div className="flex items-center justify-between text-sm">
-          <Link className="text-muted-foreground underline-offset-2 hover:underline" href="/app/sponsors/form?org=demo">
-            Public sponsor form
-          </Link>
-          <Link className="text-muted-foreground underline-offset-2 hover:underline" href="/app">
+          <Link className="text-muted-foreground underline-offset-2 hover:underline" href="/">
             Workspace index
           </Link>
         </div>

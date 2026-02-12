@@ -4,14 +4,31 @@ export type Permission =
   | "org.dashboard.read"
   | "org.branding.read"
   | "org.branding.write"
+  | "org.site.write"
   | "org.events.read"
   | "sponsors.read"
   | "sponsors.write";
 
 const rolePermissions: Record<OrgRole, Permission[]> = {
-  owner: ["org.dashboard.read", "org.branding.read", "org.branding.write", "org.events.read", "sponsors.read", "sponsors.write"],
-  admin: ["org.dashboard.read", "org.branding.read", "org.branding.write", "org.events.read", "sponsors.read", "sponsors.write"],
-  manager: ["org.dashboard.read", "org.branding.read", "org.events.read", "sponsors.read", "sponsors.write"],
+  owner: [
+    "org.dashboard.read",
+    "org.branding.read",
+    "org.branding.write",
+    "org.site.write",
+    "org.events.read",
+    "sponsors.read",
+    "sponsors.write"
+  ],
+  admin: [
+    "org.dashboard.read",
+    "org.branding.read",
+    "org.branding.write",
+    "org.site.write",
+    "org.events.read",
+    "sponsors.read",
+    "sponsors.write"
+  ],
+  manager: ["org.dashboard.read", "org.branding.read", "org.site.write", "org.events.read", "sponsors.read", "sponsors.write"],
   member: ["org.dashboard.read", "org.branding.read", "org.events.read", "sponsors.read"]
 };
 

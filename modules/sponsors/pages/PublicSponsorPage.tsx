@@ -1,14 +1,25 @@
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Textarea } from "@/components/ui/textarea";
-import type { PublicOrgContext } from "@/lib/tenancy/types";
+import type { OrgPublicContext } from "@/lib/org/types";
 import { submitSponsorInterestAction } from "@/modules/sponsors/actions";
 
-export function PublicSponsorPage({ orgContext }: { orgContext: PublicOrgContext }) {
+const publicSponsorErrorMessageByCode: Record<string, string> = {
+  missing_required: "Company name, contact name, and contact email are required.",
+  unsupported_file_type: "Logo must be a PNG, JPG, or SVG file.",
+  file_too_large: "Logo file is too large. Please use a file under 10MB.",
+  upload_not_configured: "File uploads are not configured on the server. Contact support.",
+  upload_failed: "Unable to upload the logo right now. Please try again.",
+  submission_failed: "Unable to submit sponsorship interest right now. Please try again."
+};
+
+export function PublicSponsorPage({ orgContext, errorCode }: { orgContext: OrgPublicContext; errorCode?: string }) {
   const submitAction = submitSponsorInterestAction.bind(null, orgContext.orgSlug);
+  const errorMessage = errorCode ? publicSponsorErrorMessageByCode[errorCode] : null;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
@@ -17,6 +28,7 @@ export function PublicSponsorPage({ orgContext }: { orgContext: PublicOrgContext
           description="Submit sponsorship details for review by the organization team."
           title={`Sponsorship Interest - ${orgContext.orgName}`}
         />
+        {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
         <Card>
           <CardHeader>
             <CardTitle>Organization Sponsorship Intake</CardTitle>

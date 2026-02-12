@@ -1,6 +1,9 @@
 import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { UploadError } from "@/lib/uploads/errors";
+
+const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
 
 const extensionByMimeType: Record<string, string> = {
   "image/png": "png",
@@ -22,10 +25,14 @@ function resolveExtension(file: File) {
     return fromName === "jpeg" ? "jpg" : fromName;
   }
 
-  throw new Error("Unsupported avatar file type.");
+  throw new UploadError("unsupported_file_type", "Unsupported avatar file type.");
 }
 
 export async function uploadProfileAvatar(userId: string, file: File) {
+  if (file.size > MAX_AVATAR_SIZE_BYTES) {
+    throw new UploadError("file_too_large", "Avatar file exceeds the 5MB limit.");
+  }
+
   const extension = resolveExtension(file);
   const path = `users/${userId}/avatar.${extension}`;
   const bytes = await file.arrayBuffer();
@@ -37,7 +44,7 @@ export async function uploadProfileAvatar(userId: string, file: File) {
   });
 
   if (error) {
-    throw new Error(`Failed to upload profile avatar: ${error.message}`);
+    throw new UploadError("storage_upload_failed", `Failed to upload profile avatar: ${error.message}`);
   }
 
   return path;

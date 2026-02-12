@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert } from "@/components/ui/alert";
-import type { ResolvedOrgContext } from "@/lib/tenancy/types";
+import type { OrgAuthContext } from "@/lib/org/types";
 import { getSignedSponsorLogoUrl, getSponsorSubmission } from "@/modules/sponsors/db/queries";
 import { SponsorStatusBadge } from "@/modules/sponsors/components/status-badge";
 import { updateSponsorNotesAction, updateSponsorStatusAction, uploadSponsorAssetAction } from "@/modules/sponsors/actions";
@@ -20,12 +20,23 @@ function formatDate(value: string) {
 }
 
 type SponsorDetailPageProps = {
-  orgContext: ResolvedOrgContext;
+  orgContext: OrgAuthContext;
   submissionId: string;
   statusUpdated?: boolean;
   notesSaved?: boolean;
   assetUploaded?: boolean;
+  assetUploadErrorCode?: string;
   canManage: boolean;
+};
+
+const sponsorAssetUploadErrorMessageByCode: Record<string, string> = {
+  missing_file: "Please select a file to upload.",
+  unsupported_file_type: "Asset must be a PNG, JPG, or SVG file.",
+  file_too_large: "Asset file is too large. Please use a file under 10MB.",
+  upload_not_configured: "File uploads are not configured on the server.",
+  upload_failed: "Unable to upload the file right now. Please try again.",
+  status_update_failed: "Unable to update the submission status right now.",
+  notes_save_failed: "Unable to save notes right now."
 };
 
 export async function SponsorDetailPage({
@@ -34,10 +45,12 @@ export async function SponsorDetailPage({
   statusUpdated = false,
   notesSaved = false,
   assetUploaded = false,
+  assetUploadErrorCode,
   canManage
 }: SponsorDetailPageProps) {
   const submission = await getSponsorSubmission(orgContext.orgId, submissionId);
   const logoUrl = submission.logo_path ? await getSignedSponsorLogoUrl(submission.logo_path) : null;
+  const assetUploadErrorMessage = assetUploadErrorCode ? sponsorAssetUploadErrorMessageByCode[assetUploadErrorCode] : null;
 
   const updateStatus = updateSponsorStatusAction.bind(null, orgContext.orgSlug, submission.id);
   const updateNotes = updateSponsorNotesAction.bind(null, orgContext.orgSlug, submission.id);
@@ -47,7 +60,7 @@ export async function SponsorDetailPage({
     <div className="space-y-6">
       <PageHeader
         actions={
-          <Link className={buttonVariants({ variant: "ghost" })} href={`/app/sponsors/manage?org=${encodeURIComponent(orgContext.orgSlug)}`}>
+          <Link className={buttonVariants({ variant: "ghost" })} href={`/${orgContext.orgSlug}/sponsors/manage`}>
             Back to list
           </Link>
         }
@@ -58,6 +71,7 @@ export async function SponsorDetailPage({
       {statusUpdated ? <Alert variant="success">Status updated successfully.</Alert> : null}
       {notesSaved ? <Alert variant="success">Internal notes saved.</Alert> : null}
       {assetUploaded ? <Alert variant="success">Asset uploaded successfully.</Alert> : null}
+      {assetUploadErrorMessage ? <Alert variant="destructive">{assetUploadErrorMessage}</Alert> : null}
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
@@ -131,7 +145,7 @@ export async function SponsorDetailPage({
                 </CardHeader>
                 <CardContent>
                   <form action={updateNotes} className="space-y-3">
-                    <FormField hint="Only visible to staff users." label="Notes">
+                    <FormField hint="Only visible to authorized org members." label="Notes">
                       <Textarea defaultValue={submission.internal_notes ?? ""} name="internalNotes" />
                     </FormField>
                     <Button type="submit" variant="secondary">

@@ -11,7 +11,7 @@ export default async function LoginPage({
   const user = await getSessionUser();
 
   if (user) {
-    redirect("/app");
+    redirect("/");
   }
 
   const query = await searchParams;
@@ -20,10 +20,7 @@ export default async function LoginPage({
   return (
     <main className="mx-auto max-w-xl px-4 py-10 sm:px-6">
       <div className="space-y-6">
-        <PageHeader
-          description="Staff authentication for platform workspaces."
-          title="Account Access"
-        />
+        <PageHeader description="Sign in or create an account to access organization workspaces." title="Account Access" />
         <AuthForm initialMode={initialMode} />
       </div>
     </main>

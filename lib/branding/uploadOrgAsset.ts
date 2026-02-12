@@ -1,6 +1,9 @@
 import "server-only";
 
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { UploadError } from "@/lib/uploads/errors";
+
+const MAX_ORG_ASSET_SIZE_BYTES = 10 * 1024 * 1024;
 
 const extensionByMimeType: Record<string, string> = {
   "image/png": "png",
@@ -24,7 +27,7 @@ function getExtension(file: File) {
     return fromFileName === "jpeg" ? "jpg" : fromFileName;
   }
 
-  throw new Error("Unsupported file type.");
+  throw new UploadError("unsupported_file_type", "Unsupported org asset file type.");
 }
 
 export async function uploadOrgAsset({
@@ -36,11 +39,15 @@ export async function uploadOrgAsset({
   asset: "logo" | "icon";
   file: File;
 }) {
+  if (file.size > MAX_ORG_ASSET_SIZE_BYTES) {
+    throw new UploadError("file_too_large", "Org asset exceeds the 10MB limit.");
+  }
+
   const ext = getExtension(file);
   const path = `orgs/${orgId}/branding/${asset}.${ext}`;
 
   const bytes = await file.arrayBuffer();
-  const supabase = createSupabaseServiceRoleClient();
+  const supabase = await createSupabaseServerClient();
 
   const { error } = await supabase.storage.from("org-assets").upload(path, bytes, {
     contentType: file.type || undefined,
@@ -48,7 +55,7 @@ export async function uploadOrgAsset({
   });
 
   if (error) {
-    throw new Error(`Failed to upload org ${asset}: ${error.message}`);
+    throw new UploadError("storage_upload_failed", `Failed to upload org ${asset}: ${error.message}`);
   }
 
   return path;

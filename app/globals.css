@@ -29,11 +29,15 @@
   border-color: hsl(var(--border));
 }
 
+html,
 body {
-  @apply bg-surface text-foreground antialiased;
-  background-image:
-    radial-gradient(circle at 10% 0%, rgba(255, 165, 84, 0.14), transparent 32%),
-    radial-gradient(circle at 90% 100%, rgba(34, 146, 180, 0.12), transparent 34%);
+  min-height: 100%;
+}
+
+body {
+  background-color: hsl(var(--surface));
+  color: hsl(var(--foreground));
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
 h1,

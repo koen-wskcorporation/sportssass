@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { UniversalHeader } from "@/components/shared/UniversalHeader";
+import { PrimaryHeader } from "@/components/shared/PrimaryHeader";
+import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
-  title: "Sports Platform",
-  description: "Multi-tenant sports operations platform"
+  title: "Sports SaaS",
+  description: "Multi-tenant sports operations suite"
 };
 
 export default function RootLayout({
@@ -14,11 +15,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="font-sans">
-        <div className="flex min-h-screen flex-col">
-          <UniversalHeader />
-          <div className="flex-1">{children}</div>
-        </div>
+      <body className="bg-surface font-sans text-foreground antialiased">
+        <ToastProvider>
+          <div className="flex min-h-screen flex-col">
+            <PrimaryHeader />
+            <div className="flex-1">{children}</div>
+          </div>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -11,7 +11,7 @@ export default function ForbiddenPage() {
           <CardDescription>You do not have permission to access this page or action.</CardDescription>
         </CardHeader>
         <CardContent className="flex gap-2">
-          <Link href="/app">
+          <Link href="/">
             <Button>Back to Workspace</Button>
           </Link>
           <Link href="/auth/login">

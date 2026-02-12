@@ -6,7 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { listSponsorSubmissions } from "@/modules/sponsors/db/queries";
 import { SponsorStatusBadge } from "@/modules/sponsors/components/status-badge";
-import type { ResolvedOrgContext } from "@/lib/tenancy/types";
+import type { OrgAuthContext } from "@/lib/org/types";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -16,7 +16,7 @@ function formatDate(value: string) {
 }
 
 type SponsorsListPageProps = {
-  orgContext: ResolvedOrgContext;
+  orgContext: OrgAuthContext;
   updated?: boolean;
 };
 
@@ -66,7 +66,7 @@ export async function SponsorsListPage({ orgContext, updated = false }: Sponsors
                     <TableCell className="text-right">
                       <Link
                         className={buttonVariants({ size: "sm", variant: "ghost" })}
-                        href={`/app/sponsors/manage/${submission.id}?org=${encodeURIComponent(orgContext.orgSlug)}`}
+                        href={`/${orgContext.orgSlug}/sponsors/manage/${submission.id}`}
                       >
                         Review
                       </Link>
@@ -80,7 +80,7 @@ export async function SponsorsListPage({ orgContext, updated = false }: Sponsors
       </Card>
 
       <div className="flex justify-end">
-        <Link className={buttonVariants({ variant: "secondary" })} href={`/app/sponsors/form?org=${encodeURIComponent(orgContext.orgSlug)}`}>
+        <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/sponsors`}>
           View Public Form
         </Link>
       </div>

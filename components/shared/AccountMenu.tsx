@@ -96,11 +96,19 @@ export function AccountMenu({ email, firstName, lastName, avatarUrl }: AccountMe
           <div className="mt-2 flex flex-col gap-1">
             <Link
               className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "justify-start")}
-              href="/app/account"
+              href="/account"
               onClick={() => setOpen(false)}
               role="menuitem"
             >
               Account settings
+            </Link>
+            <Link
+              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "justify-start")}
+              href="/"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+            >
+              Home
             </Link>
             <Link
               className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "justify-start")}
