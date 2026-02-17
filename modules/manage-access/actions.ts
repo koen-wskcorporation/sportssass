@@ -6,7 +6,7 @@ import { z } from "zod";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
 import { findOrgCustomRoleByKey, listOrgCustomRoles, type OrgCustomRole } from "@/lib/org/customRoles";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
-import { requirePermission } from "@/lib/permissions/requirePermission";
+import { requirePermission } from "@/lib/auth/requirePermission";
 import { createOptionalSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   allPermissions,

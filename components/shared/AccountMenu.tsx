@@ -76,11 +76,6 @@ export function AccountMenu({ email, firstName, lastName, avatarUrl }: AccountMe
         href: "/",
         label: "Home",
         active: pathname === "/"
-      },
-      {
-        href: "/auth/logout",
-        label: "Sign out",
-        active: false
       }
     ],
     [pathname]
@@ -127,6 +122,17 @@ export function AccountMenu({ email, firstName, lastName, avatarUrl }: AccountMe
                 {item.label}
               </NavItem>
             ))}
+            <form
+              action="/auth/logout"
+              method="post"
+              onSubmit={() => {
+                setOpen(false);
+              }}
+            >
+              <NavItem role="menuitem" size="sm" type="submit" variant="dropdown">
+                Sign out
+              </NavItem>
+            </form>
           </div>
         </div>
       ) : null}
