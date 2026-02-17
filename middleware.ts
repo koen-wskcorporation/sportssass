@@ -24,6 +24,8 @@ export async function middleware(request: NextRequest) {
     let response = NextResponse.next({
       request
     });
+    const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    const isHttps = request.nextUrl.protocol === "https:" || forwardedProto === "https";
 
     const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
 
@@ -38,7 +40,12 @@ export async function middleware(request: NextRequest) {
             request
           });
 
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, {
+              ...options,
+              secure: isHttps
+            })
+          );
         }
       }
     });

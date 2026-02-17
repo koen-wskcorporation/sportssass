@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 import { getSupabaseCookieOptions } from "@/lib/supabase/cookie-options";
 
@@ -19,6 +19,9 @@ type CookieToSet = {
 
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
+  const headerStore = await headers();
+  const forwardedProto = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const isHttps = forwardedProto === "https";
   const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
 
   return createServerClient<any>(supabaseUrl, supabasePublishableKey, {
@@ -30,7 +33,10 @@ export async function createSupabaseServerClient() {
       setAll(cookiesToSet: CookieToSet[]) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value, {
+              ...options,
+              secure: isHttps
+            });
           });
         } catch {
           // Server Components can read cookies but cannot always mutate them.
