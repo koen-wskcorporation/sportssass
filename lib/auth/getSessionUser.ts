@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type SessionUser = {
@@ -6,7 +5,7 @@ export type SessionUser = {
   email: string | null;
 };
 
-export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+export async function getSessionUser(): Promise<SessionUser | null> {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -25,4 +24,4 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   } catch {
     return null;
   }
-});
+}

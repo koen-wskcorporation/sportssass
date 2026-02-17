@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -51,7 +50,7 @@ function mapGoverningBody(governingBody: unknown): OrgGoverningBody | null {
   };
 }
 
-export const getOrgAuthContext = cache(async (orgSlug: string): Promise<OrgAuthContext> => {
+export async function getOrgAuthContext(orgSlug: string): Promise<OrgAuthContext> {
   if (isReservedOrgSlug(orgSlug)) {
     notFound();
   }
@@ -129,4 +128,4 @@ export const getOrgAuthContext = cache(async (orgSlug: string): Promise<OrgAuthC
     branding: mapBranding(org),
     governingBody: mapGoverningBody(org.governing_body)
   };
-});
+}

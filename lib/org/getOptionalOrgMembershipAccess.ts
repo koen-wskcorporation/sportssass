@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { resolveOrgRolePermissions } from "@/lib/org/customRoles";
@@ -9,7 +8,7 @@ export type OrgMembershipAccess = {
   permissions: Permission[];
 };
 
-export const getOptionalOrgMembershipAccess = cache(async (orgId: string): Promise<OrgMembershipAccess | null> => {
+export async function getOptionalOrgMembershipAccess(orgId: string): Promise<OrgMembershipAccess | null> {
   const user = await getSessionUser();
 
   if (!user) {
@@ -35,4 +34,4 @@ export const getOptionalOrgMembershipAccess = cache(async (orgId: string): Promi
     role,
     permissions
   };
-});
+}

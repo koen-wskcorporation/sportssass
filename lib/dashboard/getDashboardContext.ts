@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/getCurrentUser";
 import { requireAuth } from "@/lib/auth/requireAuth";
@@ -20,7 +19,7 @@ export type DashboardContext = {
   organizations: DashboardOrgMembership[];
 };
 
-export const getDashboardContext = cache(async (): Promise<DashboardContext> => {
+export async function getDashboardContext(): Promise<DashboardContext> {
   const sessionUser = await requireAuth();
 
   const [currentUser, orgMemberships] = await Promise.all([getCurrentUser(), listUserOrgs()]);
@@ -63,4 +62,4 @@ export const getDashboardContext = cache(async (): Promise<DashboardContext> => 
     },
     organizations
   };
-});
+}

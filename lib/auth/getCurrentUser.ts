@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getSignedProfileAvatarUrl } from "@/lib/account/getSignedProfileAvatarUrl";
@@ -12,7 +11,7 @@ export type CurrentUser = {
   avatarUrl: string | null;
 };
 
-export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+export async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
     const sessionUser = await getSessionUser();
     if (!sessionUser) {
@@ -40,4 +39,4 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   } catch {
     return null;
   }
-});
+}
