@@ -1,6 +1,6 @@
 import { asText, defaultPageTitleFromSlug, sanitizePageSlug } from "@/modules/site-builder/blocks/helpers";
 import { createDefaultBlocksForPage, normalizeDraftBlocks, normalizeRowBlocks } from "@/modules/site-builder/blocks/registry";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import type { LinkPickerPageOption } from "@/lib/links";
 import type { BlockContext, DraftBlockInput, OrgManagePage, OrgSitePage, OrgSitePageWithBlocks } from "@/modules/site-builder/types";
 
@@ -51,7 +51,7 @@ function mapManagePage(row: PageRow): OrgManagePage {
 }
 
 async function getNextPageSortIndex(orgId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("org_pages")
     .select("sort_index")
@@ -72,7 +72,7 @@ async function getNextPageSortIndex(orgId: string) {
 }
 
 async function loadBlocks(orgPageId: string, context: BlockContext) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase.from("org_page_blocks").select(blockSelect).eq("org_page_id", orgPageId).order("sort_index", { ascending: true });
 
   if (error) {
@@ -83,7 +83,7 @@ async function loadBlocks(orgPageId: string, context: BlockContext) {
 }
 
 async function loadPageBySlug(orgId: string, pageSlug: string, includeUnpublished: boolean) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   let query = supabase.from("org_pages").select(pageSelect).eq("org_id", orgId).eq("slug", pageSlug);
 
   if (!includeUnpublished) {
@@ -104,7 +104,7 @@ async function loadPageBySlug(orgId: string, pageSlug: string, includeUnpublishe
 }
 
 export async function getOrgPageById(orgId: string, pageId: string): Promise<OrgSitePage | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase.from("org_pages").select(pageSelect).eq("org_id", orgId).eq("id", pageId).maybeSingle();
 
   if (error) {
@@ -197,7 +197,7 @@ export async function ensureOrgPageExists({
     return existing;
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const nextTitle = asText(title, defaultPageTitleFromSlug(normalizedSlug), 120);
   const nextSortIndex = await getNextPageSortIndex(orgId);
   const { data, error } = await supabase
@@ -277,7 +277,7 @@ export async function saveOrgPageAndBlocks({
     }
   });
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const nextTitle = asText(title, existing.page.title, 120);
   const { data: updatedPage, error: updateError } = await supabase
     .from("org_pages")
@@ -324,7 +324,7 @@ export async function saveOrgPageAndBlocks({
 }
 
 export async function listOrgPagesForManage(orgId: string): Promise<OrgManagePage[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("org_pages")
     .select(pageSelect)
@@ -352,7 +352,7 @@ export async function updateOrgPageSettingsById({
   slug: string;
   isPublished: boolean;
 }): Promise<OrgManagePage | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("org_pages")
     .update({
@@ -387,7 +387,7 @@ export async function duplicateOrgPageWithBlocks({
   slug: string;
   title: string;
 }): Promise<OrgManagePage | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data: sourcePage, error: sourcePageError } = await supabase
     .from("org_pages")
     .select(pageSelect)
@@ -452,7 +452,7 @@ export async function duplicateOrgPageWithBlocks({
 }
 
 export async function deleteOrgPageById(orgId: string, pageId: string): Promise<boolean> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase.from("org_pages").delete().eq("org_id", orgId).eq("id", pageId).select("id").maybeSingle();
 
   if (error) {
@@ -463,7 +463,7 @@ export async function deleteOrgPageById(orgId: string, pageId: string): Promise<
 }
 
 export async function reorderOrgPages(orgId: string, orderedPageIds: string[]): Promise<OrgManagePage[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const offset = orderedPageIds.length + 1000;
 
   for (const [index, pageId] of orderedPageIds.entries()) {
@@ -486,7 +486,7 @@ export async function reorderOrgPages(orgId: string, orderedPageIds: string[]): 
 }
 
 export async function listOrgPagesForLinkPicker(orgId: string): Promise<LinkPickerPageOption[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("org_pages")

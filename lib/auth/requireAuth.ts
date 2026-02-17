@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import type { SessionUser } from "@/lib/auth/getSessionUser";
 
 export async function requireAuth(): Promise<SessionUser> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const {
     data: { user },
     error

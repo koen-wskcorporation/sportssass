@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { asOptionalButton } from "@/modules/site-builder/blocks/helpers";
 import type { OrgAnnouncement } from "@/modules/announcements/types";
 
@@ -40,7 +40,7 @@ export async function listOrgAnnouncements(
   const includeUnpublished = options?.includeUnpublished ?? false;
   const limit = options?.limit ?? null;
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   let query = supabase.from("org_announcements").select(announcementSelect).eq("org_id", orgId).order("publish_at", { ascending: false, nullsFirst: false });
 
@@ -71,7 +71,7 @@ export async function upsertOrgAnnouncement(input: {
   publishAt: string | null;
   isPublished: boolean;
 }) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const payload = {
     ...(input.id ? { id: input.id } : {}),
@@ -97,7 +97,7 @@ export async function upsertOrgAnnouncement(input: {
 }
 
 export async function deleteOrgAnnouncement(orgId: string, announcementId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { error } = await supabase.from("org_announcements").delete().eq("org_id", orgId).eq("id", announcementId);
 
   if (error) {

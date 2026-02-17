@@ -1,13 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies, headers } from "next/headers";
+import type { NextRequest, NextResponse } from "next/server";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 import { normalizeSupabaseCookieOptions, type SupabaseCookieToSet } from "@/lib/supabase/cookies";
 
-export async function createSupabaseServerClient() {
+function isHttpsFromHeaders(headerStore: Headers) {
+  const forwardedProto = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+
+  if (forwardedProto === "https") {
+    return true;
+  }
+
+  const origin = headerStore.get("origin");
+  return typeof origin === "string" && origin.startsWith("https://");
+}
+
+export async function createSupabaseServer() {
   const cookieStore = await cookies();
   const headerStore = await headers();
-  const forwardedProto = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const isHttps = forwardedProto === "https";
+  const isHttps = isHttpsFromHeaders(headerStore);
   const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
 
   return createServerClient<any>(supabaseUrl, supabasePublishableKey, {
@@ -32,3 +43,28 @@ export async function createSupabaseServerClient() {
     }
   });
 }
+
+export function createSupabaseServerForRequest(request: NextRequest, response: NextResponse) {
+  const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  const isHttps = forwardedProto === "https" || request.nextUrl.protocol === "https:";
+
+  return createServerClient<any>(supabaseUrl, supabasePublishableKey, {
+    cookieOptions: {
+      path: "/",
+      sameSite: "lax"
+    },
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet: SupabaseCookieToSet[]) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, normalizeSupabaseCookieOptions(options, isHttps));
+        });
+      }
+    }
+  });
+}
+
+export const createSupabaseServerClient = createSupabaseServer;

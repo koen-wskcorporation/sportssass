@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { getGoverningBodyLogoUrl } from "@/lib/org/getGoverningBodyLogoUrl";
 import { isReservedOrgSlug } from "@/lib/org/reservedSlugs";
 import type { OrgBranding, OrgGoverningBody, OrgPublicContext } from "@/lib/org/types";
@@ -53,7 +53,7 @@ export const getOrgPublicContext = cache(async (orgSlug: string): Promise<OrgPub
     notFound();
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data: orgWithGoverningBody, error: orgWithGoverningBodyError } = await supabase
     .from("orgs")
     .select("id, slug, name, logo_path, icon_path, brand_primary, governing_body:governing_bodies!orgs_governing_body_id_fkey(id, slug, name, logo_path)")

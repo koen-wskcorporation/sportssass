@@ -5,15 +5,22 @@ Early-stage Next.js App Router project for multi-tenant sports organizations.
 ## Temporary Auth Verification (Production)
 
 1. Deploy.
-2. Visit `/debug/headers` before login. `cookieHeaderPresent` should be `false`.
-3. Login via the `/auth/login` form.
-4. In DevTools Network, inspect `POST /auth/login/submit` and confirm `set-cookie` exists on the response.
-5. Open `/debug/headers` and `/debug/auth` after login.
-6. Verify:
-   - `cookieHeaderPresent` is `true`
-   - `serverCookieNames` includes `sb-*` cookies
+2. Visit `/api/auth/debug` before login. `hasSbCookies` should be `false`.
+3. Login via the `/auth/login` form (server action).
+4. Open `/api/auth/debug` after login and verify:
+   - `hasSbCookies` is `true`
+   - `sbCookieNames` contains `sb-*`
+   - `getUserSucceeded` is `true`
    - `supabaseUserId` is non-null
-7. If any check fails, use `host` and `x-forwarded-proto` from both debug endpoints to diagnose proxy/protocol cookie handling.
+5. If any check fails, use `host` and `x-forwarded-proto` from `/api/auth/debug` (and `/debug/headers` if needed) to diagnose proxy/protocol cookie handling.
+
+## Supabase Auth Redirect Checklist
+
+- In Supabase Dashboard, include exact redirect URLs for every environment:
+  - `https://<production-domain>/auth/callback`
+  - `http://localhost:3000/auth/callback`
+- Ensure Site URL matches your production app origin.
+- Keep auth cookies on app domain defaults (no custom cookie domain override in app code).
 
 ## Stack
 
@@ -28,8 +35,11 @@ Global routes:
 - `/`
 - `/auth/login`
 - `/auth/logout`
+- `/auth/reset`
+- `/auth/callback`
 - `/account`
 - `/forbidden`
+- `/api/auth/debug`
 
 Org routes (`orgSlug` is always first segment):
 

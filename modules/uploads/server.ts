@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { createOptionalSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 
@@ -119,7 +119,7 @@ async function createSignedUrl(bucket: string, path: string) {
     }
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
 
   if (error) {

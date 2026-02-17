@@ -10,6 +10,7 @@ type AccountMenuProps = {
   firstName?: string | null;
   lastName?: string | null;
   avatarUrl?: string | null;
+  signOutAction: (formData: FormData) => Promise<void>;
 };
 
 function initialsFromName(firstName?: string | null, lastName?: string | null, email?: string | null) {
@@ -23,7 +24,7 @@ function initialsFromName(firstName?: string | null, lastName?: string | null, e
   return (email?.trim().charAt(0) ?? "A").toUpperCase();
 }
 
-export function AccountMenu({ email, firstName, lastName, avatarUrl }: AccountMenuProps) {
+export function AccountMenu({ email, firstName, lastName, avatarUrl, signOutAction }: AccountMenuProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -123,8 +124,7 @@ export function AccountMenu({ email, firstName, lastName, avatarUrl }: AccountMe
               </NavItem>
             ))}
             <form
-              action="/auth/logout"
-              method="post"
+              action={signOutAction}
               onSubmit={() => {
                 setOpen(false);
               }}

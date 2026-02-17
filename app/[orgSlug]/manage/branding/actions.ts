@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
 import { isValidHexColor } from "@/lib/branding/applyBrandingVars";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
 function getField(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -35,7 +35,7 @@ export async function saveOrgBrandingAction(orgSlug: string, formData: FormData)
       icon_path: iconPath
     };
 
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createSupabaseServer();
     const { error } = await supabase.from("orgs").update(updates).eq("id", orgContext.orgId);
 
     if (error) {

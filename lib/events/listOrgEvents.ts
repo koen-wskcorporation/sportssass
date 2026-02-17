@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
 export type OrgEvent = {
   id: string;
@@ -11,7 +11,7 @@ export type OrgEvent = {
 };
 
 export async function listRecentOrgEvents(orgId: string, limit = 12): Promise<OrgEvent[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("org_events")

@@ -1,5 +1,5 @@
 import { getGoverningBodyLogoUrl } from "@/lib/org/getGoverningBodyLogoUrl";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
 export type GoverningBodyOption = {
   id: string;
@@ -10,7 +10,7 @@ export type GoverningBodyOption = {
 };
 
 export async function listGoverningBodies(): Promise<GoverningBodyOption[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase.from("governing_bodies").select("id, slug, name, logo_path").order("name", { ascending: true });
 
   if (error) {

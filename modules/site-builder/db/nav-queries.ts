@@ -1,5 +1,5 @@
 import type { LinkValue } from "@/lib/links";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { sanitizePageSlug } from "@/modules/site-builder/blocks/helpers";
 import { createDefaultOrgNavItems, type OrgNavChildItem, type OrgNavItem } from "@/modules/site-builder/nav";
 
@@ -130,7 +130,7 @@ function toInsertPayload({
 }
 
 export async function listOrgNavItems(orgId: string): Promise<OrgNavItem[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase.from("org_nav_items").select(navSelect).eq("org_id", orgId);
 
   if (error) {
@@ -148,7 +148,7 @@ export async function listOrgNavItems(orgId: string): Promise<OrgNavItem[]> {
 }
 
 export async function saveOrgNavItems(orgId: string, items: OrgNavItem[]): Promise<OrgNavItem[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { error: deleteError } = await supabase.from("org_nav_items").delete().eq("org_id", orgId);
 
   if (deleteError) {

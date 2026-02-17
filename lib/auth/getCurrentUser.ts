@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getSignedProfileAvatarUrl } from "@/lib/account/getSignedProfileAvatarUrl";
 
@@ -18,7 +18,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       return null;
     }
 
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createSupabaseServer();
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("first_name, last_name, avatar_path")

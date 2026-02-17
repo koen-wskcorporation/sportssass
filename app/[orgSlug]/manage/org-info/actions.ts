@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
 function getField(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -15,7 +15,7 @@ export async function saveOrgGoverningBodyAction(orgSlug: string, formData: Form
     const orgContext = await requireOrgPermission(orgSlug, "org.branding.write");
     const governingBodyId = getField(formData, "governingBodyId");
 
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createSupabaseServer();
     const { error } = await supabase
       .from("orgs")
       .update({

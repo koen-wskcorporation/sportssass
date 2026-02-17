@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
+import { createSupabaseServerForRequest } from "@/lib/supabase/server";
 
 function cleanValue(value: FormDataEntryValue | null) {
   if (typeof value !== "string") {
@@ -11,7 +11,7 @@ function cleanValue(value: FormDataEntryValue | null) {
 
 export async function POST(request: NextRequest) {
   const response = NextResponse.redirect(new URL("/account?saved=password", request.url), { status: 303 });
-  const supabase = createSupabaseRouteHandlerClient(request, response);
+  const supabase = createSupabaseServerForRequest(request, response);
   const {
     data: { user }
   } = await supabase.auth.getUser();

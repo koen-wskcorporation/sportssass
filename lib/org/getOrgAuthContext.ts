@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { resolveOrgRolePermissions } from "@/lib/org/customRoles";
 import { getGoverningBodyLogoUrl } from "@/lib/org/getGoverningBodyLogoUrl";
@@ -61,7 +61,7 @@ export async function getOrgAuthContext(orgSlug: string): Promise<OrgAuthContext
     redirect("/auth/login");
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data: orgWithGoverningBody, error: orgWithGoverningBodyError } = await supabase
     .from("orgs")
     .select("id, slug, name, logo_path, icon_path, brand_primary, governing_body:governing_bodies!orgs_governing_body_id_fkey(id, slug, name, logo_path)")

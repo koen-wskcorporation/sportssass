@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
 export type SessionUser = {
   id: string;
@@ -7,7 +7,7 @@ export type SessionUser = {
 
 export async function getSessionUser(): Promise<SessionUser | null> {
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createSupabaseServer();
     const {
       data: { user },
       error

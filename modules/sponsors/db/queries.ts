@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { createOptionalSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   getFormSubmissionById,
@@ -50,7 +50,7 @@ function mapProfile(
 
 export async function getSignedSponsorLogoUrl(path: string) {
   const buckets = ["form-assets", "sponsor-assets"] as const;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   for (const bucket of buckets) {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 10);
 

@@ -4,7 +4,7 @@ import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { createOptionalSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { uploadPurposeConfigByPurpose } from "@/modules/uploads/config";
 import {
@@ -296,7 +296,7 @@ export async function commitUploadAction(formData: FormData): Promise<CommitUplo
       };
     }
 
-    const supabaseClient = serviceRoleClient ?? (await createSupabaseServerClient());
+    const supabaseClient = serviceRoleClient ?? (await createSupabaseServer());
 
     if (!supabaseClient) {
       return {

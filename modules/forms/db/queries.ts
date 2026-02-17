@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { createOptionalSupabaseServiceRoleClient, createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   sanitizeFormBehaviorJson,
@@ -190,7 +190,7 @@ async function createFormAssetsSignedUrl(path: string) {
     }
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   for (const bucket of buckets) {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 10);
 
@@ -203,7 +203,7 @@ async function createFormAssetsSignedUrl(path: string) {
 }
 
 export async function listFormDefinitions(orgId: string): Promise<FormListItem[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase.from("form_definitions").select(formDefinitionSelect).eq("org_id", orgId).order("updated_at", { ascending: false });
 
@@ -253,7 +253,7 @@ export async function listFormDefinitions(orgId: string): Promise<FormListItem[]
 }
 
 export async function getFormDefinitionById(orgId: string, formId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("form_definitions")
     .select(formDefinitionSelect)
@@ -273,7 +273,7 @@ export async function getFormDefinitionById(orgId: string, formId: string) {
 }
 
 export async function getFormDefinitionBySlug(orgId: string, slug: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("form_definitions")
     .select(formDefinitionSelect)
@@ -302,7 +302,7 @@ export async function createFormDefinition(input: {
   themeJson: unknown;
   behaviorJson: unknown;
 }) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("form_definitions")
@@ -327,7 +327,7 @@ export async function createFormDefinition(input: {
 }
 
 async function formSlugExists(orgId: string, slug: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("form_definitions")
     .select("id")
@@ -369,7 +369,7 @@ export async function updateFormDefinitionDraft(input: {
   themeJson: unknown;
   behaviorJson: unknown;
 }) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("form_definitions")
@@ -394,7 +394,7 @@ export async function updateFormDefinitionDraft(input: {
 }
 
 export async function archiveFormDefinition(orgId: string, formId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("form_definitions")
     .update({
@@ -413,7 +413,7 @@ export async function archiveFormDefinition(orgId: string, formId: string) {
 }
 
 export async function getLatestFormVersion(orgId: string, formId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("form_versions")
@@ -436,7 +436,7 @@ export async function getLatestFormVersion(orgId: string, formId: string) {
 }
 
 export async function getFormVersionById(orgId: string, versionId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("form_versions")
@@ -467,7 +467,7 @@ export async function publishFormDefinition(input: { orgId: string; formId: stri
   const nextVersion = (latestVersion?.versionNumber ?? 0) + 1;
   const snapshot = buildSnapshot(definition);
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data: insertedVersion, error: versionError } = await supabase
     .from("form_versions")
@@ -507,7 +507,7 @@ export async function publishFormDefinition(input: { orgId: string; formId: stri
 }
 
 export async function listPublishedForms(orgId: string): Promise<PublishedFormRuntime[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data: definitions, error } = await supabase
     .from("form_definitions")
@@ -654,7 +654,7 @@ export async function listFormSubmissions(
     status?: FormSubmissionStatus | "all";
   }
 ) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   let query = supabase.from("form_submissions").select(formSubmissionSelect).eq("org_id", orgId).order("created_at", { ascending: false });
 
   if (options?.formId) {
@@ -675,7 +675,7 @@ export async function listFormSubmissions(
 }
 
 export async function getFormSubmissionById(orgId: string, submissionId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("form_submissions")
     .select(formSubmissionSelect)
@@ -695,7 +695,7 @@ export async function getFormSubmissionById(orgId: string, submissionId: string)
 }
 
 export async function listSponsorProfiles(orgId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("sponsor_profiles")
     .select(sponsorProfileSelect)
@@ -710,7 +710,7 @@ export async function listSponsorProfiles(orgId: string) {
 }
 
 export async function getSponsorProfile(orgId: string, profileId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("sponsor_profiles")
     .select(sponsorProfileSelect)
@@ -793,7 +793,7 @@ export async function upsertSponsorProfileFromSubmission(input: {
 }
 
 export async function updateSponsorProfileStatus(orgId: string, profileId: string, status: SponsorProfileStatus) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("sponsor_profiles")
@@ -813,7 +813,7 @@ export async function updateSponsorProfileStatus(orgId: string, profileId: strin
 }
 
 export async function listPublishedSponsorProfiles(orgId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase
     .from("sponsor_profiles")
@@ -861,7 +861,7 @@ export async function createAuditLog(input: {
   detailJson?: Record<string, unknown>;
 }) {
   const serviceRoleClient = createOptionalSupabaseServiceRoleClient();
-  const supabase = serviceRoleClient ?? (await createSupabaseServerClient());
+  const supabase = serviceRoleClient ?? (await createSupabaseServer());
 
   const { data, error } = await supabase
     .from("audit_logs")
@@ -884,7 +884,7 @@ export async function createAuditLog(input: {
 }
 
 export async function listAuditLogs(orgId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   const { data, error } = await supabase.from("audit_logs").select(auditLogSelect).eq("org_id", orgId).order("created_at", { ascending: false }).limit(200);
 

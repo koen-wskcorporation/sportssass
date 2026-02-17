@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { resolveOrgRolePermissions } from "@/lib/org/customRoles";
 import type { OrgRole, Permission } from "@/modules/core/tools/access";
@@ -15,7 +15,7 @@ export async function getOptionalOrgMembershipAccess(orgId: string): Promise<Org
     return null;
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data: membership, error } = await supabase
     .from("org_memberships")
     .select("role")

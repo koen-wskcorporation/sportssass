@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AccountMenu } from "@/components/shared/AccountMenu";
+import { signOutAction } from "@/app/auth/actions";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 
 export async function PrimaryHeader() {
@@ -25,6 +26,7 @@ export async function PrimaryHeader() {
             email={currentUser.email}
             firstName={currentUser.firstName}
             lastName={currentUser.lastName}
+            signOutAction={signOutAction}
           />
         ) : (
           <Link href="/auth/login">

@@ -3,6 +3,7 @@ import { DashboardSection, DashboardShell } from "@/components/dashboard/Dashboa
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { OrgCard } from "@/components/dashboard/OrgCard";
 import { buttonVariants } from "@/components/ui/button";
+import { signOutAction } from "@/app/auth/actions";
 import { getDashboardContext } from "@/lib/dashboard/getDashboardContext";
 
 export default async function HomePage() {
@@ -15,7 +16,7 @@ export default async function HomePage() {
           <Link className={buttonVariants({ size: "sm", variant: "secondary" })} href="/account">
             Account
           </Link>
-          <form action="/auth/logout" method="post">
+          <form action={signOutAction}>
             <button className={buttonVariants({ size: "sm", variant: "ghost" })} type="submit">
               Sign out
             </button>

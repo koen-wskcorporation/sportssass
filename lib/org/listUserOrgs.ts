@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import type { OrgRole } from "@/modules/core/tools/access";
 
@@ -18,7 +18,7 @@ export async function listUserOrgs(): Promise<UserOrgMembership[]> {
     return [];
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("org_memberships")
     .select("role, org:orgs!inner(id, slug, name, logo_path, icon_path)")
