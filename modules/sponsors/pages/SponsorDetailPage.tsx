@@ -1,111 +1,119 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Alert } from "@/components/ui/alert";
-import type { OrgAuthContext } from "@/lib/org/types";
-import { getSignedSponsorLogoUrl, getSponsorSubmission } from "@/modules/sponsors/db/queries";
 import { SponsorStatusBadge } from "@/modules/sponsors/components/status-badge";
-import { updateSponsorNotesAction, updateSponsorStatusAction, uploadSponsorAssetAction } from "@/modules/sponsors/actions";
+import { getSponsorProfileDetail } from "@/modules/sponsors/db/queries";
+import { updateSponsorProfileStatusAction } from "@/modules/sponsors/actions";
+import type { OrgAuthContext } from "@/lib/org/types";
 
 function formatDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short"
-  }).format(new Date(value));
+  }).format(date);
+}
+
+function toDisplayValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry)).join(", ");
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+
+  if (value === null || value === undefined) {
+    return "-";
+  }
+
+  const text = String(value).trim();
+  return text || "-";
 }
 
 type SponsorDetailPageProps = {
   orgContext: OrgAuthContext;
-  submissionId: string;
+  profileId: string;
   statusUpdated?: boolean;
-  notesSaved?: boolean;
-  assetUploaded?: boolean;
-  assetUploadErrorCode?: string;
+  errorCode?: string;
   canManage: boolean;
 };
 
-const sponsorAssetUploadErrorMessageByCode: Record<string, string> = {
-  missing_file: "Please select a file to upload.",
-  unsupported_file_type: "Asset must be a PNG, JPG, or SVG file.",
-  file_too_large: "Asset file is too large. Please use a file under 10MB.",
-  upload_not_configured: "File uploads are not configured on the server.",
-  upload_failed: "Unable to upload the file right now. Please try again.",
-  status_update_failed: "Unable to update the submission status right now.",
-  notes_save_failed: "Unable to save notes right now."
+const sponsorErrorMessageByCode: Record<string, string> = {
+  status_update_failed: "Unable to update sponsor status right now."
 };
 
-export async function SponsorDetailPage({
-  orgContext,
-  submissionId,
-  statusUpdated = false,
-  notesSaved = false,
-  assetUploaded = false,
-  assetUploadErrorCode,
-  canManage
-}: SponsorDetailPageProps) {
-  const submission = await getSponsorSubmission(orgContext.orgId, submissionId);
-  const logoUrl = submission.logo_path ? await getSignedSponsorLogoUrl(submission.logo_path) : null;
-  const assetUploadErrorMessage = assetUploadErrorCode ? sponsorAssetUploadErrorMessageByCode[assetUploadErrorCode] : null;
+export async function SponsorDetailPage({ orgContext, profileId, statusUpdated = false, errorCode, canManage }: SponsorDetailPageProps) {
+  const detail = await getSponsorProfileDetail(orgContext.orgId, profileId);
 
-  const updateStatus = updateSponsorStatusAction.bind(null, orgContext.orgSlug, submission.id);
-  const updateNotes = updateSponsorNotesAction.bind(null, orgContext.orgSlug, submission.id);
-  const uploadAsset = uploadSponsorAssetAction.bind(null, orgContext.orgSlug, submission.id);
+  if (!detail) {
+    notFound();
+  }
+
+  const updateStatus = updateSponsorProfileStatusAction.bind(null, orgContext.orgSlug, detail.profile.id);
+  const errorMessage = errorCode ? sponsorErrorMessageByCode[errorCode] : null;
+
+  const answerLabelByFieldName = new Map(
+    (detail.version?.snapshotJson.schema.fields ?? [])
+      .filter((field) => field.type !== "heading" && field.type !== "paragraph")
+      .map((field) => [field.name, field.label])
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         actions={
-          <Link className={buttonVariants({ variant: "ghost" })} href={`/${orgContext.orgSlug}/sponsors/manage`}>
+          <Link className={buttonVariants({ variant: "ghost" })} href={`/${orgContext.orgSlug}/tools/sponsors/manage`}>
             Back to list
           </Link>
         }
-        description={`Submitted ${formatDate(submission.created_at)}`}
-        title={submission.company_name}
+        description={`Updated ${formatDate(detail.profile.updatedAt)}`}
+        title={detail.profile.name}
       />
 
-      {statusUpdated ? <Alert variant="success">Status updated successfully.</Alert> : null}
-      {notesSaved ? <Alert variant="success">Internal notes saved.</Alert> : null}
-      {assetUploaded ? <Alert variant="success">Asset uploaded successfully.</Alert> : null}
-      {assetUploadErrorMessage ? <Alert variant="destructive">{assetUploadErrorMessage}</Alert> : null}
+      {statusUpdated ? <Alert variant="success">Sponsor status updated.</Alert> : null}
+      {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Submission Details</CardTitle>
-            <CardDescription>Contact information and sponsorship intent details.</CardDescription>
+            <CardTitle>Profile Details</CardTitle>
+            <CardDescription>Status and public directory metadata.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <FormField label="Current Status">
-              <SponsorStatusBadge status={submission.status} />
+            <FormField label="Status">
+              <SponsorStatusBadge status={detail.profile.status} />
             </FormField>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Contact Name">
-                <Input readOnly value={submission.contact_name} />
+              <FormField label="Sponsor Name">
+                <Input readOnly value={detail.profile.name} />
               </FormField>
-              <FormField label="Contact Email">
-                <Input readOnly value={submission.contact_email} />
-              </FormField>
-              <FormField label="Phone">
-                <Input readOnly value={submission.contact_phone ?? "Not provided"} />
+              <FormField label="Tier">
+                <Input readOnly value={detail.profile.tier ?? "Not provided"} />
               </FormField>
               <FormField label="Website">
-                <Input readOnly value={submission.website ?? "Not provided"} />
+                <Input readOnly value={detail.profile.websiteUrl ?? "Not provided"} />
+              </FormField>
+              <FormField label="Submission ID">
+                <Input readOnly value={detail.profile.submissionId ?? "No linked submission"} />
               </FormField>
             </div>
 
-            <FormField label="Message">
-              <Textarea readOnly value={submission.message ?? "No message provided."} />
-            </FormField>
-
-            {logoUrl ? (
-              <FormField hint="Uploaded logo asset" label="Logo">
-                <a className={buttonVariants({ size: "sm", variant: "secondary" })} href={logoUrl} rel="noreferrer" target="_blank">
+            {detail.profile.logoUrl ? (
+              <FormField label="Logo">
+                <a className={buttonVariants({ size: "sm", variant: "secondary" })} href={detail.profile.logoUrl} rel="noreferrer" target="_blank">
                   Open Logo
                 </a>
               </FormField>
@@ -115,73 +123,64 @@ export async function SponsorDetailPage({
 
         <div className="space-y-6">
           {canManage ? (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Update Status</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form action={updateStatus} className="space-y-3">
-                    <FormField label="Submission Status">
-                      <Select
-                        defaultValue={submission.status}
-                        name="status"
-                        options={[
-                          { label: "Submitted", value: "submitted" },
-                          { label: "Approved", value: "approved" },
-                          { label: "Rejected", value: "rejected" },
-                          { label: "Paid", value: "paid" }
-                        ]}
-                      />
-                    </FormField>
-                    <Button type="submit">Save Status</Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Internal Notes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form action={updateNotes} className="space-y-3">
-                    <FormField hint="Only visible to authorized org members." label="Notes">
-                      <Textarea defaultValue={submission.internal_notes ?? ""} name="internalNotes" />
-                    </FormField>
-                    <Button type="submit" variant="secondary">
-                      Save Notes
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Upload Asset</CardTitle>
-                  <CardDescription>Attach or replace the sponsor logo/file for this submission.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form action={uploadAsset} className="space-y-3">
-                    <FormField hint="PNG, JPG, or SVG" label="File">
-                      <Input accept=".png,.jpg,.jpeg,.svg" name="logo" required type="file" />
-                    </FormField>
-                    <Button type="submit" variant="secondary">
-                      Upload File
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </>
+            <Card>
+              <CardHeader>
+                <CardTitle>Workflow Status</CardTitle>
+                <CardDescription>Control approval and publish state for this sponsor profile.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form action={updateStatus} className="space-y-3">
+                  <FormField label="Status">
+                    <Select
+                      defaultValue={detail.profile.status}
+                      name="status"
+                      options={[
+                        { value: "draft", label: "Draft" },
+                        { value: "pending", label: "Pending" },
+                        { value: "approved", label: "Approved" },
+                        { value: "published", label: "Published" }
+                      ]}
+                    />
+                  </FormField>
+                  <Button type="submit">Save Status</Button>
+                </form>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardHeader>
                 <CardTitle>Read-only Access</CardTitle>
-                <CardDescription>Your role can review this submission but cannot make changes.</CardDescription>
+                <CardDescription>Your role can view sponsor profiles but cannot make changes.</CardDescription>
               </CardHeader>
             </Card>
           )}
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Intake Submission</CardTitle>
+          <CardDescription>Submission answers are rendered against the version snapshot used at submit time.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!detail.submission ? <p className="text-sm text-text-muted">No submission linked to this profile.</p> : null}
+
+          {detail.submission ? (
+            <>
+              <p className="text-xs text-text-muted">Submitted: {formatDate(detail.submission.createdAt)}</p>
+              <p className="text-xs text-text-muted">Version: {detail.version ? `v${detail.version.versionNumber}` : "Unknown"}</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                {Object.entries(detail.submission.answersJson).map(([fieldName, value]) => (
+                  <div className="space-y-1" key={fieldName}>
+                    <p className="text-xs font-semibold text-text">{answerLabelByFieldName.get(fieldName) ?? fieldName}</p>
+                    <p className="rounded-control border bg-surface-muted px-2 py-1 text-sm text-text">{toDisplayValue(value)}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   );
 }

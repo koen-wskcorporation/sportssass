@@ -1,5 +1,5 @@
 import { emitOrgEvent } from "@/lib/events/emitOrgEvent";
-import type { SponsorSubmissionStatus } from "@/modules/sponsors/types";
+import type { SponsorProfileStatus } from "@/modules/sponsors/types";
 
 type SponsorEventBase = {
   orgId: string;
@@ -33,8 +33,8 @@ export async function emitSponsorSubmissionStatusChanged({
   companyName,
   actorUserId,
   status
-}: SponsorEventBase & { status: SponsorSubmissionStatus }) {
-  if (!["approved", "rejected", "paid"].includes(status)) {
+}: SponsorEventBase & { status: SponsorProfileStatus }) {
+  if (!["approved", "published"].includes(status)) {
     return;
   }
 

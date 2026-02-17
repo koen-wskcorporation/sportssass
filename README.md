@@ -1,82 +1,94 @@
-# Sports SaaS Platform Foundation
+# Sports SaaS
 
-This repository is scaffolded as a **multi-tenant platform**, with Sponsorships implemented as the first tool module.
+Early-stage Next.js App Router project for multi-tenant sports organizations.
 
 ## Stack
 
-- Next.js App Router + TypeScript
-- Tailwind CSS with shared design tokens
-- Supabase (Postgres + Auth + Storage)
+- Next.js + TypeScript
+- Tailwind CSS semantic tokens
+- Supabase (Auth, Postgres, Storage)
 
-## Platform-first architecture
+## Canonical Routes
 
-### Tool system
+Global routes:
 
-- Registry: `modules/core/tools/registry.ts`
-- Permission model: `modules/core/tools/access.ts`
-- App shell navigation is rendered from the tool registry (`components/shared/AppShell.tsx`)
+- `/`
+- `/auth/login`
+- `/auth/logout`
+- `/account`
+- `/forbidden`
 
-Add a new tool by:
+Org routes (`orgSlug` is always first segment):
 
-1. Creating `modules/{toolName}`
-2. Adding a registry entry
-3. Adding routes under `/app/org/[orgSlug]/{toolName}`
+- `/[orgSlug]`
+- `/[orgSlug]/icon`
+- `/[orgSlug]/forms/[slug]`
+- `/[orgSlug]/forms/[slug]/submit`
+- `/[orgSlug]/sponsors`
+- `/[orgSlug]/sponsors/success`
+- `/[orgSlug]/manage`
+- `/[orgSlug]/manage/org-info`
+- `/[orgSlug]/manage/branding`
+- `/[orgSlug]/manage/members`
+- `/[orgSlug]/manage/billing`
+- `/[orgSlug]/tools`
+- `/[orgSlug]/tools/forms`
+- `/[orgSlug]/tools/forms/[id]/edit`
+- `/[orgSlug]/tools/forms/[id]/submissions`
+- `/[orgSlug]/tools/forms/[id]/submissions/export`
+- `/[orgSlug]/tools/sponsors`
+- `/[orgSlug]/tools/sponsors/manage`
+- `/[orgSlug]/tools/sponsors/manage/[id]`
+- `/[orgSlug]/tools/announcements`
 
-### Tenancy
+## Branding Model
 
-- Org resolution: `lib/tenancy/resolveOrg.ts`
-- Org role guards: `lib/tenancy/requireOrgRole.ts`
-- Shared org-scoped shell layout: `app/app/org/[orgSlug]/layout.tsx`
+- App default accent: `#00EAFF`
+- Org override: accent only (`brand_primary` in DB)
+- Org accent is scoped inside org layout only
 
-### Cross-tool event stream
+## Development
 
-- Global events table: `org_events`
-- Event emitter utility: `lib/events/emitOrgEvent.ts`
-- Sponsors module emitters: `modules/sponsors/events.ts`
+```bash
+npm install
+npm run dev
+```
 
-### Sponsorship module
+Quality checks:
 
-- Module root: `modules/sponsors`
-- Includes types, DB queries, components, page components, actions, and event emitters
+```bash
+npm run typecheck
+npm run lint
+```
 
-## Routes
+## Forms Workflow
 
-### Public
+1. Open `/{orgSlug}/tools/forms`.
+2. Create a form and open the builder.
+3. Build fields in the left palette + center canvas + right inspector.
+4. Save draft and publish. Each publish creates a new immutable `form_versions` snapshot.
+5. Public runtime route is `/{orgSlug}/forms/{slug}`.
 
-- `/org/[orgSlug]/sponsor`
-- `/org/[orgSlug]/sponsor/success`
+## Embed Forms In Site Builder
 
-### Authenticated platform
+- Add the `embed_form` block in page builder.
+- Choose a published form.
+- Pick `inline` or `modal` render variant.
+- Optionally override title and success message per embed instance.
 
-- `/app`
-- `/app/org/[orgSlug]`
-- `/app/org/[orgSlug]/sponsors`
-- `/app/org/[orgSlug]/sponsors/[id]`
+## Submission Inbox + CSV Export
 
-## Database and RLS
+- View inbox at `/{orgSlug}/tools/forms/{id}/submissions`.
+- Filter by status (`all`, `submitted`, `reviewed`, `archived`).
+- Open individual submissions to inspect answers against the snapshot version used at submit time.
+- Export filtered rows at `/{orgSlug}/tools/forms/{id}/submissions/export`.
 
-- Migration: `supabase/migrations/202602110001_platform_foundation.sql`
-- Includes:
-  - `orgs`, `org_memberships`
-  - `org_tool_settings`
-  - `org_events`
-  - `sponsor_submissions`
-  - RLS policies for tenant separation
-  - Storage bucket/policies for sponsor assets
+## Sponsorship Intake + Directory
 
-## Local setup
-
-1. Copy `.env.example` to `.env.local` and fill in keys.
-2. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-3. Run Next.js:
-
-   ```bash
-   npm run dev
-   ```
-
-4. Apply Supabase migration in your Supabase project.
+- Canonical intake URL: `/{orgSlug}/forms/sponsorship-intake`.
+- Public `/{orgSlug}/sponsors` now renders the published sponsor directory.
+- Intake submissions with sponsorship behavior create `sponsor_profiles` in `pending`.
+- Sponsors admins (`sponsors.write`) review profiles at:
+  - `/{orgSlug}/tools/sponsors/manage`
+  - `/{orgSlug}/tools/sponsors/manage/{id}`
+- Publish a profile by setting status to `published`.

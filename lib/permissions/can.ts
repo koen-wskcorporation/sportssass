@@ -1,6 +1,6 @@
-import { hasPermissions, type OrgRole, type Permission } from "@/modules/core/tools/access";
+import { hasPermissions, type Permission } from "@/modules/core/tools/access";
 
-export function can(role: OrgRole, permission: Permission | Permission[]) {
-  const permissions = Array.isArray(permission) ? permission : [permission];
-  return hasPermissions(role, permissions);
+export function can(grantedPermissions: Permission[], permission: Permission | Permission[]) {
+  const requiredPermissions = Array.isArray(permission) ? permission : [permission];
+  return hasPermissions(grantedPermissions, requiredPermissions);
 }

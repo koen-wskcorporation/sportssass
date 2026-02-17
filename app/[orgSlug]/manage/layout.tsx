@@ -1,7 +1,10 @@
-import { AppShell } from "@/components/shared/AppShell";
-import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
+import { redirect } from "next/navigation";
+import { ManageSidebar, ManageSidebarMobile } from "@/components/manage/ManageSidebar";
+import { OrgAdminAreaShell } from "@/components/manage/OrgAdminAreaShell";
+import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
+import { can } from "@/lib/permissions/can";
 
-export default async function OrgSettingsLayout({
+export default async function OrgManageLayout({
   children,
   params
 }: {
@@ -9,7 +12,23 @@ export default async function OrgSettingsLayout({
   params: Promise<{ orgSlug: string }>;
 }) {
   const { orgSlug } = await params;
-  const orgContext = await requireOrgPermission(orgSlug, "org.branding.write");
+  const orgContext = await getOrgAuthContext(orgSlug);
 
-  return <AppShell orgContext={orgContext}>{children}</AppShell>;
+  const canAccessManageArea =
+    can(orgContext.membershipPermissions, "org.manage.read") ||
+    can(orgContext.membershipPermissions, "org.pages.read") ||
+    can(orgContext.membershipPermissions, "org.pages.write");
+
+  if (!canAccessManageArea) {
+    redirect("/forbidden");
+  }
+
+  return (
+    <OrgAdminAreaShell
+      mobileSidebar={<ManageSidebarMobile orgSlug={orgContext.orgSlug} />}
+      sidebar={<ManageSidebar orgSlug={orgContext.orgSlug} />}
+    >
+      {children}
+    </OrgAdminAreaShell>
+  );
 }

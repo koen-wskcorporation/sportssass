@@ -1,0 +1,66 @@
+import { cache } from "react";
+import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth/getCurrentUser";
+import { requireAuth } from "@/lib/auth/requireAuth";
+import { listUserOrgs } from "@/lib/org/listUserOrgs";
+import type { OrgRole } from "@/modules/core/tools/access";
+
+export type DashboardUser = Pick<CurrentUser, "userId" | "email" | "firstName" | "lastName" | "avatarUrl">;
+
+export type DashboardOrgMembership = {
+  orgId: string;
+  orgName: string;
+  orgSlug: string;
+  role: OrgRole;
+  iconUrl: string | null;
+};
+
+export type DashboardContext = {
+  user: DashboardUser;
+  organizations: DashboardOrgMembership[];
+};
+
+export const getDashboardContext = cache(async (): Promise<DashboardContext> => {
+  const sessionUser = await requireAuth();
+
+  const [currentUser, orgMemberships] = await Promise.all([getCurrentUser(), listUserOrgs()]);
+
+  const organizations = await Promise.all(
+    orgMemberships.map(async (membership) => {
+      const assetPath = membership.iconPath ?? membership.logoPath;
+      const iconUrl = assetPath ? await getSignedOrgAssetUrl(assetPath, 60 * 10) : null;
+
+      return {
+        orgId: membership.orgId,
+        orgName: membership.orgName,
+        orgSlug: membership.orgSlug,
+        role: membership.role,
+        iconUrl
+      };
+    })
+  );
+
+  if (!currentUser) {
+    return {
+      user: {
+        userId: sessionUser.id,
+        email: sessionUser.email,
+        firstName: null,
+        lastName: null,
+        avatarUrl: null
+      },
+      organizations
+    };
+  }
+
+  return {
+    user: {
+      userId: currentUser.userId,
+      email: currentUser.email,
+      firstName: currentUser.firstName,
+      lastName: currentUser.lastName,
+      avatarUrl: currentUser.avatarUrl
+    },
+    organizations
+  };
+});

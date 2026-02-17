@@ -1,14 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
+import { getOptionalSupabaseServiceRoleConfig, getSupabaseServiceRoleConfig } from "@/lib/supabase/config";
 
 let serviceRoleClient: ReturnType<typeof createClient<any>> | null = null;
-
-function getServiceKey() {
-  return process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? null;
-}
-
-function getSupabaseUrl() {
-  return process.env.NEXT_PUBLIC_SUPABASE_URL ?? null;
-}
 
 function createClientWithServiceKey(supabaseUrl: string, serviceKey: string) {
   return createClient<any>(supabaseUrl, serviceKey, {
@@ -21,12 +14,7 @@ function createClientWithServiceKey(supabaseUrl: string, serviceKey: string) {
 
 export function createSupabaseServiceRoleClient() {
   if (!serviceRoleClient) {
-    const supabaseUrl = getSupabaseUrl();
-    const serviceRoleKey = getServiceKey();
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL and/or SUPABASE_SECRET_KEY (SUPABASE_SERVICE_ROLE_KEY fallback).");
-    }
+    const { supabaseUrl, serviceRoleKey } = getSupabaseServiceRoleConfig();
 
     serviceRoleClient = createClientWithServiceKey(supabaseUrl, serviceRoleKey);
   }
@@ -35,12 +23,11 @@ export function createSupabaseServiceRoleClient() {
 }
 
 export function createOptionalSupabaseServiceRoleClient() {
-  const supabaseUrl = getSupabaseUrl();
-  const serviceRoleKey = getServiceKey();
+  const config = getOptionalSupabaseServiceRoleConfig();
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!config) {
     return null;
   }
 
-  return createClientWithServiceKey(supabaseUrl, serviceRoleKey);
+  return createClientWithServiceKey(config.supabaseUrl, config.serviceRoleKey);
 }

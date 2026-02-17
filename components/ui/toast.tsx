@@ -72,19 +72,19 @@ function subscribeToast(listener: (event: ToastStoreEvent) => void) {
 
 const variantStyles: Record<ToastVariant, { accent: string; badge: string }> = {
   info: {
-    accent: "bg-secondary/60",
-    badge: "text-secondary"
+    accent: "bg-accent/45",
+    badge: "text-accent-foreground"
   },
   success: {
-    accent: "bg-success/70",
+    accent: "bg-success/45",
     badge: "text-success"
   },
   warning: {
-    accent: "bg-primary/70",
-    badge: "text-primary"
+    accent: "bg-accent/35",
+    badge: "text-accent-foreground"
   },
   destructive: {
-    accent: "bg-destructive/70",
+    accent: "bg-destructive/45",
     badge: "text-destructive"
   }
 };
@@ -219,7 +219,7 @@ function ToastViewport({ toasts }: { toasts: ToastItem[] }) {
           <section
             aria-live={variant === "destructive" ? "assertive" : "polite"}
             className={cn(
-              "pointer-events-auto relative overflow-hidden rounded-lg border bg-surface p-4 shadow-xl transition-all duration-200",
+              "pointer-events-auto relative overflow-hidden rounded-card border bg-surface p-4 shadow-card transition-all duration-200",
               item.open ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
             )}
             key={item.id}
@@ -229,9 +229,9 @@ function ToastViewport({ toasts }: { toasts: ToastItem[] }) {
 
             <div className="space-y-3 pl-3">
               <div className="space-y-1">
-                <p className={cn("text-xs font-semibold uppercase tracking-wide", variantStyle.badge)}>{variant}</p>
-                <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                {item.description ? <p className="text-sm text-muted-foreground">{item.description}</p> : null}
+                <p className={cn("text-xs font-semibold tracking-wide", variantStyle.badge)}>{variant}</p>
+                <p className="text-sm font-semibold text-text">{item.title}</p>
+                {item.description ? <p className="text-sm text-text-muted">{item.description}</p> : null}
               </div>
 
               <div className="flex items-center gap-2">

@@ -1,4 +1,6 @@
-import { renderOrgPage } from "@/modules/site-builder/server/renderOrgPage";
+import { notFound } from "next/navigation";
+import { OrgSitePage } from "@/modules/site-builder/components/OrgSitePage";
+import { getOrgSitePageForRender } from "@/modules/site-builder/server/getOrgSitePageForRender";
 
 export default async function OrgPublicHomePage({
   params,
@@ -9,10 +11,26 @@ export default async function OrgPublicHomePage({
 }) {
   const { orgSlug } = await params;
   const query = await searchParams;
-
-  return renderOrgPage({
+  const autoOpenEditor = query.edit === "1";
+  const pageData = await getOrgSitePageForRender({
     orgSlug,
-    pageKey: "home",
-    searchParams: query
+    pageSlug: "home"
   });
+
+  if (!pageData.page || !pageData.blocks) {
+    notFound();
+  }
+
+  return (
+    <OrgSitePage
+      autoOpenEditor={autoOpenEditor}
+      canEdit={pageData.canEdit}
+      initialBlocks={pageData.blocks}
+      initialPage={pageData.page}
+      initialRuntimeData={pageData.runtimeData}
+      orgName={pageData.orgContext.orgName}
+      orgSlug={pageData.orgContext.orgSlug}
+      pageSlug={pageData.page.slug}
+    />
+  );
 }

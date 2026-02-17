@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,27 +33,17 @@ export function AuthForm({ initialMode }: AuthFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-2 rounded-md border bg-surface-alt p-1">
-          <Button
-            className="w-full"
-            onClick={() => setMode("signin")}
-            type="button"
-            variant={mode === "signin" ? "primary" : "ghost"}
-          >
+        <div className="grid grid-cols-2 gap-2 rounded-control border bg-surface-muted p-1">
+          <Button className="w-full" onClick={() => setMode("signin")} type="button" variant={mode === "signin" ? "primary" : "ghost"}>
             Sign in
           </Button>
-          <Button
-            className="w-full"
-            onClick={() => setMode("signup")}
-            type="button"
-            variant={mode === "signup" ? "primary" : "ghost"}
-          >
+          <Button className="w-full" onClick={() => setMode("signup")} type="button" variant={mode === "signup" ? "primary" : "ghost"}>
             Create account
           </Button>
         </div>
 
         {activeState.error ? <Alert variant="destructive">{activeState.error}</Alert> : null}
-        {activeState.success ? <Alert variant="warning">{activeState.success}</Alert> : null}
+        {activeState.success ? <Alert variant="info">{activeState.success}</Alert> : null}
 
         {mode === "signin" ? (
           <form action={signInAction} className="space-y-3">
@@ -81,9 +71,9 @@ export function AuthForm({ initialMode }: AuthFormProps) {
           </form>
         )}
 
-        <div className="flex items-center justify-between text-sm">
-          <Link className="text-muted-foreground underline-offset-2 hover:underline" href="/">
-            Workspace index
+        <div className="text-sm">
+          <Link className="text-text-muted underline-offset-2 hover:underline" href="/">
+            Dashboard
           </Link>
         </div>
       </CardContent>

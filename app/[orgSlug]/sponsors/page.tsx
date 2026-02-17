@@ -1,27 +1,11 @@
-import type { Metadata } from "next";
-import { PublicSponsorPage } from "@/modules/sponsors/pages/PublicSponsorPage";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
+import { PublicSponsorPage } from "@/modules/sponsors/pages/PublicSponsorPage";
+import { listPublishedSponsorProfiles } from "@/modules/sponsors/db/queries";
 
-export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
-  const { orgSlug } = await params;
-
-  return {
-    icons: {
-      icon: `/${orgSlug}/icon`
-    }
-  };
-}
-
-export default async function SponsorsFormPage({
-  params,
-  searchParams
-}: {
-  params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ error?: string }>;
-}) {
+export default async function SponsorsDirectoryPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
   const orgContext = await getOrgPublicContext(orgSlug);
-  const query = await searchParams;
+  const sponsors = await listPublishedSponsorProfiles(orgContext.orgId);
 
-  return <PublicSponsorPage errorCode={query.error} orgContext={orgContext} />;
+  return <PublicSponsorPage orgContext={orgContext} sponsors={sponsors} />;
 }

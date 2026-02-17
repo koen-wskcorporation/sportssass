@@ -2,9 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { uploadProfileAvatar } from "@/lib/account/uploadProfileAvatar";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
-import { isUploadError } from "@/lib/uploads/errors";
 
 function cleanValue(value: FormDataEntryValue | null) {
   if (typeof value !== "string") {
@@ -33,43 +31,19 @@ export async function saveProfileAction(formData: FormData) {
 
     const firstName = cleanValue(formData.get("firstName"));
     const lastName = cleanValue(formData.get("lastName"));
-    const avatar = formData.get("avatar");
-
-    let avatarPath: string | null = null;
-
-    if (avatar instanceof File && avatar.size > 0) {
-      try {
-        avatarPath = await uploadProfileAvatar(user.id, avatar);
-      } catch (error) {
-        if (isUploadError(error)) {
-          switch (error.code) {
-            case "unsupported_file_type":
-              redirect("/account?error=unsupported_file_type");
-            case "file_too_large":
-              redirect("/account?error=file_too_large");
-            default:
-              redirect("/account?error=avatar_upload_failed");
-          }
-        }
-
-        redirect("/account?error=avatar_upload_failed");
-      }
-    }
+    const avatarPath = cleanValue(formData.get("avatarPath")) || null;
 
     const updates: {
       user_id: string;
       first_name: string | null;
       last_name: string | null;
-      avatar_path?: string | null;
+      avatar_path: string | null;
     } = {
       user_id: user.id,
       first_name: firstName || null,
-      last_name: lastName || null
+      last_name: lastName || null,
+      avatar_path: avatarPath
     };
-
-    if (avatarPath) {
-      updates.avatar_path = avatarPath;
-    }
 
     const { error } = await supabase.from("user_profiles").upsert(updates, {
       onConflict: "user_id"

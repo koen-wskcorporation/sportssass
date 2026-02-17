@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
@@ -8,19 +10,118 @@ type DialogProps = {
 };
 
 export function Dialog({ open, onClose, children }: DialogProps) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "textarea:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])"
+    ].join(",");
+
+    const setInitialFocus = () => {
+      const root = containerRef.current;
+      if (!root) {
+        return;
+      }
+
+      const focusable = root.querySelectorAll<HTMLElement>(focusableSelector);
+      const firstFocusable = focusable[0];
+
+      if (firstFocusable) {
+        firstFocusable.focus();
+        return;
+      }
+
+      root.focus();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const root = containerRef.current;
+      if (!root) {
+        return;
+      }
+
+      const focusable = Array.from(root.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        (element) => !element.hasAttribute("disabled") && element.tabIndex !== -1
+      );
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        root.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (!event.shiftKey && current === last) {
+        event.preventDefault();
+        first.focus();
+      }
+
+      if (event.shiftKey && current === first) {
+        event.preventDefault();
+        last.focus();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    setInitialFocus();
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      previousActiveElement?.focus();
+    };
+  }, [onClose, open]);
+
   if (!open) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-foreground/45 px-4" onClick={onClose} role="presentation">
-      <div onClick={(event) => event.stopPropagation()}>{children}</div>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-text/45 px-4" onClick={onClose} role="presentation">
+      <div aria-modal="true" onClick={(event) => event.stopPropagation()} ref={containerRef} role="dialog" tabIndex={-1}>
+        {children}
+      </div>
     </div>
   );
 }
 
-export function DialogContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("w-full max-w-lg rounded-lg border bg-surface p-6 text-foreground shadow-xl", className)} {...props} />;
+export function DialogContent({ className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "w-[min(40rem,calc(100vw-1rem))] max-h-[calc(100vh-1rem)] min-w-0 overflow-x-hidden overflow-y-auto rounded-card border bg-surface p-5 text-text shadow-card [overflow-wrap:anywhere]",
+        className
+      )}
+      style={style}
+      {...props}
+    />
+  );
 }
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
@@ -28,11 +129,11 @@ export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLD
 }
 
 export function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn("font-display text-lg font-semibold", className)} {...props} />;
+  return <h3 className={cn("text-lg font-semibold text-text", className)} {...props} />;
 }
 
 export function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-muted-foreground", className)} {...props} />;
+  return <p className={cn("text-sm text-text-muted", className)} {...props} />;
 }
 
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
+import { AssetTile } from "@/components/ui/asset-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -15,9 +16,6 @@ const successMessageByCode: Record<string, string> = {
 };
 
 const errorMessageByCode: Record<string, string> = {
-  unsupported_file_type: "Profile picture must be a PNG, JPG, WEBP, or SVG file.",
-  file_too_large: "Profile picture is too large. Please use a file under 5MB.",
-  avatar_upload_failed: "Avatar upload failed. Please use a valid image file and try again.",
   profile_save_failed: "Unable to save profile details right now.",
   service_unavailable: "We could not reach the account service. Please try again in a moment.",
   weak_password: "Password must be at least 8 characters.",
@@ -42,8 +40,8 @@ export default async function AccountPage({
   const fullName = [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") || "No name set";
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8 md:px-8 md:py-10">
-      <div className="space-y-6">
+    <main className="app-container py-8 md:py-10">
+      <div className="mx-auto max-w-6xl space-y-6">
         <PageHeader description="Manage your profile details and account security." title="Account" />
 
         {successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
@@ -55,18 +53,18 @@ export default async function AccountPage({
             <CardDescription>Your identity details shown across organizations.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3 rounded-md border p-3">
+            <div className="flex items-center gap-3 rounded-control border bg-surface-muted p-3">
               {currentUser.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img alt={`${fullName} avatar`} className="h-12 w-12 rounded-full border object-cover" src={currentUser.avatarUrl} />
               ) : (
-                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border bg-surface-alt text-sm font-semibold">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border bg-surface text-sm font-semibold">
                   {(fullName.charAt(0) || "A").toUpperCase()}
                 </span>
               )}
               <div>
                 <p className="text-sm font-semibold">{fullName}</p>
-                <p className="text-xs text-muted-foreground">{currentUser.email ?? "No email available"}</p>
+                <p className="text-xs text-text-muted">{currentUser.email ?? "No email available"}</p>
               </div>
             </div>
 
@@ -79,8 +77,28 @@ export default async function AccountPage({
                   <Input defaultValue={currentUser.lastName ?? ""} name="lastName" />
                 </FormField>
               </div>
-              <FormField hint="PNG, JPG, WEBP, or SVG" label="Profile picture">
-                <Input accept=".png,.jpg,.jpeg,.webp,.svg" name="avatar" type="file" />
+              <FormField label="Profile picture">
+                <AssetTile
+                  constraints={{
+                    accept: "image/*",
+                    maxSizeMB: 5,
+                    aspect: "square",
+                    recommendedPx: {
+                      w: 640,
+                      h: 640
+                    }
+                  }}
+                  emptyLabel="Upload profile picture"
+                  fit="contain"
+                  initialPath={currentUser.avatarPath}
+                  initialUrl={currentUser.avatarUrl}
+                  kind="account"
+                  name="avatarPath"
+                  previewAlt={`${fullName} avatar`}
+                  purpose="profile-photo"
+                  specificationText="PNG, JPG, WEBP, or SVG"
+                  title="Profile picture"
+                />
               </FormField>
               <Button type="submit">Save profile</Button>
             </form>

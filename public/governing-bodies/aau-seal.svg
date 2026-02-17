@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
+  <title id="title">AAU Seal</title>
+  <desc id="desc">Stylized AAU governing body seal placeholder.</desc>
+  <circle cx="60" cy="60" r="56" fill="#1F4A9D" />
+  <circle cx="60" cy="60" r="48" fill="none" stroke="#F4C84A" stroke-width="4" />
+  <text x="60" y="56" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" fill="#FFFFFF" font-weight="700">AAU</text>
+  <path d="M30 74h60" stroke="#F4C84A" stroke-width="4" stroke-linecap="round" />
+  <text x="60" y="93" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#FFFFFF" font-weight="700">YOUTH SPORTS</text>
+</svg>

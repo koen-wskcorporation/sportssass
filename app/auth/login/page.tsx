@@ -18,9 +18,9 @@ export default async function LoginPage({
   const initialMode = query.mode === "signup" ? "signup" : "signin";
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-10 sm:px-6">
-      <div className="space-y-6">
-        <PageHeader description="Sign in or create an account to access organization workspaces." title="Account Access" />
+    <main className="app-container py-8 md:py-10">
+      <div className="mx-auto max-w-3xl space-y-6">
+        <PageHeader description="Sign in or create an account to open your dashboard and organizations." title="Account Access" />
         <AuthForm initialMode={initialMode} />
       </div>
     </main>

@@ -1,16 +1,26 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert } from "@/components/ui/alert";
+import { PageHeader } from "@/components/ui/page-header";
+import { getAccountsAccessPageData } from "@/modules/manage-access/actions";
+import { AccountsAccessPanel } from "@/modules/manage-access/components/AccountsAccessPanel";
 
-export default function OrgMembersSettingsPage() {
+export default async function OrgMembersSettingsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  const data = await getAccountsAccessPageData(orgSlug);
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Members</CardTitle>
-        <CardDescription>Membership management lives on this single stable settings route.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Alert variant="info">Members management UI is intentionally placeholder in this routing overhaul.</Alert>
-      </CardContent>
-    </Card>
+    <>
+      <PageHeader
+        description="Invite users, assign access roles, and handle account recovery."
+        title="Accounts & Access"
+      />
+      <AccountsAccessPanel
+        currentUserPermissions={data.currentUserPermissions}
+        currentUserRole={data.currentUserRole}
+        loadError={data.loadError}
+        members={data.members}
+        orgSlug={data.orgSlug}
+        roles={data.roles}
+        serviceRoleConfigured={data.serviceRoleConfigured}
+      />
+    </>
   );
 }

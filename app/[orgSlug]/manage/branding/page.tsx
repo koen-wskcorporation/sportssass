@@ -1,20 +1,17 @@
-import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { AssetTile } from "@/components/ui/asset-tile";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
-import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { can } from "@/lib/permissions/can";
+import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { saveOrgBrandingAction } from "./actions";
 
 const errorMessageByCode: Record<string, string> = {
-  invalid_primary: "Primary color must be a valid HEX value (for example #00D09F).",
-  invalid_secondary: "Secondary color must be a valid HEX value (for example #0EA5E9).",
-  unsupported_file_type: "Brand assets must be PNG, JPG, WEBP, SVG, or ICO files.",
-  file_too_large: "Asset file is too large. Please use files under 10MB.",
-  upload_failed: "Asset upload failed. Check file type and try again.",
+  invalid_accent: "Accent color must be a valid hex value.",
   save_failed: "Unable to save branding settings right now."
 };
 
@@ -27,22 +24,20 @@ export default async function OrgBrandingSettingsPage({
 }) {
   const { orgSlug } = await params;
   const orgContext = await requireOrgPermission(orgSlug, "org.branding.read");
-  const canManageBranding = can(orgContext.membershipRole, "org.branding.write");
+  const canManageBranding = can(orgContext.membershipPermissions, "org.branding.write");
 
-  const logoUrl = orgContext.branding.logoPath ? await getSignedOrgAssetUrl(orgContext.branding.logoPath, 60 * 10) : null;
-  const iconUrl = orgContext.branding.iconPath ? await getSignedOrgAssetUrl(orgContext.branding.iconPath, 60 * 10) : null;
+  const [query, logoUrl, iconUrl] = await Promise.all([
+    searchParams,
+    orgContext.branding.logoPath ? getSignedOrgAssetUrl(orgContext.branding.logoPath, 60 * 10) : Promise.resolve(null),
+    orgContext.branding.iconPath ? getSignedOrgAssetUrl(orgContext.branding.iconPath, 60 * 10) : Promise.resolve(null)
+  ]);
 
-  const query = await searchParams;
   const errorMessage = query.error ? errorMessageByCode[query.error] : null;
   const saveBranding = saveOrgBrandingAction.bind(null, orgSlug);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
-        <Link className={buttonVariants({ variant: "ghost" })} href={`/${orgSlug}/manage`}>
-          Back to settings
-        </Link>
-      </div>
+    <>
+      <PageHeader description="Control how your organization appears across public and staff routes." title="Branding" />
 
       {query.saved === "1" ? <Alert variant="success">Branding saved successfully.</Alert> : null}
       {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
@@ -50,63 +45,77 @@ export default async function OrgBrandingSettingsPage({
       <Card>
         <CardHeader>
           <CardTitle>Brand Assets</CardTitle>
-          <CardDescription>Logo and icon will appear in org contexts and org-specific favicon routes.</CardDescription>
+          <CardDescription>Logo and icon are used in org routes and the org favicon endpoint.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
           <form action={saveBranding} className="space-y-5">
-            <fieldset className="space-y-5" disabled={!canManageBranding}>
+            <fieldset className="space-y-4" disabled={!canManageBranding}>
               <div className="grid gap-4 md:grid-cols-2">
-                <FormField hint="PNG, JPG, WEBP, or SVG" label="Org Logo">
-                  <Input accept=".png,.jpg,.jpeg,.webp,.svg" name="logo" type="file" />
+                <FormField className="space-y-2" label="Org Logo">
+                  <AssetTile
+                    constraints={{
+                      accept: "image/*,.svg",
+                      maxSizeMB: 10,
+                      aspect: "free",
+                      recommendedPx: {
+                        w: 1200,
+                        h: 500
+                      }
+                    }}
+                    disabled={!canManageBranding}
+                    emptyLabel="Upload logo"
+                    fit="contain"
+                    initialPath={orgContext.branding.logoPath}
+                    initialUrl={logoUrl}
+                    kind="org"
+                    name="logoPath"
+                    orgSlug={orgSlug}
+                    previewAlt={`${orgContext.orgName} logo`}
+                    purpose="org-logo"
+                    specificationText="PNG, JPG, WEBP, or SVG"
+                    title="Org Logo"
+                  />
                 </FormField>
 
-                <FormField hint="PNG, ICO, JPG, or SVG" label="Org Icon">
-                  <Input accept=".png,.ico,.jpg,.jpeg,.svg" name="icon" type="file" />
+                <FormField className="space-y-2" label="Org Icon">
+                  <AssetTile
+                    constraints={{
+                      accept: "image/*,.ico",
+                      maxSizeMB: 10,
+                      aspect: "square",
+                      recommendedPx: {
+                        w: 512,
+                        h: 512
+                      }
+                    }}
+                    disabled={!canManageBranding}
+                    emptyLabel="Upload icon"
+                    fit="contain"
+                    initialPath={orgContext.branding.iconPath}
+                    initialUrl={iconUrl}
+                    kind="org"
+                    name="iconPath"
+                    orgSlug={orgSlug}
+                    previewAlt={`${orgContext.orgName} icon`}
+                    purpose="org-icon"
+                    specificationText="PNG, ICO, JPG, or SVG"
+                    title="Org Icon"
+                  />
                 </FormField>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField hint="HEX value like #00D09F" label="Primary Color">
-                  <Input defaultValue={orgContext.branding.brandPrimary ?? ""} name="brandPrimary" placeholder="#00D09F" />
-                </FormField>
-
-                <FormField hint="HEX value like #0EA5E9" label="Secondary Color">
-                  <Input defaultValue={orgContext.branding.brandSecondary ?? ""} name="brandSecondary" placeholder="#0EA5E9" />
-                </FormField>
-              </div>
+              <FormField hint="Hex format: #RRGGBB" label="Accent Color">
+                <Input defaultValue={orgContext.branding.accent ?? ""} name="accent" placeholder="#00EAFF" />
+              </FormField>
             </fieldset>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-md border p-4">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current Logo</p>
-                {logoUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img alt={`${orgContext.orgName} logo`} className="h-12 w-auto" src={logoUrl} />
-                ) : (
-                  <p className="text-sm text-muted-foreground">No logo uploaded.</p>
-                )}
-              </div>
-
-              <div className="rounded-md border p-4">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current Icon</p>
-                {iconUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img alt={`${orgContext.orgName} icon`} className="h-8 w-8 rounded" src={iconUrl} />
-                ) : (
-                  <p className="text-sm text-muted-foreground">No icon uploaded.</p>
-                )}
-              </div>
-            </div>
-
-            {!canManageBranding ? (
-              <Alert variant="warning">You have read-only access to branding settings.</Alert>
-            ) : null}
+            {!canManageBranding ? <Alert variant="warning">You have read-only access to branding settings.</Alert> : null}
             <Button disabled={!canManageBranding} type="submit">
               Save Branding
             </Button>
           </form>
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

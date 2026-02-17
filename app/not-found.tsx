@@ -4,15 +4,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export default function NotFoundPage() {
   return (
-    <main className="mx-auto flex min-h-[60vh] w-full max-w-2xl items-center px-4 py-10">
-      <Card className="w-full">
+    <main className="app-container flex min-h-[60vh] items-center py-10">
+      <Card className="mx-auto w-full max-w-3xl">
         <CardHeader>
-          <CardTitle>Page not found</CardTitle>
-          <CardDescription>The page you requested does not exist or has moved.</CardDescription>
+          <CardTitle>Page Not Found</CardTitle>
+          <CardDescription>The page you requested does not exist.</CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/">
-            <Button variant="secondary">Back to home</Button>
+            <Button variant="secondary">Back to Home</Button>
           </Link>
         </CardContent>
       </Card>

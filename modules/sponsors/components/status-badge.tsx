@@ -1,18 +1,18 @@
 import { Badge } from "@/components/ui/badge";
-import type { SponsorSubmissionStatus } from "@/modules/sponsors/types";
+import type { SponsorProfileStatus } from "@/modules/sponsors/types";
 
-export function SponsorStatusBadge({ status }: { status: SponsorSubmissionStatus }) {
+export function SponsorStatusBadge({ status }: { status: SponsorProfileStatus }) {
+  if (status === "published") {
+    return <Badge variant="success">published</Badge>;
+  }
+
   if (status === "approved") {
     return <Badge variant="success">approved</Badge>;
   }
 
-  if (status === "rejected") {
-    return <Badge variant="destructive">rejected</Badge>;
+  if (status === "pending") {
+    return <Badge variant="warning">pending</Badge>;
   }
 
-  if (status === "paid") {
-    return <Badge variant="secondary">paid</Badge>;
-  }
-
-  return <Badge variant="warning">submitted</Badge>;
+  return <Badge variant="neutral">draft</Badge>;
 }

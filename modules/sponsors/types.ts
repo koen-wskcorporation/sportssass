@@ -1,31 +1,17 @@
-export const sponsorSubmissionStatuses = ["submitted", "approved", "rejected", "paid"] as const;
+export const sponsorProfileStatuses = ["draft", "pending", "approved", "published"] as const;
 
-export type SponsorSubmissionStatus = (typeof sponsorSubmissionStatuses)[number];
+export type SponsorProfileStatus = (typeof sponsorProfileStatuses)[number];
 
-export type SponsorSubmission = {
+export type SponsorProfileListItem = {
   id: string;
-  org_id: string;
-  company_name: string;
-  contact_name: string;
-  contact_email: string;
-  contact_phone: string | null;
-  website: string | null;
-  message: string | null;
-  logo_path: string | null;
-  status: SponsorSubmissionStatus;
-  internal_notes: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type CreateSponsorSubmissionInput = {
-  id: string;
-  org_id: string;
-  company_name: string;
-  contact_name: string;
-  contact_email: string;
-  contact_phone?: string | null;
-  website?: string | null;
-  message?: string | null;
-  logo_path?: string | null;
+  orgId: string;
+  name: string;
+  logoAssetId: string | null;
+  logoUrl: string | null;
+  websiteUrl: string | null;
+  tier: string | null;
+  status: SponsorProfileStatus;
+  submissionId: string | null;
+  createdAt: string;
+  updatedAt: string;
 };

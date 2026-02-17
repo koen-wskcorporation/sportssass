@@ -1,22 +1,51 @@
 import { cache } from "react";
-import { forbidden, notFound, redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import type { OrgRole } from "@/modules/core/tools/access";
-import type { OrgAuthContext, OrgBranding } from "@/lib/org/types";
+import { resolveOrgRolePermissions } from "@/lib/org/customRoles";
 import { isReservedOrgSlug } from "@/lib/org/reservedSlugs";
+import type { OrgRole } from "@/modules/core/tools/access";
+import type { OrgAuthContext, OrgBranding, OrgGoverningBody } from "@/lib/org/types";
 
 function mapBranding(org: {
   logo_path?: string | null;
   icon_path?: string | null;
   brand_primary?: string | null;
-  brand_secondary?: string | null;
 }): OrgBranding {
   return {
     logoPath: org.logo_path ?? null,
     iconPath: org.icon_path ?? null,
-    brandPrimary: org.brand_primary ?? null,
-    brandSecondary: org.brand_secondary ?? null
+    accent: org.brand_primary ?? null
+  };
+}
+
+function mapGoverningBody(governingBody: unknown): OrgGoverningBody | null {
+  if (!governingBody || typeof governingBody !== "object") {
+    return null;
+  }
+
+  const record = Array.isArray(governingBody) ? governingBody[0] : governingBody;
+
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+
+  const mapped = record as {
+    id?: string;
+    slug?: string;
+    name?: string;
+    logo_url?: string;
+  };
+
+  if (!mapped.id || !mapped.slug || !mapped.name || !mapped.logo_url) {
+    return null;
+  }
+
+  return {
+    id: mapped.id,
+    slug: mapped.slug,
+    name: mapped.name,
+    logoUrl: mapped.logo_url
   };
 }
 
@@ -32,13 +61,45 @@ export const getOrgAuthContext = cache(async (orgSlug: string): Promise<OrgAuthC
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data: org, error: orgError } = await supabase
+  const { data: orgWithGoverningBody, error: orgWithGoverningBodyError } = await supabase
     .from("orgs")
-    .select("id, slug, name, logo_path, icon_path, brand_primary, brand_secondary")
+    .select("id, slug, name, logo_path, icon_path, brand_primary, governing_body:governing_bodies!orgs_governing_body_id_fkey(id, slug, name, logo_url)")
     .eq("slug", orgSlug)
     .maybeSingle();
 
-  if (orgError || !org) {
+  let org:
+    | {
+        id: string;
+        slug: string;
+        name: string;
+        logo_path: string | null;
+        icon_path: string | null;
+        brand_primary: string | null;
+        governing_body?: unknown;
+      }
+    | null = null;
+
+  if (orgWithGoverningBodyError) {
+    // Keep auth-protected org pages online if governing body migration has not been applied yet.
+    const { data: fallbackOrg, error: fallbackOrgError } = await supabase
+      .from("orgs")
+      .select("id, slug, name, logo_path, icon_path, brand_primary")
+      .eq("slug", orgSlug)
+      .maybeSingle();
+
+    if (fallbackOrgError || !fallbackOrg) {
+      notFound();
+    }
+
+    org = {
+      ...fallbackOrg,
+      governing_body: null
+    };
+  } else {
+    org = orgWithGoverningBody;
+  }
+
+  if (!org) {
     notFound();
   }
 
@@ -50,15 +111,20 @@ export const getOrgAuthContext = cache(async (orgSlug: string): Promise<OrgAuthC
     .maybeSingle();
 
   if (membershipError || !membership) {
-    forbidden();
+    redirect("/forbidden");
   }
+
+  const membershipRole = membership.role as OrgRole;
+  const membershipPermissions = await resolveOrgRolePermissions(supabase, org.id, membershipRole);
 
   return {
     orgId: org.id,
     orgSlug: org.slug,
     orgName: org.name,
     userId: user.id,
-    membershipRole: membership.role as OrgRole,
-    branding: mapBranding(org)
+    membershipRole,
+    membershipPermissions,
+    branding: mapBranding(org),
+    governingBody: mapGoverningBody(org.governing_body)
   };
 });

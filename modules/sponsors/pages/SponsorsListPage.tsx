@@ -1,18 +1,24 @@
 import Link from "next/link";
-import { PageHeader } from "@/components/ui/page-header";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { buttonVariants } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { listSponsorSubmissions } from "@/modules/sponsors/db/queries";
-import { SponsorStatusBadge } from "@/modules/sponsors/components/status-badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { OrgAuthContext } from "@/lib/org/types";
+import { SponsorStatusBadge } from "@/modules/sponsors/components/status-badge";
+import { listSponsorProfilesForManage } from "@/modules/sponsors/db/queries";
 
 function formatDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short"
-  }).format(new Date(value));
+  }).format(date);
 }
 
 type SponsorsListPageProps = {
@@ -21,53 +27,47 @@ type SponsorsListPageProps = {
 };
 
 export async function SponsorsListPage({ orgContext, updated = false }: SponsorsListPageProps) {
-  const submissions = await listSponsorSubmissions(orgContext.orgId);
+  const profiles = await listSponsorProfilesForManage(orgContext.orgId);
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        description="Manage pipeline status, notes, and payout progression for sponsor submissions."
-        title="Sponsorship Submissions"
-      />
+      <PageHeader description="Review sponsor intake profiles and publish approved partners." title="Sponsorship Profiles" />
 
-      {updated ? <Alert variant="success">Submission updated successfully.</Alert> : null}
+      {updated ? <Alert variant="success">Sponsor profile updated successfully.</Alert> : null}
 
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Company</TableHead>
-                <TableHead>Primary Contact</TableHead>
+                <TableHead>Sponsor</TableHead>
+                <TableHead>Tier</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Submitted</TableHead>
+                <TableHead>Updated</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {submissions.length === 0 ? (
+              {profiles.length === 0 ? (
                 <TableRow>
-                  <TableCell className="py-8 text-center text-muted-foreground" colSpan={5}>
-                    No submissions yet.
+                  <TableCell className="py-8 text-center text-text-muted" colSpan={5}>
+                    No sponsor profiles yet.
                   </TableCell>
                 </TableRow>
               ) : (
-                submissions.map((submission) => (
-                  <TableRow key={submission.id}>
-                    <TableCell className="font-semibold">{submission.company_name}</TableCell>
-                    <TableCell>
-                      <p>{submission.contact_name}</p>
-                      <p className="text-xs text-muted-foreground">{submission.contact_email}</p>
+                profiles.map((profile) => (
+                  <TableRow key={profile.id}>
+                    <TableCell className="font-semibold">
+                      <p>{profile.name}</p>
+                      <p className="text-xs text-text-muted">{profile.websiteUrl || "No website"}</p>
                     </TableCell>
+                    <TableCell>{profile.tier || "-"}</TableCell>
                     <TableCell>
-                      <SponsorStatusBadge status={submission.status} />
+                      <SponsorStatusBadge status={profile.status} />
                     </TableCell>
-                    <TableCell>{formatDate(submission.created_at)}</TableCell>
+                    <TableCell>{formatDate(profile.updatedAt)}</TableCell>
                     <TableCell className="text-right">
-                      <Link
-                        className={buttonVariants({ size: "sm", variant: "ghost" })}
-                        href={`/${orgContext.orgSlug}/sponsors/manage/${submission.id}`}
-                      >
+                      <Link className={buttonVariants({ size: "sm", variant: "ghost" })} href={`/${orgContext.orgSlug}/tools/sponsors/manage/${profile.id}`}>
                         Review
                       </Link>
                     </TableCell>
@@ -79,9 +79,12 @@ export async function SponsorsListPage({ orgContext, updated = false }: Sponsors
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/sponsors`}>
-          View Public Form
+      <div className="flex flex-wrap justify-end gap-2">
+        <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/forms/sponsorship-intake`}>
+          Open Intake Form
+        </Link>
+        <Link className={buttonVariants({ variant: "ghost" })} href={`/${orgContext.orgSlug}/sponsors`}>
+          View Public Directory
         </Link>
       </div>
     </div>

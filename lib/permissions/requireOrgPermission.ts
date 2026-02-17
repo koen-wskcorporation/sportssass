@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/permissions/requirePermission";
 
 export async function requireOrgPermission(orgSlug: string, permission: Permission | Permission[]) {
   const orgContext = await getOrgAuthContext(orgSlug);
-  requirePermission(orgContext.membershipRole, permission);
+  requirePermission(orgContext.membershipPermissions, permission);
 
   return orgContext;
 }
