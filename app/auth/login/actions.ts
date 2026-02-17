@@ -2,19 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
 
-export type AuthActionState = {
-  error?: string;
-  success?: string;
-};
-
-function getCredential(formData: FormData, key: "email" | "password") {
-  const raw = formData.get(key);
-  if (typeof raw !== "string") {
+function cleanValue(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") {
     return "";
   }
-  return raw.trim();
+
+  return value.trim();
 }
 
 function validateCredentials(email: string, password: string): string | null {
@@ -33,71 +27,56 @@ function validateCredentials(email: string, password: string): string | null {
   return null;
 }
 
-export async function login(_: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  try {
-    const email = getCredential(formData, "email").toLowerCase();
-    const password = getCredential(formData, "password");
+export async function signInAction(formData: FormData) {
+  const email = cleanValue(formData.get("email")).toLowerCase();
+  const password = cleanValue(formData.get("password"));
 
-    const validationError = validateCredentials(email, password);
-    if (validationError) {
-      return { error: validationError };
-    }
-
-    const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) {
-      return { error: "Unable to sign in. Check your email and password and try again." };
-    }
-
-    redirect("/");
-  } catch (error) {
-    rethrowIfNavigationError(error);
-    return { error: "We could not reach the auth service. Please try again in a moment." };
+  const validationError = validateCredentials(email, password);
+  if (validationError) {
+    redirect(`/auth/login?mode=signin&error=${encodeURIComponent(validationError)}`);
   }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if (error) {
+    redirect(
+      `/auth/login?mode=signin&error=${encodeURIComponent("Unable to sign in. Check your email and password and try again.")}`
+    );
+  }
+
+  redirect("/");
 }
 
-export async function signup(_: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  try {
-    const email = getCredential(formData, "email").toLowerCase();
-    const password = getCredential(formData, "password");
+export async function signUpAction(formData: FormData) {
+  const email = cleanValue(formData.get("email")).toLowerCase();
+  const password = cleanValue(formData.get("password"));
 
-    const validationError = validateCredentials(email, password);
-    if (validationError) {
-      return { error: validationError };
-    }
-
-    const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password
-    });
-
-    if (error) {
-      return { error: "Unable to create account. Try a different email or sign in instead." };
-    }
-
-    if (!data.session) {
-      return { success: "Account created. Verify your email, then sign in." };
-    }
-
-    redirect("/");
-  } catch (error) {
-    rethrowIfNavigationError(error);
-    return { error: "We could not reach the auth service. Please try again in a moment." };
-  }
-}
-
-export async function logout() {
-  try {
-    const supabase = await createSupabaseServerClient();
-    await supabase.auth.signOut();
-  } catch (error) {
-    rethrowIfNavigationError(error);
+  const validationError = validateCredentials(email, password);
+  if (validationError) {
+    redirect(`/auth/login?mode=signup&error=${encodeURIComponent(validationError)}`);
   }
 
-  redirect("/auth/login");
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password
+  });
+
+  if (error) {
+    redirect(
+      `/auth/login?mode=signup&error=${encodeURIComponent("Unable to create account. Try a different email or sign in instead.")}`
+    );
+  }
+
+  if (!data.session) {
+    redirect(
+      `/auth/login?mode=signin&message=${encodeURIComponent("Account created. Verify your email, then sign in.")}`
+    );
+  }
+
+  redirect("/");
 }
