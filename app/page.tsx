@@ -15,9 +15,11 @@ export default async function HomePage() {
           <Link className={buttonVariants({ size: "sm", variant: "secondary" })} href="/account">
             Account
           </Link>
-          <Link className={buttonVariants({ size: "sm", variant: "ghost" })} href="/auth/logout">
-            Sign out
-          </Link>
+          <form action="/auth/logout" method="post">
+            <button className={buttonVariants({ size: "sm", variant: "ghost" })} type="submit">
+              Sign out
+            </button>
+          </form>
         </>
       }
       subtitle="Your sports in one place."

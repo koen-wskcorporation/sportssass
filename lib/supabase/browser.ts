@@ -2,7 +2,6 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
-import { getSupabaseCookieOptions } from "@/lib/supabase/cookie-options";
 
 let browserClient: ReturnType<typeof createBrowserClient<any>> | null = null;
 
@@ -11,7 +10,10 @@ export function createSupabaseBrowserClient() {
     const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
 
     browserClient = createBrowserClient<any>(supabaseUrl, supabasePublishableKey, {
-      cookieOptions: getSupabaseCookieOptions()
+      cookieOptions: {
+        path: "/",
+        sameSite: "lax"
+      }
     });
   }
 

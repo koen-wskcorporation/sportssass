@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import { requireAuth } from "@/lib/auth/requireAuth";
-import { changePasswordAction, saveProfileAction } from "./actions";
 
 const successMessageByCode: Record<string, string> = {
   profile: "Profile updated successfully.",
@@ -68,7 +67,7 @@ export default async function AccountPage({
               </div>
             </div>
 
-            <form action={saveProfileAction} className="space-y-3">
+            <form action="/account/profile" className="space-y-3" method="post">
               <div className="grid gap-3 md:grid-cols-2">
                 <FormField label="First name">
                   <Input defaultValue={currentUser.firstName ?? ""} name="firstName" />
@@ -111,7 +110,7 @@ export default async function AccountPage({
             <CardDescription>Set a new password for this account.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={changePasswordAction} className="flex flex-col gap-3 md:flex-row md:items-end">
+            <form action="/account/password" className="flex flex-col gap-3 md:flex-row md:items-end" method="post">
               <FormField className="w-full" hint="Minimum 8 characters" label="New password">
                 <Input name="newPassword" required type="password" />
               </FormField>

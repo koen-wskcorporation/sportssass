@@ -6,7 +6,14 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { signInAction, signUpAction } from "./actions";
+
+const errorMessageByCode: Record<string, string> = {
+  "1": "Unable to continue. Check your details and try again."
+};
+
+const infoMessageByCode: Record<string, string> = {
+  signup_check_email: "Account created. Verify your email, then sign in."
+};
 
 export default async function LoginPage({
   searchParams
@@ -19,15 +26,16 @@ export default async function LoginPage({
     redirect("/");
   }
 
-  const mode = query.mode === "signup" ? "signup" : "signin";
+  const errorMessage = query.error ? errorMessageByCode[query.error] ?? "Authentication failed." : null;
+  const infoMessage = query.message ? infoMessageByCode[query.message] ?? query.message : null;
 
   return (
     <main className="app-container py-8 md:py-10">
       <div className="mx-auto max-w-3xl space-y-6">
         <PageHeader description="Sign in or create an account to open your dashboard and organizations." title="Account Access" />
 
-        {query.error ? <Alert variant="destructive">{query.error}</Alert> : null}
-        {query.message ? <Alert variant="info">{query.message}</Alert> : null}
+        {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
+        {infoMessage ? <Alert variant="info">{infoMessage}</Alert> : null}
 
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
@@ -36,7 +44,7 @@ export default async function LoginPage({
               <CardDescription>Use your credentials to access your organizations.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={signInAction} className="space-y-3">
+              <form action="/auth/login" className="space-y-3" method="post">
                 <FormField label="Email">
                   <Input autoComplete="email" name="email" required type="email" />
                 </FormField>
@@ -56,7 +64,7 @@ export default async function LoginPage({
               <CardDescription>Create an account to get started.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={signUpAction} className="space-y-3">
+              <form action="/auth/signup" className="space-y-3" method="post">
                 <FormField label="Email">
                   <Input autoComplete="email" name="email" required type="email" />
                 </FormField>

@@ -1,21 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies, headers } from "next/headers";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
-import { getSupabaseCookieOptions } from "@/lib/supabase/cookie-options";
-
-type CookieToSet = {
-  name: string;
-  value: string;
-  options?: {
-    domain?: string;
-    expires?: Date;
-    httpOnly?: boolean;
-    maxAge?: number;
-    path?: string;
-    sameSite?: "lax" | "strict" | "none";
-    secure?: boolean;
-  };
-};
+import { normalizeSupabaseCookieOptions, type SupabaseCookieToSet } from "@/lib/supabase/cookies";
 
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
@@ -25,18 +11,18 @@ export async function createSupabaseServerClient() {
   const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
 
   return createServerClient<any>(supabaseUrl, supabasePublishableKey, {
-    cookieOptions: getSupabaseCookieOptions(),
+    cookieOptions: {
+      path: "/",
+      sameSite: "lax"
+    },
     cookies: {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet: CookieToSet[]) {
+      setAll(cookiesToSet: SupabaseCookieToSet[]) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, {
-              ...options,
-              secure: isHttps
-            });
+            cookieStore.set(name, value, normalizeSupabaseCookieOptions(options, isHttps));
           });
         } catch {
           // Server Components can read cookies but cannot always mutate them.
