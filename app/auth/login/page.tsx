@@ -44,7 +44,7 @@ export default async function LoginPage({
               <CardDescription>Use your credentials to access your organizations.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form action="/auth/login" className="space-y-3" method="post">
+              <form action="/auth/login/submit" className="space-y-3" method="post">
                 <FormField label="Email">
                   <Input autoComplete="email" name="email" required type="email" />
                 </FormField>

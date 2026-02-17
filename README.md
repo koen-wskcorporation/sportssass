@@ -7,7 +7,7 @@ Early-stage Next.js App Router project for multi-tenant sports organizations.
 1. Deploy.
 2. Visit `/debug/headers` before login. `cookieHeaderPresent` should be `false`.
 3. Login via the `/auth/login` form.
-4. In DevTools Network, inspect `POST /auth/login` and confirm `set-cookie` exists on the response.
+4. In DevTools Network, inspect `POST /auth/login/submit` and confirm `set-cookie` exists on the response.
 5. Open `/debug/headers` and `/debug/auth` after login.
 6. Verify:
    - `cookieHeaderPresent` is `true`
