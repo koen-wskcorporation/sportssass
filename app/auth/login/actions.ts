@@ -1,11 +1,12 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
 
 export type AuthActionState = {
   error?: string;
   success?: string;
-  redirectTo?: string;
 };
 
 function getCredential(formData: FormData, key: "email" | "password") {
@@ -33,15 +34,15 @@ function validateCredentials(email: string, password: string): string | null {
 }
 
 export async function login(_: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  const email = getCredential(formData, "email").toLowerCase();
-  const password = getCredential(formData, "password");
-
-  const validationError = validateCredentials(email, password);
-  if (validationError) {
-    return { error: validationError };
-  }
-
   try {
+    const email = getCredential(formData, "email").toLowerCase();
+    const password = getCredential(formData, "password");
+
+    const validationError = validateCredentials(email, password);
+    if (validationError) {
+      return { error: validationError };
+    }
+
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -52,25 +53,23 @@ export async function login(_: AuthActionState, formData: FormData): Promise<Aut
       return { error: "Unable to sign in. Check your email and password and try again." };
     }
 
-    return {
-      success: "Signed in.",
-      redirectTo: "/"
-    };
-  } catch {
+    redirect("/");
+  } catch (error) {
+    rethrowIfNavigationError(error);
     return { error: "We could not reach the auth service. Please try again in a moment." };
   }
 }
 
 export async function signup(_: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  const email = getCredential(formData, "email").toLowerCase();
-  const password = getCredential(formData, "password");
-
-  const validationError = validateCredentials(email, password);
-  if (validationError) {
-    return { error: validationError };
-  }
-
   try {
+    const email = getCredential(formData, "email").toLowerCase();
+    const password = getCredential(formData, "password");
+
+    const validationError = validateCredentials(email, password);
+    if (validationError) {
+      return { error: validationError };
+    }
+
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -85,20 +84,20 @@ export async function signup(_: AuthActionState, formData: FormData): Promise<Au
       return { success: "Account created. Verify your email, then sign in." };
     }
 
-    return {
-      success: "Account created.",
-      redirectTo: "/"
-    };
-  } catch {
+    redirect("/");
+  } catch (error) {
+    rethrowIfNavigationError(error);
     return { error: "We could not reach the auth service. Please try again in a moment." };
   }
 }
 
 export async function logout() {
-  const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
+  try {
+    const supabase = await createSupabaseServerClient();
+    await supabase.auth.signOut();
+  } catch (error) {
+    rethrowIfNavigationError(error);
+  }
 
-  return {
-    redirectTo: "/auth/login"
-  };
+  redirect("/auth/login");
 }

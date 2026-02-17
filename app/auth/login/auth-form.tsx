@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,22 +17,12 @@ type AuthFormProps = {
 };
 
 export function AuthForm({ initialMode }: AuthFormProps) {
-  const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [signInState, signInAction, signInPending] = useActionState(login, initialState);
   const [signUpState, signUpAction, signUpPending] = useActionState(signup, initialState);
 
   const activeState = useMemo(() => (mode === "signin" ? signInState : signUpState), [mode, signInState, signUpState]);
   const isPending = mode === "signin" ? signInPending : signUpPending;
-
-  useEffect(() => {
-    if (!activeState.redirectTo) {
-      return;
-    }
-
-    router.replace(activeState.redirectTo);
-    router.refresh();
-  }, [activeState.redirectTo, router]);
 
   return (
     <Card>

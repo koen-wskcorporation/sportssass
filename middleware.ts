@@ -17,6 +17,8 @@ type CookieToSet = {
   };
 };
 
+let hasLoggedMiddlewareError = false;
+
 export async function middleware(request: NextRequest) {
   try {
     let response = NextResponse.next({
@@ -47,7 +49,12 @@ export async function middleware(request: NextRequest) {
     await supabase.auth.getUser();
 
     return response;
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production" && !hasLoggedMiddlewareError) {
+      hasLoggedMiddlewareError = true;
+      console.error("Supabase middleware refresh failed:", error);
+    }
+
     // Never block requests if auth refresh fails in middleware.
     return NextResponse.next({
       request
