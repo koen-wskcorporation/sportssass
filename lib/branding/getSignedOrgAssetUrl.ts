@@ -1,29 +1,15 @@
 import "server-only";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createOptionalSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import { getSupabasePublicConfig } from "@/lib/supabase/config";
 
-export async function getSignedOrgAssetUrl(path: string, expiresInSeconds = 60 * 10) {
-  const supabase = await createSupabaseServerClient();
+function encodePath(path: string) {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
 
-  const { data, error } = await supabase.storage.from("org-assets").createSignedUrl(path, expiresInSeconds);
-
-  if (!error) {
-    return data.signedUrl;
-  }
-
-  const serviceRoleClient = createOptionalSupabaseServiceRoleClient();
-  if (!serviceRoleClient) {
-    return null;
-  }
-
-  const { data: fallbackData, error: fallbackError } = await serviceRoleClient.storage
-    .from("org-assets")
-    .createSignedUrl(path, expiresInSeconds);
-
-  if (fallbackError) {
-    return null;
-  }
-
-  return fallbackData.signedUrl;
+export async function getSignedOrgAssetUrl(path: string, _expiresInSeconds = 60 * 10) {
+  const { supabaseUrl } = getSupabasePublicConfig();
+  return `${supabaseUrl}/storage/v1/object/public/org-assets/${encodePath(path)}`;
 }

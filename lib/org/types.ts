@@ -10,6 +10,7 @@ export type OrgGoverningBody = {
   id: string;
   slug: string;
   name: string;
+  logoPath: string;
   logoUrl: string;
 };
 
