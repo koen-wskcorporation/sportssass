@@ -17,33 +17,40 @@ type CookieToSet = {
 };
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request
-  });
+  try {
+    let response = NextResponse.next({
+      request
+    });
 
-  const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
+    const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
 
-  const supabase = createServerClient(supabaseUrl, supabasePublishableKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet: CookieToSet[]) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+    const supabase = createServerClient(supabaseUrl, supabasePublishableKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
 
-        response = NextResponse.next({
-          request
-        });
+          response = NextResponse.next({
+            request
+          });
 
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        }
       }
-    }
-  });
+    });
 
-  // Refreshes auth cookies when needed so server-side auth stays stable.
-  await supabase.auth.getUser();
+    // Refreshes auth cookies when needed so server-side auth stays stable.
+    await supabase.auth.getUser();
 
-  return response;
+    return response;
+  } catch {
+    // Never block requests if auth refresh fails in middleware.
+    return NextResponse.next({
+      request
+    });
+  }
 }
 
 export const config = {
