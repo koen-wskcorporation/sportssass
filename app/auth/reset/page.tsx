@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requestPasswordResetAction, updatePasswordFromResetAction } from "@/app/auth/actions";
 
 const errorMessageByCode: Record<string, string> = {
@@ -55,18 +55,14 @@ export default async function ResetPage({
                 <FormField label="Confirm password">
                   <Input autoComplete="new-password" name="confirmPassword" required type="password" />
                 </FormField>
-                <Button className="w-full" type="submit">
-                  Update password
-                </Button>
+                <SubmitButton className="w-full">Update password</SubmitButton>
               </form>
             ) : (
               <form action={requestPasswordResetAction} className="space-y-3">
                 <FormField label="Email">
                   <Input autoComplete="email" name="email" required type="email" />
                 </FormField>
-                <Button className="w-full" type="submit">
-                  Send reset email
-                </Button>
+                <SubmitButton className="w-full">Send reset email</SubmitButton>
               </form>
             )}
             <p className="mt-4 text-center text-sm text-text-muted">

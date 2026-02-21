@@ -2,7 +2,7 @@ import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/getCurrentUser";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { listUserOrgs } from "@/lib/org/listUserOrgs";
-import type { OrgRole } from "@/modules/core/tools/access";
+import type { OrgRole } from "@/modules/core/access";
 
 export type DashboardUser = Pick<CurrentUser, "userId" | "email" | "firstName" | "lastName" | "avatarUrl">;
 
@@ -22,7 +22,7 @@ export type DashboardContext = {
 export async function getDashboardContext(): Promise<DashboardContext> {
   const sessionUser = await requireAuth();
 
-  const [currentUser, orgMemberships] = await Promise.all([getCurrentUser(), listUserOrgs()]);
+  const [currentUser, orgMemberships] = await Promise.all([getCurrentUser({ sessionUser }), listUserOrgs()]);
 
   const organizations = await Promise.all(
     orgMemberships.map(async (membership) => {

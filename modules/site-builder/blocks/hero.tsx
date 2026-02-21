@@ -3,7 +3,6 @@
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { asBody, asButtons, asNumber, asObject, asOptionalStoragePath, asText } from "@/modules/site-builder/blocks/helpers";
-import { HeroBlockEditorClient } from "@/modules/site-builder/blocks/hero-editor.client";
 import { getOrgSiteAssetPublicUrl } from "@/modules/site-builder/storage";
 import type { BlockContext, BlockRenderProps, HeroBlockConfig } from "@/modules/site-builder/types";
 import { defaultInternalHref, resolveButtonHref } from "@/lib/links";
@@ -11,18 +10,18 @@ import { defaultInternalHref, resolveButtonHref } from "@/lib/links";
 function defaultHeroConfig(context: BlockContext): HeroBlockConfig {
   return {
     headline: context.orgName,
-    subheadline: `Welcome to ${context.orgName}. Explore opportunities, announcements, and ways to support our programs.`,
+    subheadline: `Welcome to ${context.orgName}. Explore programs, key information, and upcoming updates.`,
     buttons: [
       {
         id: "hero-primary",
-        label: "Sponsor With Us",
-        href: "/sponsors",
+        label: "Learn More",
+        href: defaultInternalHref("home"),
         variant: "primary"
       },
       {
         id: "hero-secondary",
-        label: "Learn More",
-        href: defaultInternalHref("home"),
+        label: "Contact Us",
+        href: "/contact",
         variant: "secondary"
       }
     ],
@@ -128,5 +127,3 @@ export function HeroBlockRender({ block, context }: BlockRenderProps<"hero">) {
     </section>
   );
 }
-
-export const HeroBlockEditor = HeroBlockEditorClient;

@@ -1,6 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import type { OrgRole } from "@/modules/core/tools/access";
+import type { OrgRole } from "@/modules/core/access";
 
 export type UserOrgMembership = {
   orgId: string;

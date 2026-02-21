@@ -44,25 +44,14 @@ Global routes:
 Org routes (`orgSlug` is always first segment):
 
 - `/[orgSlug]`
+- `/[orgSlug]/[pageSlug]`
 - `/[orgSlug]/icon`
-- `/[orgSlug]/forms/[slug]`
-- `/[orgSlug]/forms/[slug]/submit`
-- `/[orgSlug]/sponsors`
-- `/[orgSlug]/sponsors/success`
 - `/[orgSlug]/manage`
-- `/[orgSlug]/manage/org-info`
+- `/[orgSlug]/manage/site`
+- `/[orgSlug]/manage/info`
 - `/[orgSlug]/manage/branding`
-- `/[orgSlug]/manage/members`
+- `/[orgSlug]/manage/access`
 - `/[orgSlug]/manage/billing`
-- `/[orgSlug]/tools`
-- `/[orgSlug]/tools/forms`
-- `/[orgSlug]/tools/forms/[id]/edit`
-- `/[orgSlug]/tools/forms/[id]/submissions`
-- `/[orgSlug]/tools/forms/[id]/submissions/export`
-- `/[orgSlug]/tools/sponsors`
-- `/[orgSlug]/tools/sponsors/manage`
-- `/[orgSlug]/tools/sponsors/manage/[id]`
-- `/[orgSlug]/tools/announcements`
 
 ## Branding Model
 
@@ -84,34 +73,8 @@ npm run typecheck
 npm run lint
 ```
 
-## Forms Workflow
+## Site Management
 
-1. Open `/{orgSlug}/tools/forms`.
-2. Create a form and open the builder.
-3. Build fields in the left palette + center canvas + right inspector.
-4. Save draft and publish. Each publish creates a new immutable `form_versions` snapshot.
-5. Public runtime route is `/{orgSlug}/forms/{slug}`.
-
-## Embed Forms In Site Builder
-
-- Add the `embed_form` block in page builder.
-- Choose a published form.
-- Pick `inline` or `modal` render variant.
-- Optionally override title and success message per embed instance.
-
-## Submission Inbox + CSV Export
-
-- View inbox at `/{orgSlug}/tools/forms/{id}/submissions`.
-- Filter by status (`all`, `submitted`, `reviewed`, `archived`).
-- Open individual submissions to inspect answers against the snapshot version used at submit time.
-- Export filtered rows at `/{orgSlug}/tools/forms/{id}/submissions/export`.
-
-## Sponsorship Intake + Directory
-
-- Canonical intake URL: `/{orgSlug}/forms/sponsorship-intake`.
-- Public `/{orgSlug}/sponsors` now renders the published sponsor directory.
-- Intake submissions with sponsorship behavior create `sponsor_profiles` in `pending`.
-- Sponsors admins (`sponsors.write`) review profiles at:
-  - `/{orgSlug}/tools/sponsors/manage`
-  - `/{orgSlug}/tools/sponsors/manage/{id}`
-- Publish a profile by setting status to `published`.
+- Use `/{orgSlug}/manage/site` to manage pages and navigation.
+- Page content is powered by `org_pages` + `org_page_blocks`.
+- Navigation is powered by `org_nav_items`.

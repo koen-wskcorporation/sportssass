@@ -1,8 +1,7 @@
 import type { ComponentType } from "react";
 import type { LinkValue, SiteButton } from "@/lib/links";
-import type { PublishedFormRuntime } from "@/modules/forms/types";
 
-export type OrgSiteBlockType = "hero" | "cta_grid" | "announcements" | "cta_card" | "sponsors_carousel" | "schedule_preview" | "embed_form";
+export type OrgSiteBlockType = "hero" | "subhero" | "cta_grid" | "cta_card" | "schedule_preview";
 
 export type HeroBlockConfig = {
   headline: string;
@@ -12,6 +11,12 @@ export type HeroBlockConfig = {
   focalX: number;
   focalY: number;
   zoom: number;
+};
+
+export type SubheroBlockConfig = {
+  headline: string;
+  subheadline: string;
+  buttons: SiteButton[];
 };
 
 export type CtaGridItem = {
@@ -26,20 +31,6 @@ export type CtaGridBlockConfig = {
   items: CtaGridItem[];
 };
 
-export type PublishedAnnouncementItem = {
-  id: string;
-  title: string;
-  summary: string;
-  publishAt: string | null;
-  button: SiteButton | null;
-};
-
-export type AnnouncementsBlockConfig = {
-  title: string;
-  maxItems: number;
-  viewAllButton: SiteButton | null;
-};
-
 export type CtaCardBlockConfig = {
   heading: string;
   body: string;
@@ -51,31 +42,18 @@ export type CtaCardBlockConfig = {
   buttons: SiteButton[];
 };
 
-export type SponsorsCarouselBlockConfig = {
-  title: string;
-};
-
 export type SchedulePreviewBlockConfig = {
   title: string;
   body: string;
   buttons: SiteButton[];
 };
 
-export type EmbedFormBlockConfig = {
-  formId: string | null;
-  variant: "inline" | "modal";
-  titleOverride: string | null;
-  successMessageOverride: string | null;
-};
-
 export type OrgSiteBlockConfigMap = {
   hero: HeroBlockConfig;
+  subhero: SubheroBlockConfig;
   cta_grid: CtaGridBlockConfig;
-  announcements: AnnouncementsBlockConfig;
   cta_card: CtaCardBlockConfig;
-  sponsors_carousel: SponsorsCarouselBlockConfig;
   schedule_preview: SchedulePreviewBlockConfig;
-  embed_form: EmbedFormBlockConfig;
 };
 
 export type OrgPageBlock<TType extends OrgSiteBlockType = OrgSiteBlockType> = {
@@ -116,17 +94,7 @@ export type BlockContext = {
   pageSlug: string;
 };
 
-export type PublishedSponsorLogo = {
-  id: string;
-  companyName: string;
-  logoUrl: string;
-};
-
-export type OrgSiteRuntimeData = {
-  announcements: PublishedAnnouncementItem[];
-  sponsorLogos: PublishedSponsorLogo[];
-  publishedForms: PublishedFormRuntime[];
-};
+export type OrgSiteRuntimeData = Record<string, never>;
 
 export type BlockRenderProps<TType extends OrgSiteBlockType> = {
   block: OrgPageBlock<TType>;

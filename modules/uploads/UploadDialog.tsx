@@ -68,7 +68,7 @@ export function UploadDialog({
           <Button onClick={onClose} size="sm" variant="ghost">
             Cancel
           </Button>
-          <Button disabled={!canSave || isSaving} onClick={onSave} size="sm">
+          <Button disabled={!canSave || isSaving} loading={isSaving} onClick={onSave} size="sm">
             {isSaving ? "Saving..." : saveLabel}
           </Button>
         </>
@@ -118,9 +118,7 @@ export function UploadDialog({
             tabIndex={-1}
             type="file"
           />
-          <div className="rounded-full border bg-surface p-3">
-            <Upload className="h-6 w-6 text-text" />
-          </div>
+          <Upload className="h-6 w-6 text-text" />
           <div className="space-y-1">
             <p className="text-sm font-semibold text-text">Drag and drop a file</p>
             <p className="text-sm text-text-muted">or click to browse</p>

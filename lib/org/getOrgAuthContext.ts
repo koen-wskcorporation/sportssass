@@ -1,10 +1,11 @@
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { resolveOrgRolePermissions } from "@/lib/org/customRoles";
 import { getGoverningBodyLogoUrl } from "@/lib/org/getGoverningBodyLogoUrl";
 import { isReservedOrgSlug } from "@/lib/org/reservedSlugs";
-import type { OrgRole } from "@/modules/core/tools/access";
+import type { OrgRole } from "@/modules/core/access";
 import type { OrgAuthContext, OrgBranding, OrgGoverningBody } from "@/lib/org/types";
 
 function mapBranding(org: {
@@ -50,7 +51,7 @@ function mapGoverningBody(governingBody: unknown): OrgGoverningBody | null {
   };
 }
 
-export async function getOrgAuthContext(orgSlug: string): Promise<OrgAuthContext> {
+const getOrgAuthContextCached = cache(async (orgSlug: string): Promise<OrgAuthContext> => {
   if (isReservedOrgSlug(orgSlug)) {
     notFound();
   }
@@ -62,42 +63,14 @@ export async function getOrgAuthContext(orgSlug: string): Promise<OrgAuthContext
   }
 
   const supabase = await createSupabaseServer();
-  const { data: orgWithGoverningBody, error: orgWithGoverningBodyError } = await supabase
+  const { data: org, error: orgError } = await supabase
     .from("orgs")
     .select("id, slug, name, logo_path, icon_path, brand_primary, governing_body:governing_bodies!orgs_governing_body_id_fkey(id, slug, name, logo_path)")
     .eq("slug", orgSlug)
     .maybeSingle();
 
-  let org:
-    | {
-        id: string;
-        slug: string;
-        name: string;
-        logo_path: string | null;
-        icon_path: string | null;
-        brand_primary: string | null;
-        governing_body?: unknown;
-      }
-    | null = null;
-
-  if (orgWithGoverningBodyError) {
-    // Keep auth-protected org pages online if governing body migration has not been applied yet.
-    const { data: fallbackOrg, error: fallbackOrgError } = await supabase
-      .from("orgs")
-      .select("id, slug, name, logo_path, icon_path, brand_primary")
-      .eq("slug", orgSlug)
-      .maybeSingle();
-
-    if (fallbackOrgError || !fallbackOrg) {
-      notFound();
-    }
-
-    org = {
-      ...fallbackOrg,
-      governing_body: null
-    };
-  } else {
-    org = orgWithGoverningBody;
+  if (orgError) {
+    throw new Error(`Failed to load org context: ${orgError.message}`);
   }
 
   if (!org) {
@@ -128,4 +101,8 @@ export async function getOrgAuthContext(orgSlug: string): Promise<OrgAuthContext
     branding: mapBranding(org),
     governingBody: mapGoverningBody(org.governing_body)
   };
+});
+
+export async function getOrgAuthContext(orgSlug: string): Promise<OrgAuthContext> {
+  return getOrgAuthContextCached(orgSlug);
 }

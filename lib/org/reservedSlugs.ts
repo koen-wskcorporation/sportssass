@@ -1,6 +1,7 @@
 const reservedSlugs = new Set([
   "account",
   "auth",
+  "debug",
   "forbidden",
   "_next",
   "api",

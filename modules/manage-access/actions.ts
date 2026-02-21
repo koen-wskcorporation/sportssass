@@ -4,26 +4,18 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { z } from "zod";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
-import { findOrgCustomRoleByKey, listOrgCustomRoles, type OrgCustomRole } from "@/lib/org/customRoles";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { requirePermission } from "@/lib/auth/requirePermission";
 import { createOptionalSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import {
-  allPermissions,
   getDefaultRoleLabel,
   getDefaultRolePermissions,
-  isPermission,
-  isReservedOrgRoleKey,
-  isValidRoleKey,
-  normalizeRoleKey,
+  isAdminLikeRole,
   type OrgRole,
   type Permission
-} from "@/modules/core/tools/access";
+} from "@/modules/core/access";
 
 const roleKeySchema = z.string().trim().min(2).max(32);
-const membershipRoleSchema = z.object({
-  role: roleKeySchema
-});
 
 const membershipRowSchema = z.object({
   id: z.string().uuid(),
@@ -44,12 +36,6 @@ const updateMembershipRoleSchema = z.object({
   role: roleKeySchema
 });
 
-const createCustomRoleSchema = z.object({
-  orgSlug: z.string().trim().min(1),
-  label: z.string().trim().min(2).max(64),
-  permissions: z.array(z.string()).max(allPermissions.length)
-});
-
 const removeMembershipSchema = z.object({
   orgSlug: z.string().trim().min(1),
   membershipId: z.string().uuid()
@@ -64,7 +50,6 @@ const sendPasswordResetSchema = z.object({
 type ManageAccessErrorCode =
   | "invalid_input"
   | "invalid_role"
-  | "duplicate_role"
   | "service_not_configured"
   | "not_found"
   | "already_member"
@@ -97,7 +82,7 @@ export type AccessRoleDefinition = {
   id: string;
   roleKey: OrgRole;
   label: string;
-  source: "default" | "custom";
+  source: "default";
   permissions: Permission[];
   createdAt: string | null;
 };
@@ -109,16 +94,6 @@ export type AccountsAccessPageData = {
   currentUserRole: OrgRole;
   currentUserPermissions: Permission[];
   members: AccessMember[];
-  roles: AccessRoleDefinition[];
-  serviceRoleConfigured: boolean;
-  loadError: string | null;
-};
-
-export type CustomRolesPageData = {
-  orgSlug: string;
-  orgName: string;
-  currentUserRole: OrgRole;
-  currentUserPermissions: Permission[];
   roles: AccessRoleDefinition[];
   serviceRoleConfigured: boolean;
   loadError: string | null;
@@ -142,25 +117,9 @@ function asFailure(code: ManageAccessErrorCode, error: string): ManageAccessResu
   };
 }
 
-function normalizePermissionSelection(selection: string[]): Permission[] {
-  const raw = new Set(selection);
-
-  return allPermissions.filter((permission) => raw.has(permission) && isPermission(permission));
-}
-
-function buildRoleDefinitions(customRoles: OrgCustomRole[]): AccessRoleDefinition[] {
+function buildRoleDefinitions(): AccessRoleDefinition[] {
   const adminPermissions = getDefaultRolePermissions("admin") ?? [];
   const memberPermissions = getDefaultRolePermissions("member") ?? [];
-  const customDefinitions = [...customRoles]
-    .sort((left, right) => left.label.localeCompare(right.label))
-    .map((role) => ({
-      id: role.id,
-      roleKey: role.roleKey,
-      label: role.label,
-      source: "custom" as const,
-      permissions: role.permissions,
-      createdAt: role.createdAt
-    }));
 
   return [
     {
@@ -178,8 +137,7 @@ function buildRoleDefinitions(customRoles: OrgCustomRole[]): AccessRoleDefinitio
       source: "default",
       permissions: memberPermissions,
       createdAt: null
-    },
-    ...customDefinitions
+    }
   ];
 }
 
@@ -187,9 +145,8 @@ function getRoleDefinitionMap(roles: AccessRoleDefinition[]) {
   return new Map(roles.map((role) => [role.roleKey, role]));
 }
 
-async function listAssignableRoles(supabase: SupabaseClient<any>, orgId: string): Promise<AccessRoleDefinition[]> {
-  const customRoles = await listOrgCustomRoles(supabase, orgId);
-  return buildRoleDefinitions(customRoles);
+function listAssignableRoles(): AccessRoleDefinition[] {
+  return buildRoleDefinitions();
 }
 
 async function requireManageAccessContext(orgSlug: string) {
@@ -247,7 +204,11 @@ async function membershipExists(supabase: SupabaseClient<any>, orgId: string, us
 }
 
 async function countAdmins(supabase: SupabaseClient<any>, orgId: string) {
-  const { count, error } = await supabase.from("org_memberships").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("role", "admin");
+  const { count, error } = await supabase
+    .from("org_memberships")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .in("role", ["owner", "admin", "manager"]);
 
   if (error) {
     throw new Error(error.message);
@@ -299,22 +260,49 @@ async function findAuthUserByEmail(supabase: SupabaseClient<any>, email: string)
   return null;
 }
 
-function validateRoleKey(roleKey: string) {
-  if (!isValidRoleKey(roleKey)) {
-    return false;
+async function listAuthUsersByIds(supabase: SupabaseClient<any>, userIds: string[]): Promise<Map<string, User>> {
+  const pendingIds = new Set(userIds);
+  const usersById = new Map<string, User>();
+
+  if (pendingIds.size === 0) {
+    return usersById;
   }
 
-  const parsed = membershipRoleSchema.safeParse({
-    role: roleKey
-  });
+  const perPage = 200;
 
-  return parsed.success;
+  for (let page = 1; page <= 20 && pendingIds.size > 0; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    for (const user of data.users) {
+      if (pendingIds.has(user.id)) {
+        usersById.set(user.id, user);
+        pendingIds.delete(user.id);
+      }
+    }
+
+    if (data.users.length < perPage) {
+      break;
+    }
+  }
+
+  return usersById;
+}
+
+function validateRoleKey(roleKey: string) {
+  return roleKey === "admin" || roleKey === "member";
 }
 
 export async function getAccountsAccessPageData(orgSlug: string): Promise<AccountsAccessPageData> {
   const orgContext = await requireManageAccessContext(orgSlug);
   const supabase = getConfiguredServiceClient();
-  const defaultRoles = buildRoleDefinitions([]);
+  const defaultRoles = buildRoleDefinitions();
 
   if (!supabase) {
     return {
@@ -331,25 +319,26 @@ export async function getAccountsAccessPageData(orgSlug: string): Promise<Accoun
   }
 
   try {
-    const [memberships, roles] = await Promise.all([listOrgMembershipRows(supabase, orgContext.orgId), listAssignableRoles(supabase, orgContext.orgId)]);
-
-    const members = await Promise.all(
-      memberships.map(async (membership): Promise<AccessMember> => {
-        const { data, error } = await supabase.auth.admin.getUserById(membership.user_id);
-        const user = error ? null : data.user;
-
-        return {
-          membershipId: membership.id,
-          userId: membership.user_id,
-          email: user?.email ?? null,
-          role: membership.role,
-          status: getMemberStatus(user),
-          isCurrentUser: membership.user_id === orgContext.userId,
-          joinedAt: membership.created_at ?? null,
-          lastActivityAt: user?.last_sign_in_at ?? user?.invited_at ?? user?.created_at ?? null
-        };
-      })
+    const [memberships, roles] = await Promise.all([listOrgMembershipRows(supabase, orgContext.orgId), listAssignableRoles()]);
+    const usersById = await listAuthUsersByIds(
+      supabase,
+      memberships.map((membership) => membership.user_id)
     );
+
+    const members = memberships.map((membership): AccessMember => {
+      const user = usersById.get(membership.user_id) ?? null;
+
+      return {
+        membershipId: membership.id,
+        userId: membership.user_id,
+        email: user?.email ?? null,
+        role: membership.role,
+        status: getMemberStatus(user),
+        isCurrentUser: membership.user_id === orgContext.userId,
+        joinedAt: membership.created_at ?? null,
+        lastActivityAt: user?.last_sign_in_at ?? user?.invited_at ?? user?.created_at ?? null
+      };
+    });
 
     return {
       orgSlug: orgContext.orgSlug,
@@ -373,48 +362,6 @@ export async function getAccountsAccessPageData(orgSlug: string): Promise<Accoun
       roles: defaultRoles,
       serviceRoleConfigured: true,
       loadError: "Unable to load org memberships right now."
-    };
-  }
-}
-
-export async function getCustomRolesPageData(orgSlug: string): Promise<CustomRolesPageData> {
-  const orgContext = await requireManageAccessContext(orgSlug);
-  const supabase = getConfiguredServiceClient();
-  const defaultRoles = buildRoleDefinitions([]);
-
-  if (!supabase) {
-    return {
-      orgSlug: orgContext.orgSlug,
-      orgName: orgContext.orgName,
-      currentUserRole: orgContext.membershipRole,
-      currentUserPermissions: orgContext.membershipPermissions,
-      roles: defaultRoles,
-      serviceRoleConfigured: false,
-      loadError: "Service role key is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server."
-    };
-  }
-
-  try {
-    const roles = await listAssignableRoles(supabase, orgContext.orgId);
-
-    return {
-      orgSlug: orgContext.orgSlug,
-      orgName: orgContext.orgName,
-      currentUserRole: orgContext.membershipRole,
-      currentUserPermissions: orgContext.membershipPermissions,
-      roles,
-      serviceRoleConfigured: true,
-      loadError: null
-    };
-  } catch {
-    return {
-      orgSlug: orgContext.orgSlug,
-      orgName: orgContext.orgName,
-      currentUserRole: orgContext.membershipRole,
-      currentUserPermissions: orgContext.membershipPermissions,
-      roles: defaultRoles,
-      serviceRoleConfigured: true,
-      loadError: "Unable to load custom roles right now."
     };
   }
 }
@@ -443,11 +390,15 @@ export async function inviteUserToOrgAction(input: {
       return asFailure("invalid_role", "Please select a valid role.");
     }
 
-    const assignableRoles = await listAssignableRoles(supabase, orgContext.orgId);
+    const assignableRoles = listAssignableRoles();
     const roleDefinitions = getRoleDefinitionMap(assignableRoles);
 
     if (!roleDefinitions.has(role)) {
       return asFailure("invalid_role", "Please select a valid role.");
+    }
+
+    if (role === "admin" && !isAdminLikeRole(orgContext.membershipRole)) {
+      return asFailure("forbidden", "Only organization admins can assign admin access.");
     }
 
     const existingUser = await findAuthUserByEmail(supabase, email);
@@ -487,7 +438,7 @@ export async function inviteUserToOrgAction(input: {
       return asFailure("action_failed", insertError.message);
     }
 
-    revalidatePath(`/${orgSlug}/manage/members`);
+    revalidatePath(`/${orgSlug}/manage/access`);
 
     return { ok: true };
   } catch (error) {
@@ -520,7 +471,7 @@ export async function updateMembershipRoleAction(input: {
       return asFailure("invalid_role", "Please select a valid role.");
     }
 
-    const assignableRoles = await listAssignableRoles(supabase, orgContext.orgId);
+    const assignableRoles = listAssignableRoles();
     const roleDefinitions = getRoleDefinitionMap(assignableRoles);
 
     if (!roleDefinitions.has(role)) {
@@ -537,8 +488,8 @@ export async function updateMembershipRoleAction(input: {
       return { ok: true };
     }
 
-    const actorIsAdmin = orgContext.membershipRole === "admin";
-    const targetIsAdmin = membership.role === "admin";
+    const actorIsAdmin = isAdminLikeRole(orgContext.membershipRole);
+    const targetIsAdmin = isAdminLikeRole(membership.role);
     const assigningAdminRole = role === "admin";
 
     if ((targetIsAdmin || assigningAdminRole) && !actorIsAdmin) {
@@ -565,81 +516,12 @@ export async function updateMembershipRoleAction(input: {
       return asFailure("action_failed", updateError.message);
     }
 
-    revalidatePath(`/${orgSlug}/manage/members`);
+    revalidatePath(`/${orgSlug}/manage/access`);
 
     return { ok: true };
   } catch (error) {
     rethrowIfNavigationError(error);
     return asFailure("action_failed", "Unable to update this membership right now.");
-  }
-}
-
-export async function createCustomRoleAction(input: {
-  orgSlug: string;
-  label: string;
-  permissions: string[];
-}): Promise<ManageAccessResult> {
-  const parsedInput = createCustomRoleSchema.safeParse(input);
-
-  if (!parsedInput.success) {
-    return asFailure("invalid_input", "Please provide a role name and at least one permission.");
-  }
-
-  try {
-    const { orgSlug, label, permissions } = parsedInput.data;
-    const orgContext = await requireManageAccessContext(orgSlug);
-    const supabase = getConfiguredServiceClient();
-
-    if (!supabase) {
-      return asFailure("service_not_configured", "Custom roles require SUPABASE_SERVICE_ROLE_KEY on the server.");
-    }
-
-    if (orgContext.membershipRole !== "admin") {
-      return asFailure("forbidden", "Only organization admins can create custom roles.");
-    }
-
-    const roleKey = normalizeRoleKey(label);
-
-    if (!validateRoleKey(roleKey)) {
-      return asFailure("invalid_input", "Role name must include at least two letters or numbers.");
-    }
-
-    if (isReservedOrgRoleKey(roleKey)) {
-      return asFailure("invalid_input", "That role name conflicts with a default role.");
-    }
-
-    const selectedPermissions = normalizePermissionSelection(permissions);
-
-    if (selectedPermissions.length === 0) {
-      return asFailure("invalid_input", "Choose at least one permission for this role.");
-    }
-
-    const existingRole = await findOrgCustomRoleByKey(supabase, orgContext.orgId, roleKey);
-
-    if (existingRole) {
-      return asFailure("duplicate_role", "A role with that name already exists.");
-    }
-
-    const { error } = await supabase.from("org_custom_roles").insert({
-      org_id: orgContext.orgId,
-      role_key: roleKey,
-      label: label.trim(),
-      permissions: selectedPermissions
-    });
-
-    if (error) {
-      return asFailure("action_failed", error.message);
-    }
-
-    revalidatePath(`/${orgSlug}/manage/members`);
-    revalidatePath(`/${orgSlug}/manage/members/roles`);
-
-    return {
-      ok: true
-    };
-  } catch (error) {
-    rethrowIfNavigationError(error);
-    return asFailure("action_failed", "Unable to create this role right now.");
   }
 }
 
@@ -668,8 +550,8 @@ export async function removeMembershipAction(input: {
       return asFailure("not_found", "Membership not found.");
     }
 
-    const actorIsAdmin = orgContext.membershipRole === "admin";
-    const targetIsAdmin = membership.role === "admin";
+    const actorIsAdmin = isAdminLikeRole(orgContext.membershipRole);
+    const targetIsAdmin = isAdminLikeRole(membership.role);
 
     if (targetIsAdmin && !actorIsAdmin) {
       return asFailure("forbidden", "Only organization admins can remove admin memberships.");
@@ -693,7 +575,7 @@ export async function removeMembershipAction(input: {
       return asFailure("action_failed", deleteError.message);
     }
 
-    revalidatePath(`/${orgSlug}/manage/members`);
+    revalidatePath(`/${orgSlug}/manage/access`);
 
     return { ok: true };
   } catch (error) {

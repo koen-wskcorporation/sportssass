@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { signOutAction } from "@/app/auth/actions";
 
 export default function LogoutPage() {
@@ -15,9 +15,7 @@ export default function LogoutPage() {
           </CardHeader>
           <CardContent>
             <form action={signOutAction}>
-              <Button className="w-full" type="submit">
-                Sign out
-              </Button>
+              <SubmitButton className="w-full">Sign out</SubmitButton>
             </form>
           </CardContent>
         </Card>

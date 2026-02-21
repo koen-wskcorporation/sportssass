@@ -1,8 +1,8 @@
-import type { Permission } from "@/modules/core/tools/access";
+import type { Permission } from "@/modules/core/access";
 import type { UploadAspectMode, UploadPurpose } from "@/modules/uploads/types";
 
 export type UploadPurposeConfig = {
-  bucket: "org-assets" | "account-assets" | "org-site-assets" | "sponsor-assets" | "form-assets";
+  bucket: "org-assets" | "account-assets" | "org-site-assets";
   maxSizeMB: number;
   allowedExtensions: string[];
   orgPermission?: Permission;
@@ -44,22 +44,6 @@ export const uploadPurposeConfigByPurpose: Record<UploadPurpose, UploadPurposeCo
     allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
     orgPermission: "org.pages.write",
     defaultAspect: "wide"
-  },
-  "form-file": {
-    bucket: "form-assets",
-    maxSizeMB: 10,
-    allowedExtensions: ["pdf", "txt", "csv", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg", "webp", "svg"],
-    orgPermission: "forms.write",
-    allowPublicOrg: true,
-    defaultAspect: "free"
-  },
-  "sponsor-logo": {
-    bucket: "sponsor-assets",
-    maxSizeMB: 10,
-    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
-    orgPermission: "sponsors.write",
-    allowPublicOrg: true,
-    defaultAspect: "free"
   },
   attachment: {
     bucket: "org-site-assets",

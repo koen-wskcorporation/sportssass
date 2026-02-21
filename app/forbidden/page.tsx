@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthDialogTrigger } from "@/components/auth/AuthDialogTrigger";
 
 export default function ForbiddenPage() {
   return (
@@ -14,9 +15,7 @@ export default function ForbiddenPage() {
           <Link href="/">
             <Button>Back to Dashboard</Button>
           </Link>
-          <Link href="/auth/login">
-            <Button variant="ghost">Sign in as Different Account</Button>
-          </Link>
+          <AuthDialogTrigger label="Sign in as Different Account" size="md" variant="ghost" />
         </CardContent>
       </Card>
     </main>

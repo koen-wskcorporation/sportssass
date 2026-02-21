@@ -10,6 +10,7 @@ type DashboardShellProps = {
 type DashboardSectionProps = {
   title: string;
   description?: string;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -24,12 +25,15 @@ export function DashboardShell({ title, subtitle, actions, children }: Dashboard
   );
 }
 
-export function DashboardSection({ title, description, children }: DashboardSectionProps) {
+export function DashboardSection({ title, description, actions, children }: DashboardSectionProps) {
   return (
     <section className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-xl font-semibold text-text">{title}</h2>
-        {description ? <p className="text-sm text-text-muted">{description}</p> : null}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold text-text">{title}</h2>
+          {description ? <p className="text-sm text-text-muted">{description}</p> : null}
+        </div>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
       {children}
     </section>

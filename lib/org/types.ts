@@ -1,4 +1,4 @@
-import type { OrgRole, Permission } from "@/modules/core/tools/access";
+import type { OrgRole, Permission } from "@/modules/core/access";
 
 export type OrgBranding = {
   logoPath: string | null;

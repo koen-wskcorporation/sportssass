@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { AssetTile } from "@/components/ui/asset-tile";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import { requireAuth } from "@/lib/auth/requireAuth";
 
@@ -26,8 +26,10 @@ export default async function AccountPage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  await requireAuth();
-  const currentUser = await getCurrentUser();
+  const sessionUser = await requireAuth();
+  const currentUser = await getCurrentUser({
+    sessionUser
+  });
   const query = await searchParams;
 
   if (!currentUser) {
@@ -99,7 +101,7 @@ export default async function AccountPage({
                   title="Profile picture"
                 />
               </FormField>
-              <Button type="submit">Save profile</Button>
+              <SubmitButton>Save profile</SubmitButton>
             </form>
           </CardContent>
         </Card>
@@ -114,7 +116,7 @@ export default async function AccountPage({
               <FormField className="w-full" hint="Minimum 8 characters" label="New password">
                 <Input name="newPassword" required type="password" />
               </FormField>
-              <Button type="submit">Update password</Button>
+              <SubmitButton>Update password</SubmitButton>
             </form>
           </CardContent>
         </Card>

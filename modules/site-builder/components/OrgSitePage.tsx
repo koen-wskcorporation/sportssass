@@ -1,20 +1,35 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Plus, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { createDefaultBlock, getBlockDefinition } from "@/modules/site-builder/blocks/registry";
+import { createDefaultRuntimeBlock, getRuntimeBlockDefinition } from "@/modules/site-builder/blocks/runtime-registry";
 import { loadOrgPageAction, saveOrgPageAction } from "@/modules/site-builder/actions";
-import { BlockLibraryDialog } from "@/modules/site-builder/components/BlockLibraryDialog";
-import { BlockSettingsPanel } from "@/modules/site-builder/components/BlockSettingsPanel";
-import { OrgPageEditor } from "@/modules/site-builder/components/OrgPageEditor";
-import { ORG_SITE_OPEN_EDITOR_EVENT } from "@/modules/site-builder/events";
+import { ORG_SITE_OPEN_EDITOR_EVENT, ORG_SITE_OPEN_EDITOR_REQUEST_KEY } from "@/modules/site-builder/events";
 import { useUnsavedChangesWarning } from "@/modules/site-builder/hooks/useUnsavedChangesWarning";
 import type { BlockContext, OrgPageBlock, OrgSiteBlockType, OrgSitePage as OrgSitePageType, OrgSiteRuntimeData } from "@/modules/site-builder/types";
+
+const BlockLibraryDialog = dynamic(
+  async () => (await import("@/modules/site-builder/components/BlockLibraryDialog")).BlockLibraryDialog,
+  {
+    ssr: false
+  }
+);
+
+const BlockSettingsPanel = dynamic(
+  async () => (await import("@/modules/site-builder/components/BlockSettingsPanel")).BlockSettingsPanel,
+  {
+    ssr: false
+  }
+);
+
+const OrgPageEditor = dynamic(async () => (await import("@/modules/site-builder/components/OrgPageEditor")).OrgPageEditor, {
+  ssr: false
+});
 
 type OrgSitePageProps = {
   orgSlug: string;
@@ -24,7 +39,7 @@ type OrgSitePageProps = {
   initialBlocks: OrgPageBlock[];
   initialRuntimeData: OrgSiteRuntimeData;
   canEdit: boolean;
-  autoOpenEditor?: boolean;
+  initialMode?: "view" | "edit";
 };
 
 function updateDraftBlock(blocks: OrgPageBlock[], nextBlock: OrgPageBlock) {
@@ -45,7 +60,7 @@ export function OrgSitePage({
   initialBlocks,
   initialRuntimeData,
   canEdit,
-  autoOpenEditor = false
+  initialMode = "view"
 }: OrgSitePageProps) {
   const [page, setPage] = useState(initialPage);
   const [blocks, setBlocks] = useState(initialBlocks);
@@ -137,13 +152,29 @@ export function OrgSitePage({
   }, [canEdit, enterEditMode]);
 
   useEffect(() => {
-    if (!canEdit || !autoOpenEditor || autoOpenHandledRef.current) {
+    if (!canEdit || initialMode !== "edit" || autoOpenHandledRef.current) {
       return;
     }
 
     autoOpenHandledRef.current = true;
     enterEditMode();
-  }, [autoOpenEditor, canEdit, enterEditMode]);
+  }, [canEdit, enterEditMode, initialMode]);
+
+  useEffect(() => {
+    if (!canEdit || autoOpenHandledRef.current) {
+      return;
+    }
+
+    const pendingPath = sessionStorage.getItem(ORG_SITE_OPEN_EDITOR_REQUEST_KEY);
+
+    if (!pendingPath || pendingPath !== window.location.pathname) {
+      return;
+    }
+
+    autoOpenHandledRef.current = true;
+    sessionStorage.removeItem(ORG_SITE_OPEN_EDITOR_REQUEST_KEY);
+    enterEditMode();
+  }, [canEdit, enterEditMode]);
 
   function cancelEditing() {
     setDraftTitle(page.title);
@@ -195,7 +226,7 @@ export function OrgSitePage({
 
   function addBlock(type: OrgSiteBlockType) {
     setDraftBlocks((current) => {
-      return [...current, createDefaultBlock(type, context)];
+      return [...current, createDefaultRuntimeBlock(type, context)];
     });
   }
 
@@ -225,10 +256,12 @@ export function OrgSitePage({
   });
 
   return (
-    <main className="app-container pb-10 pt-4 md:pb-10 md:pt-5">
+    <main className="app-container pb-10 pt-0 md:pb-10 md:pt-0">
       <div className="space-y-6">
-        {canEdit && isEditing ? (
+        {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
+            {isEditing ? (
+              <>
             <Input
               className="h-9 w-[260px]"
               onChange={(event) => {
@@ -250,7 +283,7 @@ export function OrgSitePage({
               <Plus className="h-4 w-4" />
               Add block
             </Button>
-            <Button disabled={isSaving} onClick={saveDraft} size="sm">
+            <Button disabled={isSaving} loading={isSaving} onClick={saveDraft} size="sm">
               <Save className="h-4 w-4" />
               {isSaving ? "Saving..." : "Save"}
             </Button>
@@ -263,13 +296,15 @@ export function OrgSitePage({
                 Unsaved changes
               </span>
             ) : null}
+              </>
+            ) : null}
           </div>
         ) : null}
 
         {!isEditing ? (
           <div className="space-y-6">
             {viewBlocks.map((block) => {
-              const definition = getBlockDefinition(block.type);
+              const definition = getRuntimeBlockDefinition(block.type);
               const Render = definition.Render;
 
               return <Render block={block as never} context={context} isEditing={isEditing} key={block.id} runtimeData={runtimeData} />;

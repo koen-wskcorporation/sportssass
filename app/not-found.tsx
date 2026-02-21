@@ -1,8 +1,12 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function NotFoundPage() {
+  const router = useRouter();
+
   return (
     <main className="app-container flex min-h-[60vh] items-center py-10">
       <Card className="mx-auto w-full max-w-3xl">
@@ -11,9 +15,19 @@ export default function NotFoundPage() {
           <CardDescription>The page you requested does not exist.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Link href="/">
-            <Button variant="secondary">Back to Home</Button>
-          </Link>
+          <Button
+            onClick={() => {
+              if (window.history.length > 1) {
+                router.back();
+                return;
+              }
+
+              router.push("/");
+            }}
+            variant="secondary"
+          >
+            Go Back
+          </Button>
         </CardContent>
       </Card>
     </main>

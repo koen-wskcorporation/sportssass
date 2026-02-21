@@ -1,26 +1,16 @@
 import { createId } from "@/modules/site-builder/blocks/helpers";
-import {
-  AnnouncementsBlockEditor,
-  AnnouncementsBlockRender,
-  createDefaultAnnouncementsConfig,
-  sanitizeAnnouncementsConfig
-} from "@/modules/site-builder/blocks/announcements";
 import { CtaGridBlockEditor, CtaGridBlockRender, createDefaultCtaGridConfig, sanitizeCtaGridConfig } from "@/modules/site-builder/blocks/cta-grid";
 import { CtaCardBlockEditor, CtaCardBlockRender, createDefaultCtaCardConfig, sanitizeCtaCardConfig } from "@/modules/site-builder/blocks/cta-card";
-import { createDefaultHeroConfig, HeroBlockEditor, HeroBlockRender, sanitizeHeroConfig } from "@/modules/site-builder/blocks/hero";
+import { createDefaultHeroConfig, HeroBlockRender, sanitizeHeroConfig } from "@/modules/site-builder/blocks/hero";
+import { HeroBlockEditorClient } from "@/modules/site-builder/blocks/hero-editor.client";
+import { createDefaultSubheroConfig, sanitizeSubheroConfig, SubheroBlockRender } from "@/modules/site-builder/blocks/subhero";
+import { SubheroBlockEditorClient } from "@/modules/site-builder/blocks/subhero-editor.client";
 import {
   createDefaultSchedulePreviewConfig,
   sanitizeSchedulePreviewConfig,
   SchedulePreviewBlockEditor,
   SchedulePreviewBlockRender
 } from "@/modules/site-builder/blocks/schedule-preview";
-import {
-  createDefaultSponsorsCarouselConfig,
-  sanitizeSponsorsCarouselConfig,
-  SponsorsCarouselBlockEditor,
-  SponsorsCarouselBlockRender
-} from "@/modules/site-builder/blocks/sponsors-carousel";
-import { createDefaultEmbedFormConfig, EmbedFormBlockEditor, EmbedFormBlockRender, sanitizeEmbedFormConfig } from "@/modules/site-builder/blocks/embed-form";
 import type { BlockContext, BlockDefinition, DraftBlockInput, OrgPageBlock, OrgSiteBlockType } from "@/modules/site-builder/types";
 
 type AnyBlockDefinition = {
@@ -34,7 +24,15 @@ const blockRegistry: AnyBlockDefinition = {
     defaultConfig: createDefaultHeroConfig,
     sanitizeConfig: sanitizeHeroConfig,
     Render: HeroBlockRender,
-    Editor: HeroBlockEditor
+    Editor: HeroBlockEditorClient
+  },
+  subhero: {
+    type: "subhero",
+    displayName: "Subhero",
+    defaultConfig: createDefaultSubheroConfig,
+    sanitizeConfig: sanitizeSubheroConfig,
+    Render: SubheroBlockRender,
+    Editor: SubheroBlockEditorClient
   },
   cta_grid: {
     type: "cta_grid",
@@ -44,14 +42,6 @@ const blockRegistry: AnyBlockDefinition = {
     Render: CtaGridBlockRender,
     Editor: CtaGridBlockEditor
   },
-  announcements: {
-    type: "announcements",
-    displayName: "Announcements",
-    defaultConfig: createDefaultAnnouncementsConfig,
-    sanitizeConfig: sanitizeAnnouncementsConfig,
-    Render: AnnouncementsBlockRender,
-    Editor: AnnouncementsBlockEditor
-  },
   cta_card: {
     type: "cta_card",
     displayName: "CTA Card",
@@ -60,14 +50,6 @@ const blockRegistry: AnyBlockDefinition = {
     Render: CtaCardBlockRender,
     Editor: CtaCardBlockEditor
   },
-  sponsors_carousel: {
-    type: "sponsors_carousel",
-    displayName: "Sponsors Carousel",
-    defaultConfig: createDefaultSponsorsCarouselConfig,
-    sanitizeConfig: sanitizeSponsorsCarouselConfig,
-    Render: SponsorsCarouselBlockRender,
-    Editor: SponsorsCarouselBlockEditor
-  },
   schedule_preview: {
     type: "schedule_preview",
     displayName: "Schedule Preview",
@@ -75,14 +57,6 @@ const blockRegistry: AnyBlockDefinition = {
     sanitizeConfig: sanitizeSchedulePreviewConfig,
     Render: SchedulePreviewBlockRender,
     Editor: SchedulePreviewBlockEditor
-  },
-  embed_form: {
-    type: "embed_form",
-    displayName: "Embedded Form",
-    defaultConfig: createDefaultEmbedFormConfig,
-    sanitizeConfig: sanitizeEmbedFormConfig,
-    Render: EmbedFormBlockRender,
-    Editor: EmbedFormBlockEditor
   }
 };
 
@@ -113,18 +87,16 @@ export function createDefaultBlocksForPage(pageSlug: string, context: BlockConte
     return [
       createDefaultBlock("hero", context),
       createDefaultBlock("cta_grid", context),
-      createDefaultBlock("announcements", context),
       createDefaultBlock("cta_card", context),
-      createDefaultBlock("sponsors_carousel", context),
       createDefaultBlock("schedule_preview", context)
     ];
   }
 
-  return [createDefaultBlock("hero", context), createDefaultBlock("announcements", context), createDefaultBlock("cta_card", context)];
+  return [createDefaultBlock("subhero", context)];
 }
 
 function normalizeSingleBlock(block: DraftBlockInput, context: BlockContext): OrgPageBlock | null {
-  const normalizedType = block.type === "sponsors_preview" ? "cta_card" : block.type;
+  const normalizedType = block.type;
 
   if (!isOrgSiteBlockType(normalizedType)) {
     return null;

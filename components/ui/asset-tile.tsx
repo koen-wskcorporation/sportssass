@@ -142,9 +142,7 @@ export function AssetTile({
             />
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-center text-text-muted">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border bg-surface">
-                <ImageIcon className="h-5 w-5" aria-hidden="true" />
-              </span>
+              <ImageIcon className="h-5 w-5" aria-hidden="true" />
               <span className="sr-only">{emptyLabel}</span>
             </div>
           )}
@@ -160,6 +158,7 @@ export function AssetTile({
               <Button
                 aria-label={title ? `Change ${title}` : "Change asset"}
                 disabled={disabled || isUploading}
+                loading={isUploading}
                 onClick={handleChangeAsset}
                 size="sm"
                 variant="secondary"

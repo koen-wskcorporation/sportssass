@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 import { getOptionalOrgMembershipAccess } from "@/lib/org/getOptionalOrgMembershipAccess";
-import { can } from "@/lib/permissions/can";
+import { getOrgCapabilities } from "@/lib/permissions/orgCapabilities";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
 import { defaultPageTitleFromSlug, isReservedPageSlug, sanitizePageSlug } from "@/modules/site-builder/blocks/helpers";
@@ -20,8 +20,6 @@ import {
   saveOrgPageAndBlocks,
   updateOrgPageSettingsById
 } from "@/modules/site-builder/db/queries";
-import { listOrgNavItems, saveOrgNavItems } from "@/modules/site-builder/db/nav-queries";
-import { ORG_NAV_MAX_CHILD_ITEMS, ORG_NAV_MAX_TOP_LEVEL_ITEMS, createDefaultOrgNavItems, type OrgNavItem } from "@/modules/site-builder/nav";
 import type { LinkPickerPageOption } from "@/lib/links";
 import type { DraftBlockInput, OrgManagePage, OrgPageBlock, OrgSitePage } from "@/modules/site-builder/types";
 
@@ -47,9 +45,9 @@ export async function loadOrgPageAction(input: LoadOrgPageInput): Promise<LoadOr
     const pageSlug = sanitizePageSlug(input.pageSlug);
     const org = await getOrgPublicContext(input.orgSlug);
     const membershipAccess = await getOptionalOrgMembershipAccess(org.orgId);
-
-    const canReadEditorData = membershipAccess ? can(membershipAccess.permissions, "org.pages.read") : false;
-    const canEdit = membershipAccess ? can(membershipAccess.permissions, "org.pages.write") : false;
+    const capabilities = membershipAccess ? getOrgCapabilities(membershipAccess.permissions) : null;
+    const canReadEditorData = capabilities?.pages.canAccess ?? false;
+    const canEdit = capabilities?.pages.canWrite ?? false;
 
     const pageData = canReadEditorData
       ? await getEditableOrgPageBySlug({
@@ -160,9 +158,8 @@ export async function listOrgPagesForLinkPickerAction(input: { orgSlug: string }
   try {
     const org = await getOrgPublicContext(input.orgSlug);
     const membershipAccess = await getOptionalOrgMembershipAccess(org.orgId);
-    const canReadPages = membershipAccess
-      ? can(membershipAccess.permissions, "org.pages.read") || can(membershipAccess.permissions, "org.pages.write")
-      : false;
+    const capabilities = membershipAccess ? getOrgCapabilities(membershipAccess.permissions) : null;
+    const canReadPages = capabilities?.pages.canAccess ?? false;
 
     if (!canReadPages) {
       return {
@@ -219,55 +216,6 @@ function validatePageSlugForManage(normalizedSlug: string) {
   }
 
   return null;
-}
-
-function replaceNavPageSlug(items: OrgNavItem[], sourceSlug: string, nextSlug: string): OrgNavItem[] {
-  return items.map((item) => ({
-    ...item,
-    link:
-      item.link?.type === "internal" && item.link.pageSlug === sourceSlug
-        ? {
-            type: "internal",
-            pageSlug: nextSlug
-          }
-        : item.link,
-    children: item.children.map((child) => ({
-      ...child,
-      link:
-        child.link.type === "internal" && child.link.pageSlug === sourceSlug
-          ? {
-              type: "internal",
-              pageSlug: nextSlug
-            }
-          : child.link
-    }))
-  }));
-}
-
-function removeNavLinksForPage(items: OrgNavItem[], pageSlug: string): OrgNavItem[] {
-  const filtered = items
-    .map((item) => {
-      const children = item.children.filter((child) => !(child.link.type === "internal" && child.link.pageSlug === pageSlug));
-      const shouldDropTopLink = item.link?.type === "internal" && item.link.pageSlug === pageSlug;
-      const nextLink = shouldDropTopLink ? null : item.link;
-
-      if (!nextLink && children.length === 0) {
-        return null;
-      }
-
-      return {
-        ...item,
-        link: nextLink,
-        children
-      } satisfies OrgNavItem;
-    })
-    .filter((item): item is OrgNavItem => Boolean(item));
-
-  if (filtered.length === 0) {
-    return createDefaultOrgNavItems();
-  }
-
-  return filtered;
 }
 
 async function findNextDuplicatePageSlug({
@@ -392,12 +340,6 @@ export async function savePageSettingsAction(input: {
       slug: requestedSlug,
       isPublished: payload.isPublished
     });
-
-    if (requestedSlug !== currentPage.slug) {
-      const navItems = await listOrgNavItems(org.orgId);
-      const remappedNavItems = replaceNavPageSlug(navItems, currentPage.slug, requestedSlug);
-      await saveOrgNavItems(org.orgId, remappedNavItems);
-    }
 
     const pages = await listOrgPagesForManage(org.orgId);
 
@@ -613,10 +555,6 @@ export async function deleteManagedPageAction(input: { orgSlug: string; pageId: 
       };
     }
 
-    const navItems = await listOrgNavItems(org.orgId);
-    const nextNavItems = removeNavLinksForPage(navItems, page.slug);
-    await saveOrgNavItems(org.orgId, nextNavItems);
-
     const pagesAfterDelete = await listOrgPagesForManage(org.orgId);
     const orderedIds = pagesAfterDelete.map((item) => item.id);
     const pages = await reorderOrgPages(org.orgId, orderedIds);
@@ -688,122 +626,309 @@ export async function reorderManagedPagesAction(input: { orgSlug: string; pageId
   }
 }
 
-const navLinkSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("internal"),
-    pageSlug: z.string().trim().min(1).max(120)
-  }),
-  z.object({
-    type: z.literal("external"),
-    url: z
-      .string()
-      .trim()
-      .min(1)
-      .max(2048)
-      .refine((value) => /^https?:\/\//i.test(value), "External URL must start with http:// or https://")
-  })
-]);
-
-const navChildSchema = z.object({
-  id: z.string().trim().min(1).max(128).optional(),
-  label: z.string().trim().min(1).max(48),
-  link: navLinkSchema,
-  openInNewTab: z.boolean().optional()
+const saveOrgPagesActionSchema = z.object({
+  orgSlug: z.string().trim().min(1),
+  action: z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("reorder"),
+      pageIds: z.array(z.string().trim().uuid()).min(1)
+    }),
+    z.object({
+      type: z.literal("rename"),
+      pageId: z.string().trim().uuid(),
+      title: z.string().trim().min(1).max(120)
+    }),
+    z.object({
+      type: z.literal("set-published"),
+      pageId: z.string().trim().uuid(),
+      isPublished: z.boolean()
+    }),
+    z.object({
+      type: z.literal("duplicate"),
+      pageId: z.string().trim().uuid()
+    }),
+    z.object({
+      type: z.literal("delete"),
+      pageId: z.string().trim().uuid()
+    }),
+    z.object({
+      type: z.literal("create"),
+      title: z.string().trim().max(120),
+      slug: z.string().trim().max(120).optional(),
+      isPublished: z.boolean().optional(),
+      openEditor: z.boolean().optional()
+    })
+  ])
 });
 
-const navItemSchema = z.object({
-  id: z.string().trim().min(1).max(128).optional(),
-  label: z.string().trim().min(1).max(48),
-  link: navLinkSchema.nullable(),
-  openInNewTab: z.boolean().optional(),
-  children: z.array(navChildSchema).max(ORG_NAV_MAX_CHILD_ITEMS)
-});
-
-const saveOrgNavSchema = z
-  .object({
-    orgSlug: z.string().trim().min(1),
-    items: z.array(navItemSchema).min(1).max(ORG_NAV_MAX_TOP_LEVEL_ITEMS)
-  })
-  .superRefine((value, ctx) => {
-    value.items.forEach((item, index) => {
-      if (!item.link && item.children.length === 0) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Menus need at least one link.",
-          path: ["items", index, "children"]
-        });
-      }
-    });
-  });
-
-type SaveOrgNavItemsResult =
+export type SaveOrgPagesActionResult =
   | {
       ok: true;
-      items: OrgNavItem[];
+      pages: OrgManagePage[];
+      createdPageSlug?: string;
+      openEditor?: boolean;
     }
   | {
       ok: false;
       error: string;
     };
 
-export async function saveOrgNavItemsAction(input: { orgSlug: string; items: OrgNavItem[] }): Promise<SaveOrgNavItemsResult> {
-  const parsed = saveOrgNavSchema.safeParse(input);
+async function findAvailablePageSlug({
+  orgId,
+  orgSlug,
+  orgName,
+  preferred
+}: {
+  orgId: string;
+  orgSlug: string;
+  orgName: string;
+  preferred: string;
+}) {
+  const sanitized = sanitizePageSlug(preferred);
+  const base = sanitized === "home" ? "page" : sanitized;
+
+  for (let index = 0; index < 200; index += 1) {
+    const candidate = index === 0 ? base : sanitizePageSlug(`${base}-${index + 1}`);
+
+    if (candidate !== "home" && isReservedPageSlug(candidate)) {
+      continue;
+    }
+
+    const existing = await getEditableOrgPageBySlug({
+      orgId,
+      pageSlug: candidate,
+      context: {
+        orgSlug,
+        orgName,
+        pageSlug: candidate
+      }
+    });
+
+    if (!existing) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+export async function saveOrgPagesAction(input: z.infer<typeof saveOrgPagesActionSchema>): Promise<SaveOrgPagesActionResult> {
+  const parsed = saveOrgPagesActionSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Provide valid navigation items."
+      error: "Invalid page update."
     };
   }
 
   try {
     const payload = parsed.data;
     const org = await requireOrgPermission(payload.orgSlug, "org.pages.write");
-    const sanitizedItems: OrgNavItem[] = payload.items.map((item, topIndex) => ({
-      id: item.id ?? `tmp-top-${topIndex}`,
-      label: item.label.trim(),
-      link:
-        item.link?.type === "internal"
-          ? {
-              type: "internal",
-              pageSlug: sanitizePageSlug(item.link.pageSlug)
-            }
-          : item.link
-            ? {
-                type: "external",
-                url: item.link.url.trim()
-              }
-            : null,
-      openInNewTab: item.link?.type === "external" ? Boolean(item.openInNewTab) : false,
-      children: item.children.map((child, childIndex) => ({
-        id: child.id ?? `tmp-child-${topIndex}-${childIndex}`,
-        label: child.label.trim(),
-        link:
-          child.link.type === "internal"
-            ? {
-                type: "internal",
-                pageSlug: sanitizePageSlug(child.link.pageSlug)
-              }
-            : {
-                type: "external",
-                url: child.link.url.trim()
-              },
-        openInNewTab: child.link.type === "external" ? Boolean(child.openInNewTab) : false
-      }))
-    }));
 
-    const savedItems = await saveOrgNavItems(org.orgId, sanitizedItems);
+    if (payload.action.type === "reorder") {
+      const currentPages = await listOrgPagesForManage(org.orgId);
+
+      if (currentPages.length !== payload.action.pageIds.length) {
+        return {
+          ok: false,
+          error: "Page order is out of date. Refresh and try again."
+        };
+      }
+
+      const currentIds = new Set(currentPages.map((page) => page.id));
+      const nextIds = new Set(payload.action.pageIds);
+
+      if (currentIds.size !== nextIds.size || [...currentIds].some((id) => !nextIds.has(id))) {
+        return {
+          ok: false,
+          error: "Page order is out of date. Refresh and try again."
+        };
+      }
+
+      const pages = await reorderOrgPages(org.orgId, payload.action.pageIds);
+      return { ok: true, pages };
+    }
+
+    if (payload.action.type === "rename") {
+      const page = await getOrgPageById(org.orgId, payload.action.pageId);
+
+      if (!page) {
+        return {
+          ok: false,
+          error: "This page no longer exists."
+        };
+      }
+
+      await updateOrgPageSettingsById({
+        orgId: org.orgId,
+        pageId: page.id,
+        title: normalizePageTitleInput(payload.action.title, page.slug),
+        slug: page.slug,
+        isPublished: page.isPublished
+      });
+
+      return {
+        ok: true,
+        pages: await listOrgPagesForManage(org.orgId)
+      };
+    }
+
+    if (payload.action.type === "set-published") {
+      const page = await getOrgPageById(org.orgId, payload.action.pageId);
+
+      if (!page) {
+        return {
+          ok: false,
+          error: "This page no longer exists."
+        };
+      }
+
+      await updateOrgPageSettingsById({
+        orgId: org.orgId,
+        pageId: page.id,
+        title: page.title,
+        slug: page.slug,
+        isPublished: payload.action.isPublished
+      });
+
+      return {
+        ok: true,
+        pages: await listOrgPagesForManage(org.orgId)
+      };
+    }
+
+    if (payload.action.type === "duplicate") {
+      const sourcePage = await getOrgPageById(org.orgId, payload.action.pageId);
+
+      if (!sourcePage) {
+        return {
+          ok: false,
+          error: "This page no longer exists."
+        };
+      }
+
+      const duplicateSlug = await findNextDuplicatePageSlug({
+        orgId: org.orgId,
+        orgSlug: org.orgSlug,
+        orgName: org.orgName,
+        sourceSlug: sourcePage.slug
+      });
+
+      if (!duplicateSlug) {
+        return {
+          ok: false,
+          error: "Unable to find a URL for the duplicate page."
+        };
+      }
+
+      await duplicateOrgPageWithBlocks({
+        orgId: org.orgId,
+        sourcePageId: sourcePage.id,
+        slug: duplicateSlug,
+        title: `${sourcePage.title} Copy`.slice(0, 120)
+      });
+
+      return {
+        ok: true,
+        pages: await listOrgPagesForManage(org.orgId)
+      };
+    }
+
+    if (payload.action.type === "delete") {
+      const page = await getOrgPageById(org.orgId, payload.action.pageId);
+
+      if (!page) {
+        return {
+          ok: false,
+          error: "This page no longer exists."
+        };
+      }
+
+      if (page.slug === "home") {
+        return {
+          ok: false,
+          error: "Home can't be deleted."
+        };
+      }
+
+      await deleteOrgPageById(org.orgId, page.id);
+      const pagesAfterDelete = await listOrgPagesForManage(org.orgId);
+      const pages = await reorderOrgPages(
+        org.orgId,
+        pagesAfterDelete.map((item) => item.id)
+      );
+
+      return {
+        ok: true,
+        pages
+      };
+    }
+
+    const requestedSlug = payload.action.slug?.trim() ? sanitizePageSlug(payload.action.slug) : "";
+
+    if (requestedSlug && requestedSlug !== "home" && isReservedPageSlug(requestedSlug)) {
+      return {
+        ok: false,
+        error: "That URL is reserved by the system. Choose a different page URL."
+      };
+    }
+
+    const slugBase = requestedSlug || sanitizePageSlug(payload.action.title || "page");
+    const availableSlug = await findAvailablePageSlug({
+      orgId: org.orgId,
+      orgSlug: org.orgSlug,
+      orgName: org.orgName,
+      preferred: slugBase
+    });
+
+    if (!availableSlug) {
+      return {
+        ok: false,
+        error: "Unable to find an available URL for this page."
+      };
+    }
+
+    if (isReservedPageSlug(availableSlug)) {
+      return {
+        ok: false,
+        error: "That URL is reserved by the system. Choose a different page URL."
+      };
+    }
+
+    const created = await ensureOrgPageExists({
+      orgId: org.orgId,
+      pageSlug: availableSlug,
+      title: payload.action.title,
+      context: {
+        orgSlug: org.orgSlug,
+        orgName: org.orgName,
+        pageSlug: availableSlug
+      }
+    });
+
+    if (payload.action.isPublished === false) {
+      await updateOrgPageSettingsById({
+        orgId: org.orgId,
+        pageId: created.page.id,
+        title: created.page.title,
+        slug: created.page.slug,
+        isPublished: false
+      });
+    }
 
     return {
       ok: true,
-      items: savedItems
+      pages: await listOrgPagesForManage(org.orgId),
+      createdPageSlug: created.page.slug,
+      openEditor: Boolean(payload.action.openEditor)
     };
   } catch (error) {
     rethrowIfNavigationError(error);
 
     return {
       ok: false,
-      error: "Unable to save navigation right now."
+      error: "Unable to save page updates right now."
     };
   }
 }
@@ -811,7 +936,8 @@ export async function saveOrgNavItemsAction(input: { orgSlug: string; items: Org
 const createOrgPageSchema = z.object({
   orgSlug: z.string().trim().min(1),
   pageSlug: z.string().trim().min(1).max(120),
-  title: z.string().trim().max(120).optional()
+  title: z.string().trim().max(120).optional(),
+  isPublished: z.boolean().optional()
 });
 
 type CreateOrgPageResult =
@@ -829,6 +955,7 @@ export async function createOrgPageAction(input: {
   orgSlug: string;
   pageSlug: string;
   title?: string;
+  isPublished?: boolean;
 }): Promise<CreateOrgPageResult> {
   const parsed = createOrgPageSchema.safeParse(input);
 
@@ -842,6 +969,7 @@ export async function createOrgPageAction(input: {
   try {
     const payload = parsed.data;
     const normalizedPageSlug = sanitizePageSlug(payload.pageSlug);
+    const normalizedIsPublished = normalizedPageSlug === "home" ? true : payload.isPublished;
     const org = await requireOrgPermission(payload.orgSlug, "org.pages.write");
 
     if (normalizedPageSlug !== "home" && isReservedPageSlug(normalizedPageSlug)) {
@@ -862,6 +990,19 @@ export async function createOrgPageAction(input: {
     });
 
     if (existing) {
+      if (payload.title !== undefined || payload.isPublished !== undefined) {
+        const nextTitle = payload.title ? normalizePageTitleInput(payload.title, normalizedPageSlug) : existing.page.title;
+        const nextIsPublished = normalizedIsPublished ?? existing.page.isPublished;
+
+        await updateOrgPageSettingsById({
+          orgId: org.orgId,
+          pageId: existing.page.id,
+          title: nextTitle,
+          slug: existing.page.slug,
+          isPublished: nextIsPublished
+        });
+      }
+
       return {
         ok: true,
         pageSlug: existing.page.slug,
@@ -880,6 +1021,16 @@ export async function createOrgPageAction(input: {
       }
     });
 
+    if (normalizedIsPublished === false) {
+      await updateOrgPageSettingsById({
+        orgId: org.orgId,
+        pageId: created.page.id,
+        title: created.page.title,
+        slug: created.page.slug,
+        isPublished: false
+      });
+    }
+
     return {
       ok: true,
       pageSlug: created.page.slug,
@@ -891,6 +1042,181 @@ export async function createOrgPageAction(input: {
     return {
       ok: false,
       error: "Unable to create this page right now."
+    };
+  }
+}
+
+const setOrgHomePageSchema = z.object({
+  orgSlug: z.string().trim().min(1),
+  targetPageSlug: z.string().trim().min(1).max(120)
+});
+
+type SetOrgHomePageResult =
+  | {
+      ok: true;
+      homeSlug: "home";
+      previousHomeSlug: string;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+export async function setOrgHomePageAction(input: { orgSlug: string; targetPageSlug: string }): Promise<SetOrgHomePageResult> {
+  const parsed = setOrgHomePageSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Choose a valid page."
+    };
+  }
+
+  try {
+    const payload = parsed.data;
+    const org = await requireOrgPermission(payload.orgSlug, "org.pages.write");
+    const normalizedTargetSlug = sanitizePageSlug(payload.targetPageSlug);
+
+    if (normalizedTargetSlug === "home") {
+      return {
+        ok: true,
+        homeSlug: "home",
+        previousHomeSlug: "home"
+      };
+    }
+
+    const currentHome = await getEditableOrgPageBySlug({
+      orgId: org.orgId,
+      pageSlug: "home",
+      context: {
+        orgSlug: org.orgSlug,
+        orgName: org.orgName,
+        pageSlug: "home"
+      }
+    });
+
+    const targetPage = await getEditableOrgPageBySlug({
+      orgId: org.orgId,
+      pageSlug: normalizedTargetSlug,
+      context: {
+        orgSlug: org.orgSlug,
+        orgName: org.orgName,
+        pageSlug: normalizedTargetSlug
+      }
+    });
+
+    if (!currentHome || !targetPage) {
+      return {
+        ok: false,
+        error: "Unable to find that page."
+      };
+    }
+
+    const previousHomeSlug = targetPage.page.slug;
+    const tempSlug = sanitizePageSlug(`home-swap-${Date.now()}-${Math.floor(Math.random() * 100000)}`);
+
+    await updateOrgPageSettingsById({
+      orgId: org.orgId,
+      pageId: currentHome.page.id,
+      title: currentHome.page.title,
+      slug: tempSlug,
+      isPublished: true
+    });
+
+    await updateOrgPageSettingsById({
+      orgId: org.orgId,
+      pageId: targetPage.page.id,
+      title: targetPage.page.title,
+      slug: "home",
+      isPublished: true
+    });
+
+    await updateOrgPageSettingsById({
+      orgId: org.orgId,
+      pageId: currentHome.page.id,
+      title: currentHome.page.title,
+      slug: previousHomeSlug,
+      isPublished: currentHome.page.isPublished
+    });
+
+    return {
+      ok: true,
+      homeSlug: "home",
+      previousHomeSlug
+    };
+  } catch (error) {
+    rethrowIfNavigationError(error);
+
+    return {
+      ok: false,
+      error: "Unable to set this page as home right now."
+    };
+  }
+}
+
+const deleteOrgPagesBySlugsSchema = z.object({
+  orgSlug: z.string().trim().min(1),
+  pageSlugs: z.array(z.string().trim().min(1)).max(200)
+});
+
+type DeleteOrgPagesBySlugsResult =
+  | {
+      ok: true;
+      deletedSlugs: string[];
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+export async function deleteOrgPagesBySlugsAction(input: { orgSlug: string; pageSlugs: string[] }): Promise<DeleteOrgPagesBySlugsResult> {
+  const parsed = deleteOrgPagesBySlugsSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Unable to delete pages."
+    };
+  }
+
+  try {
+    const payload = parsed.data;
+    const org = await requireOrgPermission(payload.orgSlug, "org.pages.write");
+    const uniqueSlugs = [...new Set(payload.pageSlugs.map((slug) => sanitizePageSlug(slug)))].filter((slug) => slug !== "home");
+    const deletedSlugs: string[] = [];
+
+    for (const slug of uniqueSlugs) {
+      const existing = await getEditableOrgPageBySlug({
+        orgId: org.orgId,
+        pageSlug: slug,
+        context: {
+          orgSlug: org.orgSlug,
+          orgName: org.orgName,
+          pageSlug: slug
+        }
+      });
+
+      if (!existing) {
+        continue;
+      }
+
+      const deleted = await deleteOrgPageById(org.orgId, existing.page.id);
+
+      if (deleted) {
+        deletedSlugs.push(slug);
+      }
+    }
+
+    return {
+      ok: true,
+      deletedSlugs
+    };
+  } catch (error) {
+    rethrowIfNavigationError(error);
+
+    return {
+      ok: false,
+      error: "Unable to delete pages right now."
     };
   }
 }

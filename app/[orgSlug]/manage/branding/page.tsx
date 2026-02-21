@@ -1,10 +1,10 @@
 import { Alert } from "@/components/ui/alert";
 import { AssetTile } from "@/components/ui/asset-tile";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ColorPickerInput } from "@/components/ui/color-picker-input";
 import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
 import { can } from "@/lib/permissions/can";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
@@ -105,14 +105,12 @@ export default async function OrgBrandingSettingsPage({
               </div>
 
               <FormField hint="Hex format: #RRGGBB" label="Accent Color">
-                <Input defaultValue={orgContext.branding.accent ?? ""} name="accent" placeholder="#00EAFF" />
+                <ColorPickerInput defaultValue={orgContext.branding.accent ?? ""} name="accent" />
               </FormField>
             </fieldset>
 
             {!canManageBranding ? <Alert variant="warning">You have read-only access to branding settings.</Alert> : null}
-            <Button disabled={!canManageBranding} type="submit">
-              Save Branding
-            </Button>
+            <SubmitButton disabled={!canManageBranding}>Save Branding</SubmitButton>
           </form>
         </CardContent>
       </Card>

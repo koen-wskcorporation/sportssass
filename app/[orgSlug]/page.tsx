@@ -11,7 +11,7 @@ export default async function OrgPublicHomePage({
 }) {
   const { orgSlug } = await params;
   const query = await searchParams;
-  const autoOpenEditor = query.edit === "1";
+  const initialMode = query.edit === "1" ? "edit" : "view";
   const pageData = await getOrgSitePageForRender({
     orgSlug,
     pageSlug: "home"
@@ -23,9 +23,9 @@ export default async function OrgPublicHomePage({
 
   return (
     <OrgSitePage
-      autoOpenEditor={autoOpenEditor}
       canEdit={pageData.canEdit}
       initialBlocks={pageData.blocks}
+      initialMode={initialMode}
       initialPage={pageData.page}
       initialRuntimeData={pageData.runtimeData}
       orgName={pageData.orgContext.orgName}

@@ -11,8 +11,8 @@ import { defaultInternalHref, resolveButtonHref } from "@/lib/links";
 
 function defaultCtaCardConfig(context: BlockContext): CtaCardBlockConfig {
   return {
-    heading: `Support ${context.orgName}`,
-    body: "Use this card for sponsorship campaigns, event highlights, or featured organization updates.",
+    heading: `Get Involved with ${context.orgName}`,
+    body: "Use this card for key programs, registrations, or featured organization updates.",
     imagePath: null,
     focalX: 0.5,
     focalY: 0.5,
@@ -22,7 +22,7 @@ function defaultCtaCardConfig(context: BlockContext): CtaCardBlockConfig {
       {
         id: "cta-card-primary",
         label: "Learn More",
-        href: defaultInternalHref("sponsors"),
+        href: defaultInternalHref("home"),
         variant: "primary"
       }
     ]

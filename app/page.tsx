@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { CreateOrganizationDialog } from "@/components/dashboard/CreateOrganizationDialog";
 import { DashboardSection, DashboardShell } from "@/components/dashboard/DashboardShell";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { OrgCard } from "@/components/dashboard/OrgCard";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { buttonVariants } from "@/components/ui/button";
 import { signOutAction } from "@/app/auth/actions";
 import { getDashboardContext } from "@/lib/dashboard/getDashboardContext";
@@ -17,16 +19,20 @@ export default async function HomePage() {
             Account
           </Link>
           <form action={signOutAction}>
-            <button className={buttonVariants({ size: "sm", variant: "ghost" })} type="submit">
+            <SubmitButton size="sm" variant="ghost">
               Sign out
-            </button>
+            </SubmitButton>
           </form>
         </>
       }
       subtitle="Your sports in one place."
       title="Dashboard"
     >
-      <DashboardSection description="Open an organization to view its home page and tools." title="Organizations">
+      <DashboardSection
+        actions={<CreateOrganizationDialog />}
+        description="Open an organization to view its public site and manage core settings."
+        title="Organizations"
+      >
         {organizations.length === 0 ? (
           <EmptyState />
         ) : (

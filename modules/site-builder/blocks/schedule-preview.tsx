@@ -11,7 +11,7 @@ import { defaultInternalHref, resolveButtonHref } from "@/lib/links";
 function defaultSchedulePreviewConfig(_: BlockContext): SchedulePreviewBlockConfig {
   return {
     title: "Schedule Preview",
-    body: "Upcoming game days and training highlights will appear here as schedule tooling is connected.",
+    body: "Upcoming game days and training highlights will appear here as schedule data is connected.",
     buttons: [
       {
         id: "schedule-primary",

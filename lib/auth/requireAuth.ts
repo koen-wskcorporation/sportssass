@@ -1,20 +1,13 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServer } from "@/lib/supabase/server";
 import type { SessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export async function requireAuth(): Promise<SessionUser> {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
 
-  if (error || !user) {
+  if (!user) {
     redirect("/auth/login");
   }
 
-  return {
-    id: user.id,
-    email: user.email ?? null
-  };
+  return user;
 }

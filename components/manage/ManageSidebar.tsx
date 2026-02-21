@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Building2, CreditCard, FileText, Home, LayoutDashboard, Palette, PlusSquare, Users } from "lucide-react";
+import { Building2, CreditCard, LayoutDashboard, Palette, Users } from "lucide-react";
 import { OrgAreaSidebarNav, OrgAreaSidebarNavMobile, type OrgAreaSidebarConfig } from "@/components/manage/OrgAreaSidebarNav";
 
 type ManageSidebarProps = {
@@ -32,7 +32,7 @@ function navConfig(orgSlug: string): OrgAreaSidebarConfig {
             key: "org-info",
             label: "Org Info",
             icon: Building2,
-            href: `/${orgSlug}/manage/org-info`,
+            href: `/${orgSlug}/manage/info`,
             match: "prefix"
           },
           {
@@ -52,7 +52,7 @@ function navConfig(orgSlug: string): OrgAreaSidebarConfig {
             key: "accounts-access",
             label: "Accounts & Access",
             icon: Users,
-            href: `/${orgSlug}/manage/members`,
+            href: `/${orgSlug}/manage/access`,
             match: "prefix"
           }
         ]
@@ -67,36 +67,6 @@ function navConfig(orgSlug: string): OrgAreaSidebarConfig {
             icon: CreditCard,
             href: `/${orgSlug}/manage/billing`,
             match: "prefix"
-          }
-        ]
-      },
-      {
-        key: "content",
-        label: "Content",
-        items: [
-          {
-            key: "pages",
-            label: "Pages",
-            icon: FileText,
-            href: `/${orgSlug}/manage/pages`,
-            match: "prefix",
-            subtreePrefixes: [`/${orgSlug}/manage/pages`],
-            children: [
-              {
-                key: "pages-homepage",
-                label: "Homepage",
-                icon: Home,
-                href: `/${orgSlug}`,
-                match: "exact"
-              },
-              {
-                key: "pages-new-page",
-                label: "New Page",
-                icon: PlusSquare,
-                href: `/${orgSlug}/manage/pages`,
-                match: "exact"
-              }
-            ]
           }
         ]
       }

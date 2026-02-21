@@ -13,7 +13,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { can } from "@/lib/permissions/can";
-import { getRoleLabel, type OrgRole, type Permission } from "@/modules/core/tools/access";
+import { getRoleLabel, isAdminLikeRole, type OrgRole, type Permission } from "@/modules/core/access";
 import {
   inviteUserToOrgAction,
   removeMembershipAction,
@@ -55,15 +55,11 @@ function normalizeVisibleColumns(rawValue: unknown): TableColumnKey[] {
 }
 
 function roleBadgeVariant(role: OrgRole) {
-  if (role === "admin") {
+  if (isAdminLikeRole(role)) {
     return "success";
   }
 
-  if (role === "member") {
-    return "neutral";
-  }
-
-  return "warning";
+  return "neutral";
 }
 
 function statusBadgeVariant(status: AccessMember["status"]) {
@@ -75,7 +71,11 @@ function statusLabel(status: AccessMember["status"]) {
 }
 
 function canEditAdminMembership(currentUserRole: OrgRole, memberRole: OrgRole) {
-  return currentUserRole === "admin" || memberRole !== "admin";
+  return isAdminLikeRole(currentUserRole) || !isAdminLikeRole(memberRole);
+}
+
+function toAssignableRole(role: OrgRole): OrgRole {
+  return isAdminLikeRole(role) ? "admin" : "member";
 }
 
 function formatDateTime(value: string | null, formatter: Intl.DateTimeFormat) {
@@ -182,7 +182,7 @@ export function AccountsAccessPanel({
   useEffect(() => {
     setRoleDraftByMembershipId(
       members.reduce<Record<string, OrgRole>>((drafts, member) => {
-        drafts[member.membershipId] = member.role;
+        drafts[member.membershipId] = toAssignableRole(member.role);
         return drafts;
       }, {})
     );
@@ -230,24 +230,16 @@ export function AccountsAccessPanel({
     return roleByKey.get(roleKey)?.label ?? getRoleLabel(roleKey);
   }
 
-  function ensureRoleOption(options: SelectOption[], roleKey: OrgRole) {
-    if (options.some((option) => option.value === roleKey)) {
-      return options;
-    }
-
-    return [{ value: roleKey, label: resolveRoleLabel(roleKey) }, ...options];
-  }
-
   function getRoleOptions(member: AccessMember) {
-    if (currentUserRole === "admin") {
-      return ensureRoleOption(assignableRoleOptions, member.role);
+    if (isAdminLikeRole(currentUserRole)) {
+      return assignableRoleOptions;
     }
 
-    if (member.role === "admin") {
+    if (isAdminLikeRole(member.role)) {
       return [{ value: "admin", label: resolveRoleLabel("admin") }];
     }
 
-    return ensureRoleOption(nonAdminRoleOptions, member.role);
+    return nonAdminRoleOptions;
   }
 
   function displayUser(member: AccessMember) {
@@ -296,9 +288,10 @@ export function AccountsAccessPanel({
       return;
     }
 
-    const nextRole = roleDraftByMembershipId[member.membershipId] ?? member.role;
+    const currentRole = toAssignableRole(member.role);
+    const nextRole = roleDraftByMembershipId[member.membershipId] ?? currentRole;
 
-    if (nextRole === member.role) {
+    if (nextRole === currentRole) {
       toast({
         title: "No changes to save",
         variant: "info"
@@ -412,7 +405,7 @@ export function AccountsAccessPanel({
 
   const emptyStateColSpan = 1 + visibleColumns.length;
   const selectedRoleOptions = selectedMember ? getRoleOptions(selectedMember) : [];
-  const selectedRoleDraft = selectedMember ? (roleDraftByMembershipId[selectedMember.membershipId] ?? selectedMember.role) : "";
+  const selectedRoleDraft = selectedMember ? (roleDraftByMembershipId[selectedMember.membershipId] ?? toAssignableRole(selectedMember.role)) : "";
   const selectedRoleValue = selectedRoleOptions.some((option) => option.value === selectedRoleDraft)
     ? selectedRoleDraft
     : (selectedRoleOptions[0]?.value ?? selectedRoleDraft);
@@ -452,12 +445,11 @@ export function AccountsAccessPanel({
             </FormField>
 
             <div className="md:pt-[26px]">
-              <Button disabled={!canManageActions || isInviting || assignableRoleOptions.length === 0} type="submit">
+              <Button disabled={!canManageActions || isInviting || assignableRoleOptions.length === 0} loading={isInviting} type="submit">
                 {isInviting ? "Sending..." : "Send Invite"}
               </Button>
             </div>
           </form>
-          <p className="mt-3 text-xs text-text-muted">Manage custom role templates from the Custom Roles subpage.</p>
         </CardContent>
       </Card>
 
@@ -634,6 +626,7 @@ export function AccountsAccessPanel({
                 <Button
                   className="md:mb-px"
                   disabled={!canManageActions || !canEditAdminMembership(currentUserRole, selectedMember.role) || activeRoleSaveId === selectedMember.membershipId}
+                  loading={activeRoleSaveId === selectedMember.membershipId}
                   onClick={() => handleRoleSave(selectedMember)}
                   variant="secondary"
                 >
@@ -644,6 +637,7 @@ export function AccountsAccessPanel({
               <div className="flex flex-wrap gap-2 border-t pt-4">
                 <Button
                   disabled={!canManageActions || !selectedMember.email || activeResetMembershipId === selectedMember.membershipId}
+                  loading={activeResetMembershipId === selectedMember.membershipId}
                   onClick={() => handleSendReset(selectedMember)}
                   variant="ghost"
                 >
@@ -687,7 +681,7 @@ export function AccountsAccessPanel({
             <Button disabled={isRemoving} onClick={() => setRemoveTarget(null)} variant="ghost">
               Cancel
             </Button>
-            <Button disabled={isRemoving} onClick={handleRemoveConfirm} variant="destructive">
+            <Button disabled={isRemoving} loading={isRemoving} onClick={handleRemoveConfirm} variant="destructive">
               {isRemoving ? "Removing..." : "Confirm remove"}
             </Button>
           </DialogFooter>

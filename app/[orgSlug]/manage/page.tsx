@@ -2,16 +2,16 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
+import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 
 export default async function OrgManageOverviewPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
-  const orgContext = await getOrgPublicContext(orgSlug);
+  const orgContext = await getOrgAuthContext(orgSlug);
 
   return (
     <>
       <PageHeader
-        description="Configure organization details, branding, access, and billing from one place."
+        description="Configure organization details, access, and billing from one place."
         title={`${orgContext.orgName} Management`}
       />
 
@@ -22,7 +22,7 @@ export default async function OrgManageOverviewPage({ params }: { params: Promis
             <CardDescription>View core organization metadata and identifiers.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgSlug}/manage/org-info`}>
+            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgSlug}/manage/info`}>
               Open Org Info
             </Link>
           </CardContent>
@@ -43,10 +43,10 @@ export default async function OrgManageOverviewPage({ params }: { params: Promis
         <Card>
           <CardHeader>
             <CardTitle>Accounts &amp; Access</CardTitle>
-            <CardDescription>Invite users, manage roles, and account recovery tools.</CardDescription>
+            <CardDescription>Invite users, manage core access levels, and account recovery.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgSlug}/manage/members`}>
+            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgSlug}/manage/access`}>
               Open Accounts &amp; Access
             </Link>
           </CardContent>
@@ -60,18 +60,6 @@ export default async function OrgManageOverviewPage({ params }: { params: Promis
           <CardContent>
             <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgSlug}/manage/billing`}>
               Open Billing
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Pages</CardTitle>
-            <CardDescription>Manage organization site pages and publishing workflows.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgSlug}/manage/pages`}>
-              Open Pages
             </Link>
           </CardContent>
         </Card>

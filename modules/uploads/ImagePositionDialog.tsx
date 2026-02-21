@@ -122,7 +122,7 @@ export function ImagePositionDialog({
           <Button onClick={onBack} size="sm" variant="secondary">
             Back
           </Button>
-          <Button disabled={!file || isSaving} onClick={onSave} size="sm">
+          <Button disabled={!file || isSaving} loading={isSaving} onClick={onSave} size="sm">
             {isSaving ? "Saving..." : "Save"}
           </Button>
         </>

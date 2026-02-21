@@ -43,8 +43,6 @@ function defaultUploadTitle(options: OpenUploadOptions) {
       return "Upload Hero Image";
     case "site-block-image":
       return "Upload Block Image";
-    case "sponsor-logo":
-      return "Upload Sponsor Logo";
     default:
       return "Upload File";
   }

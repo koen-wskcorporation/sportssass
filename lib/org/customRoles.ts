@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getDefaultRolePermissions, isPermission, type OrgRole, type Permission } from "@/modules/core/tools/access";
+import { getDefaultRolePermissions, isPermission, type OrgRole, type Permission } from "@/modules/core/access";
 
 export type OrgCustomRole = {
   id: string;
@@ -27,13 +27,7 @@ const legacyManagerPermissions: Permission[] = [
   "org.manage.read",
   "org.branding.read",
   "org.pages.read",
-  "org.pages.write",
-  "announcements.read",
-  "announcements.write",
-  "forms.read",
-  "forms.write",
-  "sponsors.read",
-  "sponsors.write"
+  "org.pages.write"
 ];
 
 function parsePermissions(value: unknown): Permission[] {

@@ -1,7 +1,7 @@
 "use client";
 
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DraggableAttributes } from "@dnd-kit/core";
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { arrayMove, SortableContext, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 export type SortableHandleProps = {
@@ -19,9 +19,20 @@ type SortableCanvasProps<TItem> = {
   items: TItem[];
   getId: (item: TItem) => string;
   onReorder: (nextItems: TItem[]) => void;
+  onDrop?: (event: {
+    activeId: string;
+    overId: string;
+    activeIndex: number;
+    overIndex: number;
+    delta: {
+      x: number;
+      y: number;
+    };
+  }) => boolean;
   renderItem: (item: TItem, meta: SortableRenderMeta) => ReactNode;
   renderOverlay?: (item: TItem) => ReactNode;
   className?: string;
+  sortingStrategy?: "vertical" | "horizontal";
 };
 
 function toTransform(transform: { x: number; y: number; scaleX: number; scaleY: number } | null) {
@@ -65,7 +76,16 @@ function SortableCanvasItem<TItem>({
   );
 }
 
-export function SortableCanvas<TItem>({ items, getId, onReorder, renderItem, renderOverlay, className }: SortableCanvasProps<TItem>) {
+export function SortableCanvas<TItem>({
+  items,
+  getId,
+  onReorder,
+  onDrop,
+  renderItem,
+  renderOverlay,
+  className,
+  sortingStrategy = "vertical"
+}: SortableCanvasProps<TItem>) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -87,6 +107,7 @@ export function SortableCanvas<TItem>({ items, getId, onReorder, renderItem, ren
   }, [activeId, getId, items]);
 
   const itemIds = items.map((item) => getId(item));
+  const strategy = sortingStrategy === "horizontal" ? horizontalListSortingStrategy : verticalListSortingStrategy;
 
   return (
     <DndContext
@@ -110,6 +131,21 @@ export function SortableCanvas<TItem>({ items, getId, onReorder, renderItem, ren
           return;
         }
 
+        const wasHandled = onDrop?.({
+          activeId: activeItemId,
+          overId,
+          activeIndex: oldIndex,
+          overIndex: newIndex,
+          delta: {
+            x: event.delta.x,
+            y: event.delta.y
+          }
+        });
+
+        if (wasHandled) {
+          return;
+        }
+
         onReorder(arrayMove(items, oldIndex, newIndex));
       }}
       onDragStart={(event) => {
@@ -117,7 +153,7 @@ export function SortableCanvas<TItem>({ items, getId, onReorder, renderItem, ren
       }}
       sensors={sensors}
     >
-      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+      <SortableContext items={itemIds} strategy={strategy}>
         <div className={className ?? "space-y-4"}>
           {items.map((item) => {
             const itemId = getId(item);

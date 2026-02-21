@@ -11,7 +11,7 @@ export default async function OrgPublicPageBySlug({
 }) {
   const { orgSlug, pageSlug } = await params;
   const query = await searchParams;
-  const autoOpenEditor = query.edit === "1";
+  const initialMode = query.edit === "1" ? "edit" : "view";
 
   if (pageSlug.toLowerCase() === "home") {
     redirect(`/${orgSlug}`);
@@ -28,9 +28,9 @@ export default async function OrgPublicPageBySlug({
 
   return (
     <OrgSitePage
-      autoOpenEditor={autoOpenEditor}
       canEdit={pageData.canEdit}
       initialBlocks={pageData.blocks}
+      initialMode={initialMode}
       initialPage={pageData.page}
       initialRuntimeData={pageData.runtimeData}
       orgName={pageData.orgContext.orgName}

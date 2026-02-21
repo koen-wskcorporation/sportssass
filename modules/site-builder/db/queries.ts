@@ -339,6 +339,34 @@ export async function listOrgPagesForManage(orgId: string): Promise<OrgManagePag
   return (data ?? []).map((row) => mapManagePage(row as PageRow));
 }
 
+export async function listOrgPagesForHeader({
+  orgId,
+  includeUnpublished
+}: {
+  orgId: string;
+  includeUnpublished: boolean;
+}): Promise<OrgManagePage[]> {
+  const supabase = await createSupabaseServer();
+  let query = supabase
+    .from("org_pages")
+    .select(pageSelect)
+    .eq("org_id", orgId)
+    .order("sort_index", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (!includeUnpublished) {
+    query = query.eq("is_published", true);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to list org pages: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => mapManagePage(row as PageRow));
+}
+
 export async function updateOrgPageSettingsById({
   orgId,
   pageId,

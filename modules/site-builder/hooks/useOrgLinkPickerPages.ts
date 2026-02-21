@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { LinkPickerPageOption } from "@/lib/links";
 import { listOrgPagesForLinkPickerAction } from "@/modules/site-builder/actions";
 
@@ -71,10 +71,22 @@ export function useOrgLinkPickerPages(orgSlug: string | null | undefined) {
 
   const homePage = useMemo(() => pages.find((page) => page.slug === "home") ?? null, [pages]);
 
+  const setPagesWithCache = useCallback<Dispatch<SetStateAction<LinkPickerPageOption[]>>>(
+    (value) => {
+      setPages((current) => {
+        const next = typeof value === "function" ? value(current) : value;
+        pageCache.set(cacheKey, next);
+        return next;
+      });
+    },
+    [cacheKey]
+  );
+
   return {
     pages,
     loading,
     error,
-    homePage
+    homePage,
+    setPages: setPagesWithCache
   };
 }

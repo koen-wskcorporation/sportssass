@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { AccountMenu } from "@/components/shared/AccountMenu";
+import { AuthDialogTrigger } from "@/components/auth/AuthDialogTrigger";
 import { signOutAction } from "@/app/auth/actions";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 
@@ -29,11 +29,7 @@ export async function PrimaryHeader() {
             signOutAction={signOutAction}
           />
         ) : (
-          <Link href="/auth/login">
-            <Button size="sm" variant="secondary">
-              Sign in
-            </Button>
-          </Link>
+          <AuthDialogTrigger />
         )}
       </div>
     </header>

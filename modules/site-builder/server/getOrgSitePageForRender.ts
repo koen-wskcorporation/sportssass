@@ -1,8 +1,4 @@
-import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
-import { getOptionalOrgMembershipAccess } from "@/lib/org/getOptionalOrgMembershipAccess";
-import { can } from "@/lib/permissions/can";
-import { listOrgAnnouncements } from "@/modules/announcements/db/queries";
-import { listPublishedForms, listPublishedSponsorLogos } from "@/modules/forms/db/queries";
+import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
 import { getPublishedOrgPageBySlug } from "@/modules/site-builder/db/queries";
 
 export async function getOrgSitePageForRender({
@@ -12,54 +8,35 @@ export async function getOrgSitePageForRender({
   orgSlug: string;
   pageSlug: string;
 }) {
-  const orgContext = await getOrgPublicContext(orgSlug);
+  const orgRequest = await getOrgRequestContext(orgSlug);
 
-  const [membershipAccess, pageData, announcements, sponsorLogos, publishedForms] = await Promise.all([
-    getOptionalOrgMembershipAccess(orgContext.orgId),
-    getPublishedOrgPageBySlug({
-      orgId: orgContext.orgId,
-      pageSlug,
-      context: {
-        orgSlug: orgContext.orgSlug,
-        orgName: orgContext.orgName,
-        pageSlug
-      }
-    }),
-    listOrgAnnouncements(orgContext.orgId, {
-      includeUnpublished: false,
-      limit: 24
-    }).catch(() => []),
-    listPublishedSponsorLogos(orgContext.orgId).catch(() => []),
-    listPublishedForms(orgContext.orgId).catch(() => [])
-  ]);
+  const pageData = await getPublishedOrgPageBySlug({
+    orgId: orgRequest.org.orgId,
+    pageSlug,
+    context: {
+      orgSlug: orgRequest.org.orgSlug,
+      orgName: orgRequest.org.orgName,
+      pageSlug
+    }
+  });
 
-  const runtimeData = {
-    announcements: announcements.map((announcement) => ({
-      id: announcement.id,
-      title: announcement.title,
-      summary: announcement.summary,
-      publishAt: announcement.publishAt,
-      button: announcement.button
-    })),
-    sponsorLogos,
-    publishedForms
-  };
+  const runtimeData = {};
 
   if (!pageData) {
     return {
-      orgContext,
+      orgContext: orgRequest.org,
       page: null,
       blocks: null,
       runtimeData,
-      canEdit: membershipAccess ? can(membershipAccess.permissions, "org.pages.write") : false
+      canEdit: orgRequest.capabilities?.pages.canWrite ?? false
     };
   }
 
   return {
-    orgContext,
+    orgContext: orgRequest.org,
     page: pageData.page,
     blocks: pageData.blocks,
     runtimeData,
-    canEdit: membershipAccess ? can(membershipAccess.permissions, "org.pages.write") : false
+    canEdit: orgRequest.capabilities?.pages.canWrite ?? false
   };
 }

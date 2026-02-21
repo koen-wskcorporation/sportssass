@@ -54,42 +54,25 @@ export const getOrgPublicContext = cache(async (orgSlug: string): Promise<OrgPub
   }
 
   const supabase = await createSupabaseServer();
-  const { data: orgWithGoverningBody, error: orgWithGoverningBodyError } = await supabase
+  const { data: org, error: orgError } = await supabase
     .from("orgs")
     .select("id, slug, name, logo_path, icon_path, brand_primary, governing_body:governing_bodies!orgs_governing_body_id_fkey(id, slug, name, logo_path)")
     .eq("slug", orgSlug)
     .maybeSingle();
 
-  if (orgWithGoverningBodyError) {
-    // Keep org pages online if governing body migration has not been applied yet.
-    const { data: fallbackOrg, error: fallbackOrgError } = await supabase
-      .from("orgs")
-      .select("id, slug, name, logo_path, icon_path, brand_primary")
-      .eq("slug", orgSlug)
-      .maybeSingle();
-
-    if (fallbackOrgError || !fallbackOrg) {
-      notFound();
-    }
-
-    return {
-      orgId: fallbackOrg.id,
-      orgSlug: fallbackOrg.slug,
-      orgName: fallbackOrg.name,
-      branding: mapBranding(fallbackOrg),
-      governingBody: null
-    };
+  if (orgError) {
+    throw new Error(`Failed to load org public context: ${orgError.message}`);
   }
 
-  if (!orgWithGoverningBody) {
+  if (!org) {
     notFound();
   }
 
   return {
-    orgId: orgWithGoverningBody.id,
-    orgSlug: orgWithGoverningBody.slug,
-    orgName: orgWithGoverningBody.name,
-    branding: mapBranding(orgWithGoverningBody),
-    governingBody: mapGoverningBody(orgWithGoverningBody.governing_body)
+    orgId: org.id,
+    orgSlug: org.slug,
+    orgName: org.name,
+    branding: mapBranding(org),
+    governingBody: mapGoverningBody(org.governing_body)
   };
 });

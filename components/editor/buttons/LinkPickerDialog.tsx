@@ -34,8 +34,6 @@ type PageOption = {
   isDraft: boolean;
 };
 
-const knownSiteLinks: LinkOption[] = [{ label: "Sponsors", value: "/sponsors" }];
-
 function normalizeInternalPath(value: string) {
   const trimmed = value.trim();
 
@@ -104,15 +102,6 @@ export function LinkPickerDialog({
         isDraft: !page.isPublished
       });
     }
-
-    options.push(
-      ...knownSiteLinks.map((item) => ({
-        label: item.label,
-        path: normalizeInternalPath(item.value),
-        value: normalizeInternalPath(item.value),
-        isDraft: false
-      }))
-    );
 
     options.push(
       ...availableInternalLinks
@@ -201,7 +190,6 @@ export function LinkPickerDialog({
 
   return (
     <EditorSettingsDialog
-      className="sm:w-[680px]"
       contentClassName="space-y-4"
       description={description}
       footer={

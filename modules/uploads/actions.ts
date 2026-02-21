@@ -25,8 +25,6 @@ const uploadPurposes: UploadPurpose[] = [
   "profile-photo",
   "site-hero",
   "site-block-image",
-  "form-file",
-  "sponsor-logo",
   "attachment"
 ];
 

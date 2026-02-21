@@ -1,0 +1,65 @@
+import { createId } from "@/modules/site-builder/blocks/helpers";
+import { CtaGridBlockRender, createDefaultCtaGridConfig, sanitizeCtaGridConfig } from "@/modules/site-builder/blocks/cta-grid";
+import { CtaCardBlockRender, createDefaultCtaCardConfig, sanitizeCtaCardConfig } from "@/modules/site-builder/blocks/cta-card";
+import { createDefaultHeroConfig, HeroBlockRender, sanitizeHeroConfig } from "@/modules/site-builder/blocks/hero";
+import { createDefaultSubheroConfig, sanitizeSubheroConfig, SubheroBlockRender } from "@/modules/site-builder/blocks/subhero";
+import { createDefaultSchedulePreviewConfig, sanitizeSchedulePreviewConfig, SchedulePreviewBlockRender } from "@/modules/site-builder/blocks/schedule-preview";
+import type { BlockContext, BlockDefinition, OrgPageBlock, OrgSiteBlockType } from "@/modules/site-builder/types";
+
+type RuntimeBlockDefinition<TType extends OrgSiteBlockType> = Omit<BlockDefinition<TType>, "Editor">;
+
+type AnyRuntimeBlockDefinition = {
+  [K in OrgSiteBlockType]: RuntimeBlockDefinition<K>;
+};
+
+const runtimeBlockRegistry: AnyRuntimeBlockDefinition = {
+  hero: {
+    type: "hero",
+    displayName: "Hero",
+    defaultConfig: createDefaultHeroConfig,
+    sanitizeConfig: sanitizeHeroConfig,
+    Render: HeroBlockRender
+  },
+  subhero: {
+    type: "subhero",
+    displayName: "Subhero",
+    defaultConfig: createDefaultSubheroConfig,
+    sanitizeConfig: sanitizeSubheroConfig,
+    Render: SubheroBlockRender
+  },
+  cta_grid: {
+    type: "cta_grid",
+    displayName: "Quick Links",
+    defaultConfig: createDefaultCtaGridConfig,
+    sanitizeConfig: sanitizeCtaGridConfig,
+    Render: CtaGridBlockRender
+  },
+  cta_card: {
+    type: "cta_card",
+    displayName: "CTA Card",
+    defaultConfig: createDefaultCtaCardConfig,
+    sanitizeConfig: sanitizeCtaCardConfig,
+    Render: CtaCardBlockRender
+  },
+  schedule_preview: {
+    type: "schedule_preview",
+    displayName: "Schedule Preview",
+    defaultConfig: createDefaultSchedulePreviewConfig,
+    sanitizeConfig: sanitizeSchedulePreviewConfig,
+    Render: SchedulePreviewBlockRender
+  }
+};
+
+export function getRuntimeBlockDefinition<TType extends OrgSiteBlockType>(type: TType): RuntimeBlockDefinition<TType> {
+  return runtimeBlockRegistry[type] as RuntimeBlockDefinition<TType>;
+}
+
+export function createDefaultRuntimeBlock<TType extends OrgSiteBlockType>(type: TType, context: BlockContext, id = createId()): OrgPageBlock<TType> {
+  const definition = getRuntimeBlockDefinition(type);
+
+  return {
+    id,
+    type,
+    config: definition.defaultConfig(context)
+  };
+}

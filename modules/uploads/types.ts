@@ -25,8 +25,6 @@ export type UploadPurpose =
   | "profile-photo"
   | "site-hero"
   | "site-block-image"
-  | "form-file"
-  | "sponsor-logo"
   | "attachment";
 
 export type OpenUploadOptions = {

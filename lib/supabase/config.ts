@@ -39,19 +39,12 @@ function validateSupabaseUrl(supabaseUrl: string) {
 
 function getSupabasePublishableKey() {
   const publishableKey = readEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY");
-  const anonKey = readEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 
   if (publishableKey) {
     return publishableKey;
   }
 
-  if (anonKey) {
-    return anonKey;
-  }
-
-  throw new Error(
-    "Missing Supabase publishable key. Set NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY (preferred) or NEXT_PUBLIC_SUPABASE_ANON_KEY."
-  );
+  throw new Error("Missing Supabase publishable key. Set NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY.");
 }
 
 function getSupabaseServiceRoleKeyOptional() {
@@ -61,8 +54,7 @@ function getSupabaseServiceRoleKeyOptional() {
     return secretKey;
   }
 
-  const legacyServiceRoleKey = readEnv("SUPABASE_SERVICE_ROLE_KEY");
-  return legacyServiceRoleKey || null;
+  return null;
 }
 
 export function getSupabasePublicConfig(): SupabasePublicConfig {
@@ -95,7 +87,7 @@ export function getSupabaseServiceRoleConfig(): SupabaseServiceRoleConfig {
   const serviceRoleKey = getSupabaseServiceRoleKeyOptional();
 
   if (!serviceRoleKey) {
-    throw new Error("Missing SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY.");
+    throw new Error("Missing SUPABASE_SECRET_KEY.");
   }
 
   cachedServiceRoleConfig = {

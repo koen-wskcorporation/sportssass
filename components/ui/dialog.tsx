@@ -115,10 +115,15 @@ export function DialogContent({ className, style, ...props }: React.HTMLAttribut
   return (
     <div
       className={cn(
-        "w-[min(40rem,calc(100vw-1rem))] max-h-[calc(100vh-1rem)] min-w-0 overflow-x-hidden overflow-y-auto rounded-card border bg-surface p-5 text-text shadow-card [overflow-wrap:anywhere]",
+        "max-h-[calc(100vh-1rem)] overflow-x-hidden overflow-y-auto rounded-card border bg-surface p-5 text-text shadow-card [overflow-wrap:anywhere]",
         className
       )}
-      style={style}
+      style={{
+        ...(style ?? {}),
+        width: "25vw",
+        minWidth: "25vw",
+        maxWidth: "25vw"
+      }}
       {...props}
     />
   );

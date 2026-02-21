@@ -141,9 +141,6 @@ const reservedPageSlugs = new Set([
   "_next",
   "forbidden",
   "manage",
-  "tools",
-  "forms",
-  "sponsors",
   "icon"
 ]);
 
