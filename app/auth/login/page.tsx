@@ -12,15 +12,29 @@ const infoMessageByCode: Record<string, string> = {
   password_updated: "Password updated. Sign in with your new password."
 };
 
+function normalizeNextPath(value: string | undefined, fallbackPath = "/") {
+  if (!value) {
+    return fallbackPath;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.startsWith("/auth/login")) {
+    return fallbackPath;
+  }
+
+  return trimmed;
+}
+
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ mode?: string; error?: string; message?: string }>;
+  searchParams: Promise<{ mode?: string; error?: string; message?: string; next?: string }>;
 }) {
   const [user, query] = await Promise.all([getSessionUser(), searchParams]);
+  const nextPath = normalizeNextPath(query.next);
 
   if (user) {
-    redirect("/");
+    redirect(nextPath);
   }
 
   const errorMessage = query.error ? errorMessageByCode[query.error] ?? "Authentication failed." : null;
@@ -29,7 +43,7 @@ export default async function LoginPage({
 
   return (
     <main className="app-container flex min-h-[60vh] items-center justify-center py-8 md:py-10">
-      <AuthLoginPagePopup errorMessage={errorMessage} infoMessage={infoMessage} initialMode={initialMode} />
+      <AuthLoginPagePopup errorMessage={errorMessage} infoMessage={infoMessage} initialMode={initialMode} nextPath={nextPath} />
     </main>
   );
 }

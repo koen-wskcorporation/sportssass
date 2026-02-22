@@ -11,6 +11,12 @@ import {
   SchedulePreviewBlockEditor,
   SchedulePreviewBlockRender
 } from "@/modules/site-builder/blocks/schedule-preview";
+import {
+  createDefaultProgramCatalogConfig,
+  ProgramCatalogBlockEditor,
+  ProgramCatalogBlockRender,
+  sanitizeProgramCatalogConfig
+} from "@/modules/site-builder/blocks/program-catalog";
 import type { BlockContext, BlockDefinition, DraftBlockInput, OrgPageBlock, OrgSiteBlockType } from "@/modules/site-builder/types";
 
 type AnyBlockDefinition = {
@@ -57,6 +63,14 @@ const blockRegistry: AnyBlockDefinition = {
     sanitizeConfig: sanitizeSchedulePreviewConfig,
     Render: SchedulePreviewBlockRender,
     Editor: SchedulePreviewBlockEditor
+  },
+  program_catalog: {
+    type: "program_catalog",
+    displayName: "Programs Catalog",
+    defaultConfig: createDefaultProgramCatalogConfig,
+    sanitizeConfig: sanitizeProgramCatalogConfig,
+    Render: ProgramCatalogBlockRender,
+    Editor: ProgramCatalogBlockEditor
   }
 };
 

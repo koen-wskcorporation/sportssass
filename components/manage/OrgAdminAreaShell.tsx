@@ -6,12 +6,14 @@ type OrgAdminAreaShellProps = {
 
 export function OrgAdminAreaShell({ children, sidebar, mobileSidebar }: OrgAdminAreaShellProps) {
   return (
-    <main className="app-container py-6 md:py-8">
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)] lg:gap-6">
-        <aside className="hidden lg:sticky lg:top-6 lg:block lg:w-[280px]">{sidebar}</aside>
+    <main className="app-container py-3 md:py-4">
+      <div className="grid items-start gap-5 lg:grid-cols-[auto_minmax(0,1fr)] lg:gap-6">
+        <aside className="hidden lg:block">
+          <div className="sticky top-36 z-30 h-fit max-h-[calc(100vh-10rem)] overflow-y-auto pr-1">{sidebar}</div>
+        </aside>
 
-        <div className="space-y-6">
-          {mobileSidebar}
+        <div>
+          <div className="sticky top-24 z-30 mb-4 lg:hidden">{mobileSidebar}</div>
           {children}
         </div>
       </div>

@@ -57,9 +57,10 @@ type ManageAccessErrorCode =
   | "last_admin"
   | "action_failed";
 
-type ManageAccessResult =
+type ManageAccessResult<TData = undefined> =
   | {
       ok: true;
+      data: TData;
     }
   | {
       ok: false;
@@ -109,7 +110,7 @@ function getConfiguredServiceClient() {
   return createOptionalSupabaseServiceRoleClient();
 }
 
-function asFailure(code: ManageAccessErrorCode, error: string): ManageAccessResult {
+function asFailure(code: ManageAccessErrorCode, error: string): ManageAccessResult<never> {
   return {
     ok: false,
     code,
@@ -295,6 +296,37 @@ async function listAuthUsersByIds(supabase: SupabaseClient<any>, userIds: string
   return usersById;
 }
 
+async function listAccessMembersForOrg({
+  supabase,
+  orgId,
+  currentUserId
+}: {
+  supabase: SupabaseClient<any>;
+  orgId: string;
+  currentUserId: string;
+}): Promise<AccessMember[]> {
+  const memberships = await listOrgMembershipRows(supabase, orgId);
+  const usersById = await listAuthUsersByIds(
+    supabase,
+    memberships.map((membership) => membership.user_id)
+  );
+
+  return memberships.map((membership): AccessMember => {
+    const user = usersById.get(membership.user_id) ?? null;
+
+    return {
+      membershipId: membership.id,
+      userId: membership.user_id,
+      email: user?.email ?? null,
+      role: membership.role,
+      status: getMemberStatus(user),
+      isCurrentUser: membership.user_id === currentUserId,
+      joinedAt: membership.created_at ?? null,
+      lastActivityAt: user?.last_sign_in_at ?? user?.invited_at ?? user?.created_at ?? null
+    };
+  });
+}
+
 function validateRoleKey(roleKey: string) {
   return roleKey === "admin" || roleKey === "member";
 }
@@ -319,26 +351,14 @@ export async function getAccountsAccessPageData(orgSlug: string): Promise<Accoun
   }
 
   try {
-    const [memberships, roles] = await Promise.all([listOrgMembershipRows(supabase, orgContext.orgId), listAssignableRoles()]);
-    const usersById = await listAuthUsersByIds(
-      supabase,
-      memberships.map((membership) => membership.user_id)
-    );
-
-    const members = memberships.map((membership): AccessMember => {
-      const user = usersById.get(membership.user_id) ?? null;
-
-      return {
-        membershipId: membership.id,
-        userId: membership.user_id,
-        email: user?.email ?? null,
-        role: membership.role,
-        status: getMemberStatus(user),
-        isCurrentUser: membership.user_id === orgContext.userId,
-        joinedAt: membership.created_at ?? null,
-        lastActivityAt: user?.last_sign_in_at ?? user?.invited_at ?? user?.created_at ?? null
-      };
-    });
+    const [members, roles] = await Promise.all([
+      listAccessMembersForOrg({
+        supabase,
+        orgId: orgContext.orgId,
+        currentUserId: orgContext.userId
+      }),
+      listAssignableRoles()
+    ]);
 
     return {
       orgSlug: orgContext.orgSlug,
@@ -370,7 +390,7 @@ export async function inviteUserToOrgAction(input: {
   orgSlug: string;
   email: string;
   role: OrgRole;
-}): Promise<ManageAccessResult> {
+}): Promise<ManageAccessResult<{ members: AccessMember[] }>> {
   const parsedInput = inviteUserSchema.safeParse(input);
 
   if (!parsedInput.success) {
@@ -440,7 +460,18 @@ export async function inviteUserToOrgAction(input: {
 
     revalidatePath(`/${orgSlug}/manage/access`);
 
-    return { ok: true };
+    const members = await listAccessMembersForOrg({
+      supabase,
+      orgId: orgContext.orgId,
+      currentUserId: orgContext.userId
+    });
+
+    return {
+      ok: true,
+      data: {
+        members
+      }
+    };
   } catch (error) {
     rethrowIfNavigationError(error);
     return asFailure("action_failed", "Unable to send invite right now.");
@@ -451,7 +482,7 @@ export async function updateMembershipRoleAction(input: {
   orgSlug: string;
   membershipId: string;
   role: OrgRole;
-}): Promise<ManageAccessResult> {
+}): Promise<ManageAccessResult<{ members: AccessMember[] }>> {
   const parsedInput = updateMembershipRoleSchema.safeParse(input);
 
   if (!parsedInput.success) {
@@ -485,7 +516,18 @@ export async function updateMembershipRoleAction(input: {
     }
 
     if (membership.role === role) {
-      return { ok: true };
+      const members = await listAccessMembersForOrg({
+        supabase,
+        orgId: orgContext.orgId,
+        currentUserId: orgContext.userId
+      });
+
+      return {
+        ok: true,
+        data: {
+          members
+        }
+      };
     }
 
     const actorIsAdmin = isAdminLikeRole(orgContext.membershipRole);
@@ -518,7 +560,18 @@ export async function updateMembershipRoleAction(input: {
 
     revalidatePath(`/${orgSlug}/manage/access`);
 
-    return { ok: true };
+    const members = await listAccessMembersForOrg({
+      supabase,
+      orgId: orgContext.orgId,
+      currentUserId: orgContext.userId
+    });
+
+    return {
+      ok: true,
+      data: {
+        members
+      }
+    };
   } catch (error) {
     rethrowIfNavigationError(error);
     return asFailure("action_failed", "Unable to update this membership right now.");
@@ -528,7 +581,7 @@ export async function updateMembershipRoleAction(input: {
 export async function removeMembershipAction(input: {
   orgSlug: string;
   membershipId: string;
-}): Promise<ManageAccessResult> {
+}): Promise<ManageAccessResult<{ members: AccessMember[] }>> {
   const parsedInput = removeMembershipSchema.safeParse(input);
 
   if (!parsedInput.success) {
@@ -577,7 +630,18 @@ export async function removeMembershipAction(input: {
 
     revalidatePath(`/${orgSlug}/manage/access`);
 
-    return { ok: true };
+    const members = await listAccessMembersForOrg({
+      supabase,
+      orgId: orgContext.orgId,
+      currentUserId: orgContext.userId
+    });
+
+    return {
+      ok: true,
+      data: {
+        members
+      }
+    };
   } catch (error) {
     rethrowIfNavigationError(error);
     return asFailure("action_failed", "Unable to remove this membership right now.");
@@ -622,7 +686,10 @@ export async function sendPasswordResetAction(input: {
       return asFailure("action_failed", error.message);
     }
 
-    return { ok: true };
+    return {
+      ok: true,
+      data: undefined
+    };
   } catch (error) {
     rethrowIfNavigationError(error);
     return asFailure("action_failed", "Unable to send a password reset email right now.");

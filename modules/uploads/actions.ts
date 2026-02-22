@@ -22,6 +22,7 @@ const uploadKinds: UploadKind[] = ["org", "account", "public-org"];
 const uploadPurposes: UploadPurpose[] = [
   "org-logo",
   "org-icon",
+  "program-cover",
   "profile-photo",
   "site-hero",
   "site-block-image",

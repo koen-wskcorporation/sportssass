@@ -1,7 +1,8 @@
 import type { ComponentType } from "react";
 import type { LinkValue, SiteButton } from "@/lib/links";
+import type { ProgramCatalogItem } from "@/modules/programs/types";
 
-export type OrgSiteBlockType = "hero" | "subhero" | "cta_grid" | "cta_card" | "schedule_preview";
+export type OrgSiteBlockType = "hero" | "subhero" | "cta_grid" | "cta_card" | "schedule_preview" | "program_catalog";
 
 export type HeroBlockConfig = {
   headline: string;
@@ -48,12 +49,22 @@ export type SchedulePreviewBlockConfig = {
   buttons: SiteButton[];
 };
 
+export type ProgramCatalogBlockConfig = {
+  title: string;
+  body: string;
+  maxItems: number;
+  showDates: boolean;
+  showType: boolean;
+  buttons: SiteButton[];
+};
+
 export type OrgSiteBlockConfigMap = {
   hero: HeroBlockConfig;
   subhero: SubheroBlockConfig;
   cta_grid: CtaGridBlockConfig;
   cta_card: CtaCardBlockConfig;
   schedule_preview: SchedulePreviewBlockConfig;
+  program_catalog: ProgramCatalogBlockConfig;
 };
 
 export type OrgPageBlock<TType extends OrgSiteBlockType = OrgSiteBlockType> = {
@@ -94,7 +105,9 @@ export type BlockContext = {
   pageSlug: string;
 };
 
-export type OrgSiteRuntimeData = Record<string, never>;
+export type OrgSiteRuntimeData = {
+  programCatalogItems?: ProgramCatalogItem[];
+};
 
 export type BlockRenderProps<TType extends OrgSiteBlockType> = {
   block: OrgPageBlock<TType>;

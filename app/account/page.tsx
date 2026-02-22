@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { AssetTile } from "@/components/ui/asset-tile";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -41,86 +43,96 @@ export default async function AccountPage({
   const fullName = [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") || "No name set";
 
   return (
-    <main className="app-container py-8 md:py-10">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <PageHeader description="Manage your profile details and account security." title="Account" />
+    <>
+      <PageHeader description="Manage your profile details and account security." title="Account" />
 
-        {successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
-        {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
+      {successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
+      {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile</CardTitle>
-            <CardDescription>Your identity details shown across organizations.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-3 rounded-control border bg-surface-muted p-3">
-              {currentUser.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img alt={`${fullName} avatar`} className="h-12 w-12 rounded-full border object-cover" src={currentUser.avatarUrl} />
-              ) : (
-                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border bg-surface text-sm font-semibold">
-                  {(fullName.charAt(0) || "A").toUpperCase()}
-                </span>
-              )}
-              <div>
-                <p className="text-sm font-semibold">{fullName}</p>
-                <p className="text-xs text-text-muted">{currentUser.email ?? "No email available"}</p>
-              </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Profile</CardTitle>
+          <CardDescription>Your identity details shown across organizations.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3 rounded-control border bg-surface-muted p-3">
+            {currentUser.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt={`${fullName} avatar`} className="h-12 w-12 rounded-full border object-cover" src={currentUser.avatarUrl} />
+            ) : (
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border bg-surface text-sm font-semibold">
+                {(fullName.charAt(0) || "A").toUpperCase()}
+              </span>
+            )}
+            <div>
+              <p className="text-sm font-semibold">{fullName}</p>
+              <p className="text-xs text-text-muted">{currentUser.email ?? "No email available"}</p>
             </div>
+          </div>
 
-            <form action="/account/profile" className="space-y-3" method="post">
-              <div className="grid gap-3 md:grid-cols-2">
-                <FormField label="First name">
-                  <Input defaultValue={currentUser.firstName ?? ""} name="firstName" />
-                </FormField>
-                <FormField label="Last name">
-                  <Input defaultValue={currentUser.lastName ?? ""} name="lastName" />
-                </FormField>
-              </div>
-              <FormField label="Profile picture">
-                <AssetTile
-                  constraints={{
-                    accept: "image/*",
-                    maxSizeMB: 5,
-                    aspect: "square",
-                    recommendedPx: {
-                      w: 640,
-                      h: 640
-                    }
-                  }}
-                  emptyLabel="Upload profile picture"
-                  fit="contain"
-                  initialPath={currentUser.avatarPath}
-                  initialUrl={currentUser.avatarUrl}
-                  kind="account"
-                  name="avatarPath"
-                  previewAlt={`${fullName} avatar`}
-                  purpose="profile-photo"
-                  specificationText="PNG, JPG, WEBP, or SVG"
-                  title="Profile picture"
-                />
+          <form action="/account/profile" className="space-y-3" method="post">
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="First name">
+                <Input defaultValue={currentUser.firstName ?? ""} name="firstName" />
               </FormField>
-              <SubmitButton>Save profile</SubmitButton>
-            </form>
-          </CardContent>
-        </Card>
+              <FormField label="Last name">
+                <Input defaultValue={currentUser.lastName ?? ""} name="lastName" />
+              </FormField>
+            </div>
+            <FormField label="Profile picture">
+              <AssetTile
+                constraints={{
+                  accept: "image/*",
+                  maxSizeMB: 5,
+                  aspect: "square",
+                  recommendedPx: {
+                    w: 640,
+                    h: 640
+                  }
+                }}
+                emptyLabel="Upload profile picture"
+                fit="contain"
+                initialPath={currentUser.avatarPath}
+                initialUrl={currentUser.avatarUrl}
+                kind="account"
+                name="avatarPath"
+                previewAlt={`${fullName} avatar`}
+                purpose="profile-photo"
+                specificationText="PNG, JPG, WEBP, or SVG"
+                title="Profile picture"
+              />
+            </FormField>
+            <SubmitButton>Save profile</SubmitButton>
+          </form>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Password</CardTitle>
-            <CardDescription>Set a new password for this account.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action="/account/password" className="flex flex-col gap-3 md:flex-row md:items-end" method="post">
-              <FormField className="w-full" hint="Minimum 8 characters" label="New password">
-                <Input name="newPassword" required type="password" />
-              </FormField>
-              <SubmitButton>Update password</SubmitButton>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    </main>
+      <Card>
+        <CardHeader>
+          <CardTitle>Password</CardTitle>
+          <CardDescription>Set a new password for this account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action="/account/password" className="flex flex-col gap-3 md:flex-row md:items-end" method="post">
+            <FormField className="w-full" hint="Minimum 8 characters" label="New password">
+              <Input name="newPassword" required type="password" />
+            </FormField>
+            <SubmitButton>Update password</SubmitButton>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Players</CardTitle>
+          <CardDescription>Manage player profiles and guardian linking for registrations.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link className={buttonVariants({ variant: "secondary" })} href="/account/players">
+            Manage Players
+          </Link>
+        </CardContent>
+      </Card>
+    </>
   );
 }

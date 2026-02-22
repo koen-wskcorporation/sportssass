@@ -11,6 +11,16 @@ export type OrgCapabilities = {
     canWrite: boolean;
     canAccess: boolean;
   };
+  programs: {
+    canRead: boolean;
+    canWrite: boolean;
+    canAccess: boolean;
+  };
+  forms: {
+    canRead: boolean;
+    canWrite: boolean;
+    canAccess: boolean;
+  };
 };
 
 function resolveReadWriteAccess(permissions: Permission[], readPermission: Permission, writePermission: Permission) {
@@ -26,13 +36,17 @@ function resolveReadWriteAccess(permissions: Permission[], readPermission: Permi
 
 export function getOrgCapabilities(permissions: Permission[]): OrgCapabilities {
   const pages = resolveReadWriteAccess(permissions, "org.pages.read", "org.pages.write");
+  const programs = resolveReadWriteAccess(permissions, "programs.read", "programs.write");
+  const forms = resolveReadWriteAccess(permissions, "forms.read", "forms.write");
   const canManage = can(permissions, "org.manage.read");
 
   return {
     manage: {
       canRead: canManage,
-      canAccessArea: canManage || pages.canAccess
+      canAccessArea: canManage || pages.canAccess || programs.canAccess || forms.canAccess
     },
-    pages
+    pages,
+    programs,
+    forms
   };
 }

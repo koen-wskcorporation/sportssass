@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
 type DialogProps = {
@@ -11,6 +12,17 @@ type DialogProps = {
 
 export function Dialog({ open, onClose, children }: DialogProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const onCloseRef = React.useRef(onClose);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  React.useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   React.useEffect(() => {
     if (!open) {
@@ -49,7 +61,7 @@ export function Dialog({ open, onClose, children }: DialogProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -96,34 +108,47 @@ export function Dialog({ open, onClose, children }: DialogProps) {
       document.removeEventListener("keydown", onKeyDown);
       previousActiveElement?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
-  if (!open) {
+  if (!open || !mounted) {
     return null;
   }
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-text/45 px-4" onClick={onClose} role="presentation">
-      <div aria-modal="true" onClick={(event) => event.stopPropagation()} ref={containerRef} role="dialog" tabIndex={-1}>
-        {children}
+  return createPortal(
+    <div className="fixed inset-0 z-[100] h-screen w-screen bg-text/45 px-4" onClick={onClose} role="presentation">
+      <div className="flex h-full w-full items-center justify-center">
+        <div aria-modal="true" onClick={(event) => event.stopPropagation()} ref={containerRef} role="dialog" tabIndex={-1}>
+          {children}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
-export function DialogContent({ className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
+
+const dialogSizeClassName: Record<DialogSize, string> = {
+  sm: "w-full max-w-md",
+  md: "w-full max-w-2xl",
+  lg: "w-full max-w-3xl",
+  xl: "w-full max-w-5xl",
+  full: "h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-w-none"
+};
+
+type DialogContentProps = React.HTMLAttributes<HTMLDivElement> & {
+  size?: DialogSize;
+};
+
+export function DialogContent({ className, size = "md", style, ...props }: DialogContentProps) {
   return (
     <div
       className={cn(
         "max-h-[calc(100vh-1rem)] overflow-x-hidden overflow-y-auto rounded-card border bg-surface p-5 text-text shadow-card [overflow-wrap:anywhere]",
+        dialogSizeClassName[size],
         className
       )}
-      style={{
-        ...(style ?? {}),
-        width: "25vw",
-        minWidth: "25vw",
-        maxWidth: "25vw"
-      }}
+      style={style}
       {...props}
     />
   );

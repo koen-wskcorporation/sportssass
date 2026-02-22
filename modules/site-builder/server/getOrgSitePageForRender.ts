@@ -1,4 +1,6 @@
 import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
+import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
+import { listPublishedProgramsForCatalog } from "@/modules/programs/db/queries";
 import { getPublishedOrgPageBySlug } from "@/modules/site-builder/db/queries";
 
 export async function getOrgSitePageForRender({
@@ -9,7 +11,6 @@ export async function getOrgSitePageForRender({
   pageSlug: string;
 }) {
   const orgRequest = await getOrgRequestContext(orgSlug);
-
   const pageData = await getPublishedOrgPageBySlug({
     orgId: orgRequest.org.orgId,
     pageSlug,
@@ -20,7 +21,21 @@ export async function getOrgSitePageForRender({
     }
   });
 
-  const runtimeData = {};
+  const requiresProgramCatalog = pageData?.blocks.some((block) => block.type === "program_catalog") ?? false;
+  const programCatalogItems = requiresProgramCatalog
+    ? await listPublishedProgramsForCatalog(orgRequest.org.orgId)
+        .then((items) =>
+          items.map((item) => ({
+            ...item,
+            coverImageUrl: getOrgAssetPublicUrl(item.coverImagePath)
+          }))
+        )
+        .catch(() => [])
+    : [];
+
+  const runtimeData = {
+    programCatalogItems
+  };
 
   if (!pageData) {
     return {

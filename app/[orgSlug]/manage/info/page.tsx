@@ -53,7 +53,7 @@ export default async function OrgInfoPage({
 
   return (
     <>
-      <PageHeader description="View and manage organization identity details used across public and staff routes." title="Org Info" />
+      <PageHeader description="View and manage organization identity details used across public and staff routes." showBorder={false} title="Org Info" />
       <OrgInfoPageToasts errorMessage={errorMessage} successMessage={successMessage} />
 
       <Card>

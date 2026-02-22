@@ -1,20 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Settings, SlidersHorizontal, Trash2 } from "lucide-react";
-import { SortableCanvas, type SortableRenderMeta } from "@/components/editor/SortableCanvas";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Building2,
+  CalendarDays,
+  ChevronDown,
+  CreditCard,
+  FileText,
+  LayoutDashboard,
+  Palette,
+  Pencil,
+  Settings,
+  Users,
+  Wrench,
+  type LucideIcon
+} from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { NavItem } from "@/components/ui/nav-item";
-import { useToast } from "@/components/ui/toast";
+import { getOrgAdminNavItems, type OrgAdminNavIcon } from "@/lib/org/toolsNav";
 import { cn } from "@/lib/utils";
-import { sanitizePageSlug } from "@/modules/site-builder/blocks/helpers";
-import { saveOrgPagesAction } from "@/modules/site-builder/actions";
-import { ORG_SITE_OPEN_EDITOR_EVENT, ORG_SITE_OPEN_EDITOR_REQUEST_KEY } from "@/modules/site-builder/events";
 import type { OrgManagePage } from "@/modules/site-builder/types";
 
 type OrgHeaderProps = {
@@ -28,10 +34,16 @@ type OrgHeaderProps = {
   pages: OrgManagePage[];
 };
 
-type AddPageState = {
-  title: string;
-  slug: string;
-  isPublished: boolean;
+const toolsNavIconMap: Record<OrgAdminNavIcon, LucideIcon> = {
+  wrench: Wrench,
+  settings: Settings,
+  building: Building2,
+  palette: Palette,
+  users: Users,
+  "credit-card": CreditCard,
+  layout: LayoutDashboard,
+  calendar: CalendarDays,
+  "file-text": FileText
 };
 
 function getOrgInitial(orgName: string) {
@@ -61,6 +73,12 @@ function isActivePath(pathname: string, href: string) {
   return current === normalizedHref;
 }
 
+function isActivePrefixPath(pathname: string, href: string) {
+  const current = normalizePath(pathname);
+  const normalizedHref = normalizePath(href);
+  return current === normalizedHref || current.startsWith(`${normalizedHref}/`);
+}
+
 function isEditablePublicOrgPath(pathname: string, orgBasePath: string) {
   if (pathname === orgBasePath) {
     return true;
@@ -70,7 +88,7 @@ function isEditablePublicOrgPath(pathname: string, orgBasePath: string) {
     return false;
   }
 
-  return !pathname.startsWith(`${orgBasePath}/manage`) && !pathname.startsWith(`${orgBasePath}/icon`);
+  return !pathname.startsWith(`${orgBasePath}/manage`) && !pathname.startsWith(`${orgBasePath}/tools`) && !pathname.startsWith(`${orgBasePath}/icon`);
 }
 
 function sortedPages(pages: OrgManagePage[]) {
@@ -79,555 +97,237 @@ function sortedPages(pages: OrgManagePage[]) {
 
 export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, governingBodyName, canManageOrg, canEditPages, pages }: OrgHeaderProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { toast } = useToast();
+  const searchParams = useSearchParams();
   const orgBasePath = `/${orgSlug}`;
   const canEditCurrentPage = canEditPages && isEditablePublicOrgPath(pathname, orgBasePath);
-  const [isEditingMenu, setIsEditingMenu] = useState(false);
-  const [localPages, setLocalPages] = useState<OrgManagePage[]>(() => sortedPages(pages));
-  const [addPageOpen, setAddPageOpen] = useState(false);
-  const [addPageState, setAddPageState] = useState<AddPageState>({
-    title: "",
-    slug: "",
-    isPublished: true
-  });
-  const [settingsTarget, setSettingsTarget] = useState<OrgManagePage | null>(null);
-  const [settingsTitle, setSettingsTitle] = useState("");
-  const [settingsIsPublished, setSettingsIsPublished] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState<OrgManagePage | null>(null);
-  const [isMutating, startMutation] = useTransition();
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
+  const [expandedToolsParents, setExpandedToolsParents] = useState<Record<string, boolean>>({});
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  const toolsNavItems = useMemo(() => getOrgAdminNavItems(orgSlug), [orgSlug]);
+  const toolsNavTopLevelItems = useMemo(() => toolsNavItems.filter((item) => !item.parentKey), [toolsNavItems]);
+  const toolsNavChildrenByParent = useMemo(() => {
+    const map = new Map<string, typeof toolsNavItems>();
+
+    for (const item of toolsNavItems) {
+      if (!item.parentKey) {
+        continue;
+      }
+
+      const current = map.get(item.parentKey) ?? [];
+      current.push(item);
+      map.set(item.parentKey, current);
+    }
+
+    return map;
+  }, [toolsNavItems]);
+
+  const orderedPages = useMemo(() => sortedPages(pages), [pages]);
+  const navPages = useMemo(() => orderedPages.filter((page) => page.isPublished), [orderedPages]);
+
+  const editHref = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("edit", "1");
+    const queryString = params.toString();
+    return queryString ? `${pathname}?${queryString}` : pathname;
+  }, [pathname, searchParams]);
 
   useEffect(() => {
-    setLocalPages(sortedPages(pages));
-  }, [pages]);
+    const onScroll = () => setIsScrolled(window.scrollY > 8);
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
-    if (!canEditPages && isEditingMenu) {
-      setIsEditingMenu(false);
-    }
-  }, [canEditPages, isEditingMenu]);
+    setIsToolsMenuOpen(false);
+  }, [pathname]);
 
-  const orderedPages = useMemo(() => sortedPages(localPages), [localPages]);
-  const navPages = useMemo(
-    () => (isEditingMenu ? orderedPages : orderedPages.filter((page) => page.isPublished)),
-    [isEditingMenu, orderedPages]
-  );
+  useEffect(() => {
+    setExpandedToolsParents((current) => {
+      const next = { ...current };
 
-  function setEditorOpenForPath(path: string) {
-    sessionStorage.setItem(ORG_SITE_OPEN_EDITOR_REQUEST_KEY, path);
-  }
-
-  function openPageEditor() {
-    window.dispatchEvent(
-      new CustomEvent(ORG_SITE_OPEN_EDITOR_EVENT, {
-        detail: {
-          pathname
+      for (const item of toolsNavTopLevelItems) {
+        const children = toolsNavChildrenByParent.get(item.key) ?? [];
+        if (children.length === 0) {
+          continue;
         }
-      })
-    );
-  }
 
-  function navigateToEditContent(page: OrgManagePage) {
-    const href = pageHref(orgSlug, page.slug);
-
-    if (normalizePath(pathname) === normalizePath(href)) {
-      openPageEditor();
-      return;
-    }
-
-    setEditorOpenForPath(href);
-    router.push(href);
-  }
-
-  function applyPagesResult(result: Awaited<ReturnType<typeof saveOrgPagesAction>>) {
-    if (!result.ok) {
-      toast({
-        title: "Unable to save",
-        description: result.error,
-        variant: "destructive"
-      });
-      return null;
-    }
-
-    setLocalPages(sortedPages(result.pages));
-    return result;
-  }
-
-  function reorderPages(nextPages: OrgManagePage[]) {
-    if (!canEditPages || isMutating) {
-      return;
-    }
-
-    const previous = orderedPages;
-    const optimistic = nextPages.map((page, index) => ({ ...page, sortIndex: index }));
-    setLocalPages(optimistic);
-
-    startMutation(async () => {
-      const result = await saveOrgPagesAction({
-        orgSlug,
-        action: {
-          type: "reorder",
-          pageIds: optimistic.map((page) => page.id)
+        const isActive = isActivePrefixPath(pathname, item.href) || children.some((child) => isActivePrefixPath(pathname, child.href));
+        if (isActive) {
+          next[item.key] = true;
+        } else if (!(item.key in next)) {
+          next[item.key] = false;
         }
-      });
-
-      if (!result.ok) {
-        setLocalPages(previous);
-        toast({
-          title: "Unable to reorder",
-          description: result.error,
-          variant: "destructive"
-        });
-        return;
       }
 
-      setLocalPages(sortedPages(result.pages));
+      return next;
     });
-  }
+  }, [pathname, toolsNavChildrenByParent, toolsNavTopLevelItems]);
 
-  function duplicatePage(page: OrgManagePage) {
-    if (!canEditPages || isMutating) {
-      return;
-    }
-
-    startMutation(async () => {
-      const result = await saveOrgPagesAction({
-        orgSlug,
-        action: {
-          type: "duplicate",
-          pageId: page.id
-        }
-      });
-
-      const applied = applyPagesResult(result);
-      if (!applied) {
-        return;
-      }
-
-      toast({
-        title: "Page duplicated",
-        variant: "success"
-      });
-    });
-  }
-
-  function togglePublish(page: OrgManagePage) {
-    if (!canEditPages || isMutating) {
-      return;
-    }
-
-    startMutation(async () => {
-      const result = await saveOrgPagesAction({
-        orgSlug,
-        action: {
-          type: "set-published",
-          pageId: page.id,
-          isPublished: !page.isPublished
-        }
-      });
-
-      const applied = applyPagesResult(result);
-      if (!applied) {
-        return;
-      }
-
-      toast({
-        title: page.isPublished ? "Page unpublished" : "Page published",
-        variant: "success"
-      });
-    });
-  }
-
-  function deletePage() {
-    if (!deleteTarget || !canEditPages || isMutating) {
-      return;
-    }
-
-    startMutation(async () => {
-      const result = await saveOrgPagesAction({
-        orgSlug,
-        action: {
-          type: "delete",
-          pageId: deleteTarget.id
-        }
-      });
-
-      const applied = applyPagesResult(result);
-      if (!applied) {
-        return;
-      }
-
-      setDeleteTarget(null);
-      toast({
-        title: "Page deleted",
-        variant: "success"
-      });
-    });
-  }
-
-  function savePageSettings(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!settingsTarget || !canEditPages || isMutating) {
-      return;
-    }
-
-    const nextTitle = settingsTitle.trim();
-    if (!nextTitle) {
-      toast({
-        title: "Missing title",
-        description: "Enter a page title.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    startMutation(async () => {
-      const renameResult = await saveOrgPagesAction({
-        orgSlug,
-        action: {
-          type: "rename",
-          pageId: settingsTarget.id,
-          title: nextTitle
-        }
-      });
-
-      const appliedRename = applyPagesResult(renameResult);
-      if (!appliedRename) {
-        return;
-      }
-
-      const publishResult = await saveOrgPagesAction({
-        orgSlug,
-        action: {
-          type: "set-published",
-          pageId: settingsTarget.id,
-          isPublished: settingsIsPublished
-        }
-      });
-
-      const applied = applyPagesResult(publishResult);
-      if (!applied) {
-        return;
-      }
-
-      setSettingsTarget(null);
-      setSettingsTitle("");
-      toast({ title: "Page settings saved", variant: "success" });
-    });
-  }
-
-  function createPage(options: { openEditor: boolean }) {
-    if (!canEditPages || isMutating) {
-      return;
-    }
-
-    startMutation(async () => {
-      const result = await saveOrgPagesAction({
-        orgSlug,
-        action: {
-          type: "create",
-          title: addPageState.title,
-          slug: addPageState.slug ? sanitizePageSlug(addPageState.slug) : undefined,
-          isPublished: addPageState.isPublished,
-          openEditor: options.openEditor
-        }
-      });
-
-      const applied = applyPagesResult(result);
-      if (!applied) {
-        return;
-      }
-
-      setAddPageOpen(false);
-      setAddPageState({
-        title: "",
-        slug: "",
-        isPublished: true
-      });
-
-      if (applied.createdPageSlug && options.openEditor) {
-        const href = pageHref(orgSlug, applied.createdPageSlug);
-        setEditorOpenForPath(href);
-        router.push(href);
-      }
-
-      toast({
-        title: "Page created",
-        variant: "success"
-      });
-    });
-  }
-
-  function openSettingsDialog(page: OrgManagePage) {
-    setSettingsTarget(page);
-    setSettingsTitle(page.title);
-    setSettingsIsPublished(page.isPublished);
-  }
-
-  function renderPageChip(page: OrgManagePage, dragMeta: SortableRenderMeta | null) {
-    const href = pageHref(orgSlug, page.slug);
-    const active = isActivePath(pathname, href);
-
-    return (
-      <div
-        className={cn(
-          "flex h-10 shrink-0 items-center gap-0.5 rounded-control border bg-surface px-1.5",
-          page.isPublished ? "border-border/70" : "border-border/40 bg-surface-muted"
-        )}
-      >
-        {dragMeta ? (
-          <button
-            {...dragMeta.handleProps.attributes}
-            {...dragMeta.handleProps.listeners}
-            aria-label="Reorder page"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-text-muted hover:bg-surface-muted"
-            type="button"
-          >
-            <GripVertical className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-
-        <Link
-          className={cn(
-            "inline-flex h-8 min-w-0 max-w-[120px] items-center rounded-control px-1.5 text-sm font-medium",
-            active ? "bg-surface-muted text-text" : "text-text-muted hover:bg-surface-muted hover:text-text"
-          )}
-          href={href}
-        >
-          <span className="truncate">{page.title}</span>
-        </Link>
-
-        {isEditingMenu ? (
-          <div className="flex shrink-0 items-center gap-0 pl-0.5">
-            <Button className="h-8 w-8 px-0" onClick={() => navigateToEditContent(page)} size="sm" variant="ghost">
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button className="h-8 w-8 px-0" disabled={isMutating} loading={isMutating} onClick={() => duplicatePage(page)} size="sm" variant="ghost">
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-            <Button className="h-8 w-8 px-0" disabled={isMutating} loading={isMutating} onClick={() => togglePublish(page)} size="sm" variant="ghost">
-              {page.isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </Button>
-            <Button className="h-8 w-8 px-0" onClick={() => openSettingsDialog(page)} size="sm" variant="ghost">
-              <Settings className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  const hasHeaderActions = canEditCurrentPage || canManageOrg || canEditPages;
+  const hasHeaderActions = canEditCurrentPage || canManageOrg;
 
   return (
-    <>
-      <div className="app-container mt-4">
-        <div className="rounded-card border bg-surface shadow-floating">
-          <div className="flex min-h-[64px] items-center gap-3 px-3 py-3 md:px-[18px]">
-            <div className="shrink-0 self-stretch">
-              <Link className="flex h-full min-w-0 items-center gap-3 leading-none" href={orgBasePath}>
-                {governingBodyLogoUrl ? (
-                  <>
-                    <span className="flex h-7 shrink-0 items-center leading-none md:h-8">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        alt={`${governingBodyName ?? "Governing body"} seal`}
-                        className="block h-full w-auto max-w-[44px] align-middle object-contain"
-                        src={governingBodyLogoUrl}
-                      />
-                    </span>
-                    <span aria-hidden className="h-6 w-px shrink-0 bg-border" />
-                  </>
-                ) : null}
+    <div className="app-container sticky top-0 z-40 py-4">
+      <div className={cn("rounded-card border bg-surface shadow-floating transition-shadow", isScrolled ? "shadow-lg" : "") }>
+        <div className="flex min-h-[64px] items-center gap-3 px-3 py-3 md:px-[18px]">
+          <div className="shrink-0 self-stretch">
+            <Link className="flex h-full min-w-0 items-center gap-3 leading-none" href={orgBasePath} prefetch>
+              {governingBodyLogoUrl ? (
+                <>
+                  <span className="flex h-7 shrink-0 items-center leading-none md:h-8">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      alt={`${governingBodyName ?? "Governing body"} seal`}
+                      className="block h-full w-auto max-w-[44px] align-middle object-contain"
+                      src={governingBodyLogoUrl}
+                    />
+                  </span>
+                  <span aria-hidden className="h-6 w-px shrink-0 bg-border" />
+                </>
+              ) : null}
 
-                <span className="flex h-7 max-w-[220px] shrink-0 items-center leading-none md:h-8">
-                  {orgLogoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img alt={`${orgName} logo`} className="block h-full w-auto max-w-full align-middle object-contain object-left" src={orgLogoUrl} />
-                  ) : (
-                    <span className="inline-flex h-full items-center text-sm font-semibold text-text-muted">{getOrgInitial(orgName)}</span>
-                  )}
-                </span>
+              <span className="flex h-7 max-w-[220px] shrink-0 items-center leading-none md:h-8">
+                {orgLogoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt={`${orgName} logo`} className="block h-full w-auto max-w-full align-middle object-contain object-left" src={orgLogoUrl} />
+                ) : (
+                  <span className="inline-flex h-full items-center text-sm font-semibold text-text-muted">{getOrgInitial(orgName)}</span>
+                )}
+              </span>
 
-                {!orgLogoUrl ? <span className="hidden max-w-[180px] truncate text-sm font-semibold text-text sm:inline">{orgName}</span> : null}
+              {!orgLogoUrl ? <span className="hidden max-w-[180px] truncate text-sm font-semibold text-text sm:inline">{orgName}</span> : null}
+            </Link>
+          </div>
+
+          <nav className="hidden min-w-0 flex-1 md:block">
+            <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto pb-1">
+              {navPages.map((page) => {
+                const href = pageHref(orgSlug, page.slug);
+                return (
+                  <NavItem active={isActivePath(pathname, href)} href={href} key={page.id} variant="header">
+                    {page.title}
+                  </NavItem>
+                );
+              })}
+            </div>
+          </nav>
+
+          {hasHeaderActions ? <span aria-hidden className="hidden h-6 w-px shrink-0 bg-border md:block" /> : null}
+
+          <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+            {canEditCurrentPage ? (
+              <Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={editHref} prefetch>
+                <Pencil className="h-4 w-4" />
+                Edit page
               </Link>
-            </div>
+            ) : null}
 
-            <nav className="hidden min-w-0 flex-1 md:block">
-              {isEditingMenu ? (
-                <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto pb-1">
-                  <SortableCanvas
-                    className="flex w-max items-center gap-1.5"
-                    getId={(page) => page.id}
-                    items={navPages}
-                    onReorder={reorderPages}
-                    renderItem={(page, meta) => renderPageChip(page, meta)}
-                    renderOverlay={(page) => renderPageChip(page, null)}
-                    sortingStrategy="horizontal"
-                  />
-                  {canEditPages ? (
-                    <Button onClick={() => setAddPageOpen(true)} size="sm" variant="secondary">
-                      <Plus className="h-4 w-4" />
-                      Add page
-                    </Button>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto pb-1">
-                  {navPages.map((page) => {
-                    const href = pageHref(orgSlug, page.slug);
-                    return (
-                      <NavItem active={isActivePath(pathname, href)} href={href} key={page.id} variant="header">
-                        {page.title}
-                      </NavItem>
-                    );
-                  })}
-                </div>
-              )}
-            </nav>
-
-            {hasHeaderActions ? <span aria-hidden className="hidden h-6 w-px shrink-0 bg-border md:block" /> : null}
-
-            <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
-              {canEditPages ? (
-                <button className={buttonVariants({ size: "sm", variant: "secondary" })} onClick={() => setIsEditingMenu((current) => !current)} type="button">
-                  <SlidersHorizontal className="h-4 w-4" />
-                  {isEditingMenu ? "Done" : "Edit menu"}
-                </button>
-              ) : null}
-
-              {canEditCurrentPage ? (
-                <button className={buttonVariants({ size: "sm", variant: "secondary" })} onClick={openPageEditor} type="button">
-                  <Pencil className="h-4 w-4" />
-                  Edit page
-                </button>
-              ) : null}
-
-              {canManageOrg ? (
-                <Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={`/${orgSlug}/manage`}>
+            {canManageOrg ? (
+              <div
+                className="relative"
+                onBlurCapture={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setIsToolsMenuOpen(false);
+                  }
+                }}
+              >
+                <button
+                  aria-expanded={isToolsMenuOpen}
+                  aria-label="Open admin menu"
+                  className={buttonVariants({ size: "sm" })}
+                  onClick={() => setIsToolsMenuOpen((current) => !current)}
+                  type="button"
+                >
                   <Settings className="h-4 w-4" />
-                  Manage Org
-                </Link>
-              ) : null}
-            </div>
+                  Admin
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", isToolsMenuOpen ? "rotate-180" : "rotate-0")} />
+                </button>
+                {isToolsMenuOpen ? (
+                  <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[20rem] max-w-[calc(100vw-1rem)] rounded-card border bg-surface p-2 shadow-floating">
+                    {toolsNavTopLevelItems.map((item) => {
+                      const children = toolsNavChildrenByParent.get(item.key) ?? [];
+                      const isActive = isActivePrefixPath(pathname, item.href) || children.some((child) => isActivePrefixPath(pathname, child.href));
+                      const isExpanded = Boolean(expandedToolsParents[item.key]);
+
+                      return (
+                        <div className="space-y-1" key={item.key}>
+                          {children.length > 0 ? (
+                            <NavItem
+                              accentWhenActive
+                              active={isActive}
+                              icon={(() => {
+                                const Icon = toolsNavIconMap[item.icon];
+                                return <Icon className="h-[17px] w-[17px]" />;
+                              })()}
+                              rightSlot={<ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded ? "rotate-180" : "rotate-0")} />}
+                              size="md"
+                              type="button"
+                              variant="sidebar"
+                              onClick={() => {
+                                setExpandedToolsParents((current) => ({
+                                  ...current,
+                                  [item.key]: !Boolean(current[item.key])
+                                }));
+                              }}
+                            >
+                              {item.label}
+                            </NavItem>
+                          ) : (
+                            <NavItem
+                              accentWhenActive
+                              active={isActive}
+                              href={item.href}
+                              icon={(() => {
+                                const Icon = toolsNavIconMap[item.icon];
+                                return <Icon className="h-[17px] w-[17px]" />;
+                              })()}
+                              size="md"
+                              variant="sidebar"
+                              onClick={() => setIsToolsMenuOpen(false)}
+                            >
+                              {item.label}
+                            </NavItem>
+                          )}
+                          {children.length > 0 && isExpanded ? (
+                            <div className="space-y-1 pb-1 pl-[14px]">
+                              {children.map((child) => (
+                                <NavItem
+                                  active={isActivePrefixPath(pathname, child.href)}
+                                  href={child.href}
+                                  icon={(() => {
+                                    const Icon = toolsNavIconMap[child.icon];
+                                    return <Icon className="h-4 w-4" />;
+                                  })()}
+                                  key={child.key}
+                                  size="sm"
+                                  variant="sidebar"
+                                  onClick={() => setIsToolsMenuOpen(false)}
+                                >
+                                  {child.label}
+                                </NavItem>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
-
-      <Dialog onClose={() => setAddPageOpen(false)} open={addPageOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add page</DialogTitle>
-            <DialogDescription>Create a new page and add it to the menu.</DialogDescription>
-          </DialogHeader>
-
-          <form className="space-y-3">
-            <FormField hint="Optional. If omitted, URL is generated from title." label="Title">
-              <Input
-                onChange={(event) => setAddPageState((current) => ({ ...current, title: event.target.value }))}
-                placeholder="About"
-                value={addPageState.title}
-              />
-            </FormField>
-
-            <FormField hint="Optional. Use letters, numbers, and hyphens." label="Slug">
-              <Input
-                onChange={(event) => setAddPageState((current) => ({ ...current, slug: event.target.value }))}
-                placeholder="about"
-                value={addPageState.slug}
-              />
-            </FormField>
-
-            <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text">
-              <input
-                checked={addPageState.isPublished}
-                onChange={(event) => setAddPageState((current) => ({ ...current, isPublished: event.target.checked }))}
-                type="checkbox"
-              />
-              Published
-            </label>
-
-            <DialogFooter>
-              <Button onClick={() => setAddPageOpen(false)} type="button" variant="ghost">
-                Cancel
-              </Button>
-              <Button disabled={isMutating} loading={isMutating} onClick={() => createPage({ openEditor: false })} type="button" variant="secondary">
-                {isMutating ? "Creating..." : "Create"}
-              </Button>
-              <Button disabled={isMutating} loading={isMutating} onClick={() => createPage({ openEditor: true })} type="button">
-                {isMutating ? "Creating..." : "Create & Edit"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog onClose={() => setSettingsTarget(null)} open={Boolean(settingsTarget)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Page settings</DialogTitle>
-            <DialogDescription>Update page details and visibility.</DialogDescription>
-          </DialogHeader>
-
-          <form className="space-y-3" onSubmit={savePageSettings}>
-            <FormField label="Title">
-              <Input onChange={(event) => setSettingsTitle(event.target.value)} value={settingsTitle} />
-            </FormField>
-
-            <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text">
-              <input checked={settingsIsPublished} onChange={(event) => setSettingsIsPublished(event.target.checked)} type="checkbox" />
-              Published
-            </label>
-
-            <div className="pt-2">
-              <Button
-                disabled={isMutating || settingsTarget?.slug === "home"}
-                onClick={() => {
-                  if (settingsTarget) {
-                    setDeleteTarget(settingsTarget);
-                    setSettingsTarget(null);
-                  }
-                }}
-                type="button"
-                variant="destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete page
-              </Button>
-            </div>
-
-            <DialogFooter>
-              <Button onClick={() => setSettingsTarget(null)} type="button" variant="ghost">
-                Cancel
-              </Button>
-              <Button disabled={isMutating} loading={isMutating} type="submit">
-                {isMutating ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog onClose={() => setDeleteTarget(null)} open={Boolean(deleteTarget)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete page</DialogTitle>
-            <DialogDescription>
-              Delete <span className="font-semibold text-text">{deleteTarget?.title}</span>? This also removes all blocks for that page.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter>
-            <Button onClick={() => setDeleteTarget(null)} type="button" variant="ghost">
-              Cancel
-            </Button>
-            <Button disabled={isMutating} loading={isMutating} onClick={deletePage} type="button" variant="destructive">
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none h-3 rounded-b-card border-b border-border/60 bg-surface transition-opacity",
+          isScrolled ? "opacity-100" : "opacity-0"
+        )}
+      />
+    </div>
   );
 }

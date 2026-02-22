@@ -1,9 +1,8 @@
 "use client";
 
-import { ChevronDown, Menu, type LucideIcon } from "lucide-react";
+import { ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, type LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { NavGroup } from "@/components/ui/nav-group";
 import { NavItem } from "@/components/ui/nav-item";
 import { cn } from "@/lib/utils";
 
@@ -33,18 +32,13 @@ export type OrgAreaSidebarParentItem = SidebarNavItemBase & {
 
 export type OrgAreaSidebarNode = OrgAreaSidebarLeafItem | OrgAreaSidebarParentItem;
 
-export type OrgAreaSidebarGroup = {
-  key: string;
-  label: string;
-  items: OrgAreaSidebarNode[];
-};
-
 export type OrgAreaSidebarConfig = {
   title: string;
   subtitle: string;
   mobileLabel: string;
   ariaLabel: string;
-  groups: OrgAreaSidebarGroup[];
+  items: OrgAreaSidebarNode[];
+  collapseStorageKey?: string;
 };
 
 type OrgAreaSidebarNavProps = {
@@ -86,13 +80,13 @@ function SoonBadge() {
 
 export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }: OrgAreaSidebarNavProps) {
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
+  const canCollapse = !mobile;
+  const collapseStorageKey = config.collapseStorageKey ?? "org-area-sidebar:collapsed";
 
   const parentNodes = useMemo(
-    () =>
-      config.groups
-        .flatMap((group) => group.items)
-        .filter((node): node is OrgAreaSidebarParentItem => isParentNode(node)),
-    [config.groups]
+    () => config.items.filter((node): node is OrgAreaSidebarParentItem => isParentNode(node)),
+    [config.items]
   );
 
   const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>(() => {
@@ -101,6 +95,31 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
       return draft;
     }, {});
   });
+
+  useEffect(() => {
+    if (!canCollapse) {
+      return;
+    }
+
+    try {
+      const storedValue = window.localStorage.getItem(collapseStorageKey);
+      setCollapsed(storedValue === "true");
+    } catch {
+      setCollapsed(false);
+    }
+  }, [canCollapse, collapseStorageKey]);
+
+  useEffect(() => {
+    if (!canCollapse) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(collapseStorageKey, String(collapsed));
+    } catch {
+      // Ignore localStorage failures.
+    }
+  }, [canCollapse, collapseStorageKey, collapsed]);
 
   useEffect(() => {
     setExpandedByKey((current) => {
@@ -137,12 +156,17 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
     return (
       <NavItem
         active={isActive}
+        accentWhenActive
+        ariaLabel={collapsed ? item.label : undefined}
+        iconOnly={collapsed}
+        className={collapsed ? "mx-auto !h-10 !w-10 !min-h-0 !justify-center !p-0" : undefined}
         disabled={item.disabled || !item.href}
         href={item.href}
         icon={<Icon className="h-[17px] w-[17px]" />}
         key={item.key}
-        rightSlot={item.soon ? <SoonBadge /> : null}
+        rightSlot={!collapsed && item.soon ? <SoonBadge /> : null}
         size="md"
+        title={item.label}
         variant="sidebar"
       >
         {item.label}
@@ -171,58 +195,99 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
   }
 
   return (
-    <aside className={cn("rounded-card border border-border bg-surface p-4", mobile ? "shadow-card" : "shadow-floating")}>
-      {showHeader ? (
+    <aside
+      className={cn(
+        "rounded-card border border-border bg-surface transition-[width,padding] duration-200",
+        mobile ? "p-4 shadow-card" : collapsed ? "w-20 p-3 shadow-floating" : "w-[280px] p-4 shadow-floating"
+      )}
+    >
+      {showHeader && !collapsed ? (
         <>
-          <header className="min-h-[44px]">
-            <h2 className="text-[18px] font-bold leading-tight tracking-tight text-text">{config.title}</h2>
-            <p className="mt-1 text-[12px] text-text-muted">{config.subtitle}</p>
+          <header className="flex min-h-[44px] items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[18px] font-bold leading-tight tracking-tight text-text">{config.title}</h2>
+              <p className="mt-1 text-[12px] text-text-muted">{config.subtitle}</p>
+            </div>
+            {canCollapse ? (
+              <button
+                aria-label="Collapse sidebar"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-border bg-surface-muted text-text-muted transition-colors hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                onClick={() => setCollapsed(true)}
+                type="button"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            ) : null}
           </header>
 
           <div className="my-3 border-t border-border" />
         </>
       ) : null}
 
-      <nav aria-label={config.ariaLabel} className="space-y-5">
-        {config.groups.map((group) => (
-          <NavGroup key={group.key} title={group.label}>
-            {group.items.map((node) => {
-              if (!isParentNode(node)) {
-                return renderLeafItem(node);
-              }
+      {showHeader && collapsed && canCollapse ? (
+        <>
+          <header className="flex min-h-[44px] items-center justify-center">
+            <button
+              aria-label="Expand sidebar"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-control border border-border bg-surface-muted text-text-muted transition-colors hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+              onClick={() => setCollapsed(false)}
+              type="button"
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </button>
+          </header>
 
-              const Icon = node.icon;
-              const expanded = Boolean(expandedByKey[node.key]);
-              const parentActive = isParentActive(pathname, node);
-              const parentDisabled = node.disabled || !node.href;
+          <div className="my-3 border-t border-border" />
+        </>
+      ) : null}
 
-              return (
-                <div className="space-y-1" key={node.key}>
-                  <NavItem
-                    active={parentActive}
-                    ariaExpanded={expanded}
-                    className={parentDisabled ? "opacity-55" : undefined}
-                    icon={<Icon className="h-[17px] w-[17px]" />}
-                    onClick={() => toggleParent(node.key)}
-                    rightSlot={
-                      <span className="flex items-center gap-2 text-text-muted">
-                        {node.soon ? <SoonBadge /> : null}
-                        <ChevronDown className={cn("h-4 w-4 transition-transform", expanded ? "rotate-180" : "rotate-0")} />
-                      </span>
-                    }
-                    size="md"
-                    type="button"
-                    variant="sidebar"
-                  >
-                    {node.label}
-                  </NavItem>
+      <nav aria-label={config.ariaLabel} className={cn(collapsed ? "flex flex-col items-center gap-2" : "space-y-1")}>
+        {config.items.map((node) => {
+          if (!isParentNode(node)) {
+            return renderLeafItem(node);
+          }
 
-                  {expanded ? <div className="space-y-1 pl-[14px]">{node.children.map((child) => renderChildItem(child))}</div> : null}
-                </div>
-              );
-            })}
-          </NavGroup>
-        ))}
+          const Icon = node.icon;
+          const expanded = !collapsed && Boolean(expandedByKey[node.key]);
+          const parentActive = isParentActive(pathname, node);
+          const parentDisabled = node.disabled || (!node.href && node.children.length === 0);
+
+          return (
+            <div className={cn(collapsed ? "w-10" : "space-y-1")} key={node.key}>
+              <NavItem
+                active={parentActive}
+                accentWhenActive
+                ariaLabel={collapsed ? node.label : undefined}
+                ariaExpanded={expanded}
+                iconOnly={collapsed}
+                className={cn(
+                  parentDisabled ? "opacity-55" : undefined,
+                  collapsed ? "mx-auto !h-10 !w-10 !min-h-0 !justify-center !p-0" : undefined
+                )}
+                disabled={!node.href && collapsed}
+                href={node.href}
+                icon={<Icon className="h-[17px] w-[17px]" />}
+                onClick={!collapsed ? () => toggleParent(node.key) : undefined}
+                rightSlot={
+                  !collapsed ? (
+                    <span className="flex items-center gap-2 text-text-muted">
+                      {node.soon ? <SoonBadge /> : null}
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", expanded ? "rotate-180" : "rotate-0")} />
+                    </span>
+                  ) : null
+                }
+                size="md"
+                title={node.label}
+                type="button"
+                variant="sidebar"
+              >
+                {node.label}
+              </NavItem>
+
+              {expanded ? <div className="space-y-1 pl-[14px]">{node.children.map((child) => renderChildItem(child))}</div> : null}
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );

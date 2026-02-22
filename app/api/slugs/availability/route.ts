@@ -3,7 +3,7 @@ import { isReservedOrgSlug } from "@/lib/org/reservedSlugs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { isReservedPageSlug } from "@/modules/site-builder/blocks/helpers";
 
-type SlugKind = "org" | "page";
+type SlugKind = "org" | "page" | "program" | "form";
 
 type SlugAvailabilityRequest = {
   kind: SlugKind;
@@ -56,7 +56,7 @@ function isValidPayload(value: unknown): value is SlugAvailabilityRequest {
   }
 
   const payload = value as Partial<SlugAvailabilityRequest>;
-  return (payload.kind === "org" || payload.kind === "page") && typeof payload.slug === "string";
+  return (payload.kind === "org" || payload.kind === "page" || payload.kind === "program" || payload.kind === "form") && typeof payload.slug === "string";
 }
 
 function validateSlugFormat(kind: SlugKind, normalizedSlug: string) {
@@ -127,6 +127,28 @@ async function pageSlugExists(orgId: string, slug: string) {
   return Boolean(data?.id);
 }
 
+async function programSlugExists(orgId: string, slug: string) {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase.from("programs").select("id").eq("org_id", orgId).eq("slug", slug).maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.id);
+}
+
+async function formSlugExists(orgId: string, slug: string) {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase.from("org_forms").select("id").eq("org_id", orgId).eq("slug", slug).maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.id);
+}
+
 export async function POST(request: NextRequest) {
   const payloadRaw = await request.json().catch(() => null);
 
@@ -186,12 +208,32 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const exists = await pageSlugExists(orgId, normalizedSlug);
+    if (payload.kind === "page") {
+      const exists = await pageSlugExists(orgId, normalizedSlug);
+      return asSuccess({
+        kind: payload.kind,
+        normalizedSlug,
+        available: !exists,
+        message: exists ? "That page URL already exists in this organization." : "Page URL is available."
+      });
+    }
+
+    if (payload.kind === "program") {
+      const exists = await programSlugExists(orgId, normalizedSlug);
+      return asSuccess({
+        kind: payload.kind,
+        normalizedSlug,
+        available: !exists,
+        message: exists ? "That program slug already exists in this organization." : "Program slug is available."
+      });
+    }
+
+    const exists = await formSlugExists(orgId, normalizedSlug);
     return asSuccess({
       kind: payload.kind,
       normalizedSlug,
       available: !exists,
-      message: exists ? "That page URL already exists in this organization." : "Page URL is available."
+      message: exists ? "That form slug already exists in this organization." : "Form slug is available."
     });
   } catch {
     return NextResponse.json(

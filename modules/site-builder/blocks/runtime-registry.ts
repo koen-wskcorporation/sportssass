@@ -4,6 +4,7 @@ import { CtaCardBlockRender, createDefaultCtaCardConfig, sanitizeCtaCardConfig }
 import { createDefaultHeroConfig, HeroBlockRender, sanitizeHeroConfig } from "@/modules/site-builder/blocks/hero";
 import { createDefaultSubheroConfig, sanitizeSubheroConfig, SubheroBlockRender } from "@/modules/site-builder/blocks/subhero";
 import { createDefaultSchedulePreviewConfig, sanitizeSchedulePreviewConfig, SchedulePreviewBlockRender } from "@/modules/site-builder/blocks/schedule-preview";
+import { createDefaultProgramCatalogConfig, ProgramCatalogBlockRender, sanitizeProgramCatalogConfig } from "@/modules/site-builder/blocks/program-catalog";
 import type { BlockContext, BlockDefinition, OrgPageBlock, OrgSiteBlockType } from "@/modules/site-builder/types";
 
 type RuntimeBlockDefinition<TType extends OrgSiteBlockType> = Omit<BlockDefinition<TType>, "Editor">;
@@ -47,6 +48,13 @@ const runtimeBlockRegistry: AnyRuntimeBlockDefinition = {
     defaultConfig: createDefaultSchedulePreviewConfig,
     sanitizeConfig: sanitizeSchedulePreviewConfig,
     Render: SchedulePreviewBlockRender
+  },
+  program_catalog: {
+    type: "program_catalog",
+    displayName: "Programs Catalog",
+    defaultConfig: createDefaultProgramCatalogConfig,
+    sanitizeConfig: sanitizeProgramCatalogConfig,
+    Render: ProgramCatalogBlockRender
   }
 };
 

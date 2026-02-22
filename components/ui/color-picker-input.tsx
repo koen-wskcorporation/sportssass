@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type ColorPickerInputProps = {
@@ -37,29 +36,31 @@ export function ColorPickerInput({ name, defaultValue, placeholder = "00EAFF", d
   const submittedValue = rawHex.length === 0 ? "" : `#${rawHex}`;
 
   return (
-    <div className={cn("flex items-center gap-3", className)}>
-      <button
-        aria-label="Choose accent color"
-        className="h-8 w-8 shrink-0 rounded-full border border-border transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-        disabled={disabled}
-        onClick={() => pickerRef.current?.click()}
-        style={{ backgroundColor: pickerColor }}
-        type="button"
-      />
-
-      <Input
-        autoComplete="off"
-        disabled={disabled}
-        onChange={(event) => {
-          event.currentTarget.value = sanitizeHexInput(event.currentTarget.value);
-          setRawHex(event.currentTarget.value);
-        }}
-        pattern="^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$"
-        persistentPrefix="#"
-        placeholder={placeholder}
-        title="Use 3 or 6 hexadecimal characters"
-        value={rawHex}
-      />
+    <div className={cn("w-full", className)}>
+      <div className="flex h-10 w-full items-center rounded-control border bg-surface pr-2 text-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-canvas">
+        <button
+          aria-label="Choose accent color"
+          className="ml-2 h-6 w-6 shrink-0 rounded-full border border-border transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          disabled={disabled}
+          onClick={() => pickerRef.current?.click()}
+          style={{ backgroundColor: pickerColor }}
+          type="button"
+        />
+        <span className="shrink-0 pl-3 text-text-muted">#</span>
+        <input
+          autoComplete="off"
+          className="h-full w-full min-w-0 border-0 bg-transparent px-1 py-2 text-sm text-text placeholder:text-text-muted focus-visible:outline-none disabled:cursor-not-allowed"
+          disabled={disabled}
+          onChange={(event) => {
+            event.currentTarget.value = sanitizeHexInput(event.currentTarget.value);
+            setRawHex(event.currentTarget.value);
+          }}
+          pattern="^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$"
+          placeholder={placeholder}
+          title="Use 3 or 6 hexadecimal characters"
+          value={rawHex}
+        />
+      </div>
 
       <input name={name} type="hidden" value={submittedValue} />
 

@@ -16,9 +16,9 @@ export default async function OrgManageSitePage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-6">
-      <PageHeader description="Page and menu management now lives in the org header." title="Site" />
+      <PageHeader description="Page and menu management now lives in the org header." showBorder={false} title="Site" />
       <p className="text-sm text-text-muted">
-        Manage your site pages from the org header using <span className="font-semibold text-text">Admin → Edit menu</span>.
+        Manage your site pages from the org header using <span className="font-semibold text-text">Admin {"->"} Edit menu</span>.
       </p>
       <div>
         <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}`}>

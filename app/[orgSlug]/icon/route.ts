@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
+import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
   const org = await getOrgPublicContext(orgSlug);
 
   if (org.branding.iconPath) {
-    const signedUrl = await getSignedOrgAssetUrl(org.branding.iconPath, 60 * 5);
+    const signedUrl = getOrgAssetPublicUrl(org.branding.iconPath);
 
     if (signedUrl) {
       const response = NextResponse.redirect(signedUrl, { status: 307 });

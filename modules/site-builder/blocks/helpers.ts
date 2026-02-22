@@ -141,7 +141,10 @@ const reservedPageSlugs = new Set([
   "_next",
   "forbidden",
   "manage",
-  "icon"
+  "icon",
+  "programs",
+  "register",
+  "tools"
 ]);
 
 export function isReservedPageSlug(slug: string) {

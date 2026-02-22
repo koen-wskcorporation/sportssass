@@ -10,6 +10,7 @@ type SupabaseServiceRoleConfig = {
 
 let cachedPublicConfig: SupabasePublicConfig | null = null;
 let cachedServiceRoleConfig: SupabaseServiceRoleConfig | null = null;
+let legacyServiceRoleKeyWarningShown = false;
 
 function readEnv(name: string) {
   const value = process.env[name];
@@ -48,10 +49,21 @@ function getSupabasePublishableKey() {
 }
 
 function getSupabaseServiceRoleKeyOptional() {
-  const secretKey = readEnv("SUPABASE_SECRET_KEY");
+  const canonicalKey = readEnv("SUPABASE_SERVICE_ROLE_KEY");
 
-  if (secretKey) {
-    return secretKey;
+  if (canonicalKey) {
+    return canonicalKey;
+  }
+
+  const legacyKey = readEnv("SUPABASE_SECRET_KEY");
+
+  if (legacyKey) {
+    if (!legacyServiceRoleKeyWarningShown) {
+      legacyServiceRoleKeyWarningShown = true;
+      console.warn("[supabase] SUPABASE_SECRET_KEY is deprecated. Rename it to SUPABASE_SERVICE_ROLE_KEY.");
+    }
+
+    return legacyKey;
   }
 
   return null;
@@ -87,7 +99,7 @@ export function getSupabaseServiceRoleConfig(): SupabaseServiceRoleConfig {
   const serviceRoleKey = getSupabaseServiceRoleKeyOptional();
 
   if (!serviceRoleKey) {
-    throw new Error("Missing SUPABASE_SECRET_KEY.");
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY.");
   }
 
   cachedServiceRoleConfig = {

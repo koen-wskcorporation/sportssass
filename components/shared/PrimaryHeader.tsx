@@ -1,12 +1,7 @@
 import Link from "next/link";
-import { AccountMenu } from "@/components/shared/AccountMenu";
-import { AuthDialogTrigger } from "@/components/auth/AuthDialogTrigger";
-import { signOutAction } from "@/app/auth/actions";
-import { getCurrentUser } from "@/lib/auth/getCurrentUser";
+import { PrimaryAccountControls } from "@/components/shared/PrimaryAccountControls";
 
-export async function PrimaryHeader() {
-  const currentUser = await getCurrentUser();
-
+export function PrimaryHeader() {
   return (
     <header className="border-b bg-surface">
       <div className="app-container flex h-16 items-center justify-between">
@@ -20,17 +15,7 @@ export async function PrimaryHeader() {
           />
         </Link>
 
-        {currentUser ? (
-          <AccountMenu
-            avatarUrl={currentUser.avatarUrl}
-            email={currentUser.email}
-            firstName={currentUser.firstName}
-            lastName={currentUser.lastName}
-            signOutAction={signOutAction}
-          />
-        ) : (
-          <AuthDialogTrigger />
-        )}
+        <PrimaryAccountControls />
       </div>
     </header>
   );

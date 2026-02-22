@@ -104,21 +104,18 @@ export function AccountMenu({ email, firstName, lastName, avatarUrl, signOutActi
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-12 z-50 w-64 rounded-card border bg-surface p-2 shadow-card" role="menu">
-          <div className="border-b px-2 pb-2">
-            <p className="truncate text-sm font-semibold text-text">{fullName}</p>
-            <p className="truncate text-xs text-text-muted">{accountLabel}</p>
-          </div>
-          <div className="mt-2 flex flex-col gap-1">
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[20rem] max-w-[calc(100vw-1rem)] rounded-card border bg-surface p-2 shadow-floating" role="menu">
+          <div className="space-y-1">
             {menuItems.map((item) => (
               <NavItem
+                accentWhenActive
                 active={item.active}
                 href={item.href}
                 key={item.href}
                 onClick={() => setOpen(false)}
                 role="menuitem"
-                size="sm"
-                variant="dropdown"
+                size="md"
+                variant="sidebar"
               >
                 {item.label}
               </NavItem>
@@ -129,10 +126,11 @@ export function AccountMenu({ email, firstName, lastName, avatarUrl, signOutActi
                 setOpen(false);
               }}
             >
-              <NavItem role="menuitem" size="sm" type="submit" variant="dropdown">
+              <NavItem role="menuitem" size="md" type="submit" variant="sidebar">
                 Sign out
               </NavItem>
             </form>
+            <p className="px-3 pt-1 text-xs text-text-muted">{accountLabel}</p>
           </div>
         </div>
       ) : null}

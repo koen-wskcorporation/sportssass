@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { Eye, KeyRound, Trash2 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Select, type SelectOption } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { can } from "@/lib/permissions/can";
 import { getRoleLabel, isAdminLikeRole, type OrgRole, type Permission } from "@/modules/core/access";
@@ -23,8 +23,6 @@ import {
   type AccessRoleDefinition
 } from "@/modules/manage-access/actions";
 
-type TableColumnKey = "role" | "status" | "joined" | "lastActivity" | "userId";
-
 type AccountsAccessPanelProps = {
   orgSlug: string;
   currentUserRole: OrgRole;
@@ -34,25 +32,6 @@ type AccountsAccessPanelProps = {
   loadError: string | null;
   serviceRoleConfigured: boolean;
 };
-
-const orderedColumnKeys: TableColumnKey[] = ["role", "status", "joined", "lastActivity", "userId"];
-const defaultVisibleColumns: TableColumnKey[] = ["role", "status", "joined", "lastActivity"];
-const columnLabels: Record<TableColumnKey, string> = {
-  role: "Role",
-  status: "Status",
-  joined: "Joined",
-  lastActivity: "Last activity",
-  userId: "User ID"
-};
-
-function normalizeVisibleColumns(rawValue: unknown): TableColumnKey[] {
-  if (!Array.isArray(rawValue)) {
-    return defaultVisibleColumns;
-  }
-
-  const normalized = orderedColumnKeys.filter((key) => rawValue.includes(key));
-  return normalized.length > 0 ? normalized : defaultVisibleColumns;
-}
 
 function roleBadgeVariant(role: OrgRole) {
   if (isAdminLikeRole(role)) {
@@ -108,15 +87,13 @@ export function AccountsAccessPanel({
   loadError,
   serviceRoleConfigured
 }: AccountsAccessPanelProps) {
-  const router = useRouter();
   const { toast } = useToast();
+  const [membersState, setMembersState] = useState(members);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("member");
   const [roleDraftByMembershipId, setRoleDraftByMembershipId] = useState<Record<string, OrgRole>>({});
   const [removeTarget, setRemoveTarget] = useState<AccessMember | null>(null);
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
-  const [isColumnDialogOpen, setIsColumnDialogOpen] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<TableColumnKey[]>(defaultVisibleColumns);
   const [isInviting, startInviteTransition] = useTransition();
   const [isRemoving, startRemoveTransition] = useTransition();
   const [activeRoleSaveId, setActiveRoleSaveId] = useState<string | null>(null);
@@ -151,21 +128,13 @@ export function AccountsAccessPanel({
 
   const canManageActions = serviceRoleConfigured && !loadError && can(currentUserPermissions, "org.manage.read");
 
-  const sortedMembers = useMemo(() => {
-    return [...members].sort((left, right) => {
-      const leftValue = (left.email ?? left.userId).toLowerCase();
-      const rightValue = (right.email ?? right.userId).toLowerCase();
-      return leftValue.localeCompare(rightValue);
-    });
-  }, [members]);
-
   const selectedMember = useMemo(() => {
     if (!selectedMembershipId) {
       return null;
     }
 
-    return sortedMembers.find((member) => member.membershipId === selectedMembershipId) ?? null;
-  }, [selectedMembershipId, sortedMembers]);
+    return membersState.find((member) => member.membershipId === selectedMembershipId) ?? null;
+  }, [membersState, selectedMembershipId]);
 
   useEffect(() => {
     if (assignableRoleOptions.length === 0) {
@@ -180,55 +149,36 @@ export function AccountsAccessPanel({
   }, [assignableRoleOptions, inviteRole]);
 
   useEffect(() => {
+    setMembersState(members);
+  }, [members]);
+
+  useEffect(() => {
     setRoleDraftByMembershipId(
-      members.reduce<Record<string, OrgRole>>((drafts, member) => {
+      membersState.reduce<Record<string, OrgRole>>((drafts, member) => {
         drafts[member.membershipId] = toAssignableRole(member.role);
         return drafts;
       }, {})
     );
-  }, [members]);
-
-  useEffect(() => {
-    const storageKey = `accounts-access-columns:${orgSlug}`;
-
-    try {
-      const rawColumns = window.localStorage.getItem(storageKey);
-      if (!rawColumns) {
-        return;
-      }
-
-      const parsedColumns = JSON.parse(rawColumns) as unknown;
-      setVisibleColumns(normalizeVisibleColumns(parsedColumns));
-    } catch {
-      setVisibleColumns(defaultVisibleColumns);
-    }
-  }, [orgSlug]);
-
-  useEffect(() => {
-    const storageKey = `accounts-access-columns:${orgSlug}`;
-
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(visibleColumns));
-    } catch {
-      // Ignore localStorage failures.
-    }
-  }, [orgSlug, visibleColumns]);
+  }, [membersState]);
 
   useEffect(() => {
     if (!selectedMembershipId) {
       return;
     }
 
-    const stillExists = members.some((member) => member.membershipId === selectedMembershipId);
+    const stillExists = membersState.some((member) => member.membershipId === selectedMembershipId);
 
     if (!stillExists) {
       setSelectedMembershipId(null);
     }
-  }, [members, selectedMembershipId]);
+  }, [membersState, selectedMembershipId]);
 
-  function resolveRoleLabel(roleKey: OrgRole) {
-    return roleByKey.get(roleKey)?.label ?? getRoleLabel(roleKey);
-  }
+  const resolveRoleLabel = useCallback(
+    (roleKey: OrgRole) => {
+      return roleByKey.get(roleKey)?.label ?? getRoleLabel(roleKey);
+    },
+    [roleByKey]
+  );
 
   function getRoleOptions(member: AccessMember) {
     if (isAdminLikeRole(currentUserRole)) {
@@ -242,13 +192,13 @@ export function AccountsAccessPanel({
     return nonAdminRoleOptions;
   }
 
-  function displayUser(member: AccessMember) {
+  const displayUser = useCallback((member: AccessMember) => {
     if (member.email) {
       return member.email;
     }
 
     return member.userId;
-  }
+  }, []);
 
   function handleInviteSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -279,7 +229,7 @@ export function AccountsAccessPanel({
       });
       setInviteEmail("");
       setInviteRole(getDefaultInviteRole(assignableRoleOptions));
-      router.refresh();
+      setMembersState(result.data.members);
     });
   }
 
@@ -323,7 +273,7 @@ export function AccountsAccessPanel({
         title: "Role updated",
         variant: "success"
       });
-      router.refresh();
+      setMembersState(result.data.members);
     })();
   }
 
@@ -387,23 +337,117 @@ export function AccountsAccessPanel({
         title: "Access removed",
         variant: "success"
       });
-      router.refresh();
+      setMembersState(result.data.members);
     });
   }
 
-  function toggleVisibleColumn(columnKey: TableColumnKey, nextChecked: boolean) {
-    setVisibleColumns((current) => {
-      const withChange = nextChecked ? [...current, columnKey] : current.filter((item) => item !== columnKey);
-      const ordered = orderedColumnKeys.filter((key) => withChange.includes(key));
-      return ordered.length > 0 ? ordered : ["role"];
-    });
+  const memberTableColumns = useMemo<DataTableColumn<AccessMember>[]>(
+    () => [
+      {
+        key: "user",
+        label: "User",
+        defaultVisible: true,
+        sortable: true,
+        renderCell: (member) => (
+          <div className="space-y-1">
+            <p className="font-medium">
+              {displayUser(member)} {member.isCurrentUser ? "(you)" : ""}
+            </p>
+          </div>
+        ),
+        renderSearchValue: (member) => `${displayUser(member)} ${member.userId}`,
+        renderSortValue: (member) => displayUser(member)
+      },
+      {
+        key: "role",
+        label: "Role",
+        defaultVisible: true,
+        sortable: true,
+        renderCell: (member) => <Badge variant={roleBadgeVariant(member.role)}>{resolveRoleLabel(member.role)}</Badge>,
+        renderSearchValue: (member) => resolveRoleLabel(member.role),
+        renderSortValue: (member) => resolveRoleLabel(member.role)
+      },
+      {
+        key: "status",
+        label: "Status",
+        defaultVisible: true,
+        sortable: true,
+        renderCell: (member) => <Badge variant={statusBadgeVariant(member.status)}>{statusLabel(member.status)}</Badge>,
+        renderSearchValue: (member) => statusLabel(member.status),
+        renderSortValue: (member) => statusLabel(member.status)
+      },
+      {
+        key: "joined",
+        label: "Joined",
+        defaultVisible: true,
+        sortable: true,
+        renderCell: (member) => formatDateTime(member.joinedAt, dateFormatter),
+        renderSortValue: (member) => (member.joinedAt ? new Date(member.joinedAt).getTime() : 0)
+      },
+      {
+        key: "lastActivity",
+        label: "Last activity",
+        defaultVisible: true,
+        sortable: true,
+        renderCell: (member) => formatDateTime(member.lastActivityAt, dateFormatter),
+        renderSortValue: (member) => (member.lastActivityAt ? new Date(member.lastActivityAt).getTime() : 0)
+      },
+      {
+        key: "userId",
+        label: "User ID",
+        defaultVisible: false,
+        sortable: true,
+        className: "font-mono text-xs",
+        renderCell: (member) => member.userId,
+        renderSearchValue: (member) => member.userId,
+        renderSortValue: (member) => member.userId
+      }
+    ],
+    [dateFormatter, displayUser, resolveRoleLabel]
+  );
+
+  function renderMemberRowActions(member: AccessMember) {
+    const canEditThisMember = canEditAdminMembership(currentUserRole, member.role);
+
+    return (
+      <>
+        <Button
+          aria-label={`Open ${displayUser(member)}`}
+          className="h-7 px-2 text-[11px]"
+          onClick={() => setSelectedMembershipId(member.membershipId)}
+          size="sm"
+          variant="secondary"
+        >
+          <Eye aria-hidden className="h-3.5 w-3.5" />
+          Open
+        </Button>
+        <Button
+          aria-label={`Send password reset to ${displayUser(member)}`}
+          className="h-7 px-2 text-[11px]"
+          disabled={!canManageActions || !member.email || activeResetMembershipId === member.membershipId}
+          loading={activeResetMembershipId === member.membershipId}
+          onClick={() => handleSendReset(member)}
+          size="sm"
+          variant="ghost"
+        >
+          <KeyRound aria-hidden className="h-3.5 w-3.5" />
+          Reset
+        </Button>
+        <Button
+          aria-label={`Remove ${displayUser(member)}`}
+          className="h-7 px-2 text-[11px]"
+          disabled={!canManageActions || !canEditThisMember || isRemoving}
+          onClick={() => setRemoveTarget(member)}
+          size="sm"
+          variant="destructive"
+        >
+          <Trash2 aria-hidden className="h-3.5 w-3.5" />
+          Remove
+        </Button>
+      </>
+    );
   }
 
-  function isColumnVisible(columnKey: TableColumnKey) {
-    return visibleColumns.includes(columnKey);
-  }
-
-  const emptyStateColSpan = 1 + visibleColumns.length;
   const selectedRoleOptions = selectedMember ? getRoleOptions(selectedMember) : [];
   const selectedRoleDraft = selectedMember ? (roleDraftByMembershipId[selectedMember.membershipId] ?? toAssignableRole(selectedMember.role)) : "";
   const selectedRoleValue = selectedRoleOptions.some((option) => option.value === selectedRoleDraft)
@@ -454,115 +498,30 @@ export function AccountsAccessPanel({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1.5">
-            <CardTitle>Members</CardTitle>
-            <CardDescription>Click any row to open a member profile and manage access actions.</CardDescription>
-          </div>
-          <Button onClick={() => setIsColumnDialogOpen(true)} size="sm" variant="secondary">
-            Customize table
-          </Button>
+        <CardHeader>
+          <CardTitle>Members</CardTitle>
+          <CardDescription>Drag header handles to reorder columns, and click rows to open member details.</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                {isColumnVisible("role") ? <TableHead>Role</TableHead> : null}
-                {isColumnVisible("status") ? <TableHead>Status</TableHead> : null}
-                {isColumnVisible("joined") ? <TableHead>Joined</TableHead> : null}
-                {isColumnVisible("lastActivity") ? <TableHead>Last activity</TableHead> : null}
-                {isColumnVisible("userId") ? <TableHead>User ID</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedMembers.length === 0 ? (
-                <TableRow>
-                  <TableCell className="py-8 text-center text-text-muted" colSpan={emptyStateColSpan}>
-                    No org members found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                sortedMembers.map((member) => (
-                  <TableRow
-                    aria-label={`Open profile for ${displayUser(member)}`}
-                    className="cursor-pointer"
-                    key={member.membershipId}
-                    onClick={() => setSelectedMembershipId(member.membershipId)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedMembershipId(member.membershipId);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <TableCell>
-                      <div className="space-y-1">
-                        <p className="font-medium">
-                          {displayUser(member)} {member.isCurrentUser ? "(you)" : ""}
-                        </p>
-                      </div>
-                    </TableCell>
-                    {isColumnVisible("role") ? (
-                      <TableCell>
-                        <Badge variant={roleBadgeVariant(member.role)}>{resolveRoleLabel(member.role)}</Badge>
-                      </TableCell>
-                    ) : null}
-                    {isColumnVisible("status") ? (
-                      <TableCell>
-                        <Badge variant={statusBadgeVariant(member.status)}>{statusLabel(member.status)}</Badge>
-                      </TableCell>
-                    ) : null}
-                    {isColumnVisible("joined") ? <TableCell>{formatDateTime(member.joinedAt, dateFormatter)}</TableCell> : null}
-                    {isColumnVisible("lastActivity") ? <TableCell>{formatDateTime(member.lastActivityAt, dateFormatter)}</TableCell> : null}
-                    {isColumnVisible("userId") ? <TableCell className="font-mono text-xs">{member.userId}</TableCell> : null}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+        <CardContent className="p-6 pt-4">
+          <DataTable
+            ariaLabel="Organization members"
+            columns={memberTableColumns}
+            data={membersState}
+            defaultSort={{
+              columnKey: "user",
+              direction: "asc"
+            }}
+            emptyState="No org members found."
+            onRowClick={(member) => setSelectedMembershipId(member.membershipId)}
+            renderRowActions={renderMemberRowActions}
+            rowActionsLabel="Quick actions"
+            rowKey={(member) => member.membershipId}
+            searchPlaceholder="Search by user, role, or status..."
+            selectedRowKey={selectedMembershipId}
+            storageKey={`accounts-access-table:${orgSlug}`}
+          />
         </CardContent>
       </Card>
-
-      <Dialog onClose={() => setIsColumnDialogOpen(false)} open={isColumnDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Customize table</DialogTitle>
-            <DialogDescription>Select which member columns are visible.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            {orderedColumnKeys.map((columnKey) => {
-              const checked = isColumnVisible(columnKey);
-
-              return (
-                <label className="flex items-center justify-between gap-3 rounded-control border bg-surface px-3 py-2 text-sm" key={columnKey}>
-                  <span>{columnLabels[columnKey]}</span>
-                  <input
-                    checked={checked}
-                    onChange={(event) => toggleVisibleColumn(columnKey, event.target.checked)}
-                    type="checkbox"
-                  />
-                </label>
-              );
-            })}
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                setVisibleColumns(defaultVisibleColumns);
-              }}
-              variant="ghost"
-            >
-              Reset default
-            </Button>
-            <Button onClick={() => setIsColumnDialogOpen(false)} variant="secondary">
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         onClose={() => {

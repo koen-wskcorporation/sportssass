@@ -18,6 +18,7 @@ type AuthDialogProps = {
   initialMode?: AuthMode;
   errorMessage?: string | null;
   infoMessage?: string | null;
+  nextPath?: string;
 };
 
 export function AuthDialog({
@@ -25,7 +26,8 @@ export function AuthDialog({
   onClose,
   initialMode = "signin",
   errorMessage = null,
-  infoMessage = null
+  infoMessage = null,
+  nextPath = "/"
 }: AuthDialogProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const signInEmailId = useId();
@@ -69,6 +71,7 @@ export function AuthDialog({
 
         {mode === "signin" ? (
           <form action={signInAction} className="space-y-3">
+            <input name="next" type="hidden" value={nextPath} />
             <FormField htmlFor={signInEmailId} label="Email">
               <Input autoComplete="email" id={signInEmailId} name="email" required type="email" />
             </FormField>
@@ -84,6 +87,7 @@ export function AuthDialog({
           </form>
         ) : (
           <form action={signUpAction} className="space-y-3">
+            <input name="next" type="hidden" value={nextPath} />
             <FormField htmlFor={signUpEmailId} label="Email">
               <Input autoComplete="email" id={signUpEmailId} name="email" required type="email" />
             </FormField>

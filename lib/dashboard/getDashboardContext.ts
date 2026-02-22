@@ -1,4 +1,4 @@
-import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
+import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/getCurrentUser";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { listUserOrgs } from "@/lib/org/listUserOrgs";
@@ -24,20 +24,18 @@ export async function getDashboardContext(): Promise<DashboardContext> {
 
   const [currentUser, orgMemberships] = await Promise.all([getCurrentUser({ sessionUser }), listUserOrgs()]);
 
-  const organizations = await Promise.all(
-    orgMemberships.map(async (membership) => {
-      const assetPath = membership.iconPath ?? membership.logoPath;
-      const iconUrl = assetPath ? await getSignedOrgAssetUrl(assetPath, 60 * 10) : null;
+  const organizations = orgMemberships.map((membership) => {
+    const assetPath = membership.iconPath ?? membership.logoPath;
+    const iconUrl = getOrgAssetPublicUrl(assetPath);
 
-      return {
-        orgId: membership.orgId,
-        orgName: membership.orgName,
-        orgSlug: membership.orgSlug,
-        role: membership.role,
-        iconUrl
-      };
-    })
-  );
+    return {
+      orgId: membership.orgId,
+      orgName: membership.orgName,
+      orgSlug: membership.orgSlug,
+      role: membership.role,
+      iconUrl
+    };
+  });
 
   if (!currentUser) {
     return {

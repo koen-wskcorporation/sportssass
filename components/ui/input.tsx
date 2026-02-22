@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-type SlugValidationKind = "org" | "page";
+type SlugValidationKind = "org" | "page" | "program" | "form";
 
 type SlugValidationConfig = {
   kind: SlugValidationKind;
@@ -60,7 +60,7 @@ function isValidAvailabilityResponse(value: unknown): value is SlugAvailabilityR
 
   return (
     payload.ok === true &&
-    (payload.kind === "org" || payload.kind === "page") &&
+    (payload.kind === "org" || payload.kind === "page" || payload.kind === "program" || payload.kind === "form") &&
     typeof payload.normalizedSlug === "string" &&
     typeof payload.available === "boolean" &&
     (typeof payload.message === "string" || payload.message === null)

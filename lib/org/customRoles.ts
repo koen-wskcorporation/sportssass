@@ -27,7 +27,11 @@ const legacyManagerPermissions: Permission[] = [
   "org.manage.read",
   "org.branding.read",
   "org.pages.read",
-  "org.pages.write"
+  "org.pages.write",
+  "programs.read",
+  "programs.write",
+  "forms.read",
+  "forms.write"
 ];
 
 function parsePermissions(value: unknown): Permission[] {

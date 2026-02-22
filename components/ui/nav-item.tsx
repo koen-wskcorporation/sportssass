@@ -68,6 +68,7 @@ type NavItemVariantProps = VariantProps<typeof navItemVariants>;
 export type NavItemProps = {
   active?: boolean;
   accentWhenActive?: boolean;
+  ariaLabel?: string;
   ariaControls?: string;
   ariaCurrent?: React.AriaAttributes["aria-current"];
   ariaExpanded?: boolean;
@@ -78,12 +79,14 @@ export type NavItemProps = {
   disabled?: boolean;
   href?: string;
   icon?: React.ReactNode;
+  iconOnly?: boolean;
   onClick?: React.MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>;
   rel?: React.AnchorHTMLAttributes<HTMLAnchorElement>["rel"];
   rightSlot?: React.ReactNode;
   role?: React.AriaRole;
   size?: NavItemVariantProps["size"];
   target?: React.AnchorHTMLAttributes<HTMLAnchorElement>["target"];
+  title?: string;
   type?: "button" | "submit" | "reset";
   variant?: NavItemVariantProps["variant"];
 };
@@ -94,16 +97,27 @@ function NavItemInner({
   children,
   contentClassName,
   icon,
+  iconOnly,
   rightSlot,
   variant
-}: Pick<NavItemProps, "active" | "accentWhenActive" | "children" | "contentClassName" | "icon" | "rightSlot" | "variant">) {
+}: Pick<NavItemProps, "active" | "accentWhenActive" | "children" | "contentClassName" | "icon" | "iconOnly" | "rightSlot" | "variant">) {
   const showAccent = Boolean(active && accentWhenActive);
+  const iconNode = icon ? <span className={cn("shrink-0 text-current [&_svg]:h-4 [&_svg]:w-4", variant === "header" ? "opacity-90" : "")}>{icon}</span> : null;
+
+  if (iconOnly) {
+    return (
+      <>
+        {showAccent ? <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[4px] rounded-r bg-accent" /> : null}
+        <span className={cn("flex h-full w-full items-center justify-center", contentClassName)}>{iconNode}</span>
+      </>
+    );
+  }
 
   return (
     <>
       {showAccent ? <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[4px] rounded-r bg-accent" /> : null}
       <span className={cn("flex min-w-0 items-center gap-2", contentClassName)}>
-        {icon ? <span className={cn("shrink-0 text-current [&_svg]:h-4 [&_svg]:w-4", variant === "header" ? "opacity-90" : "")}>{icon}</span> : null}
+        {iconNode}
         <span className="truncate">{children}</span>
       </span>
       {rightSlot ? <span className="ml-2 shrink-0">{rightSlot}</span> : null}
@@ -114,6 +128,7 @@ function NavItemInner({
 export function NavItem({
   active = false,
   accentWhenActive,
+  ariaLabel,
   ariaControls,
   ariaCurrent,
   ariaExpanded,
@@ -124,12 +139,14 @@ export function NavItem({
   disabled = false,
   href,
   icon,
+  iconOnly = false,
   onClick,
   rel,
   rightSlot,
   role,
   size = "md",
   target,
+  title,
   type = "button",
   variant = "sidebar"
 }: NavItemProps) {
@@ -142,6 +159,7 @@ export function NavItem({
       active={active}
       contentClassName={contentClassName}
       icon={icon}
+      iconOnly={iconOnly}
       rightSlot={rightSlot}
       variant={variant}
     >
@@ -152,6 +170,7 @@ export function NavItem({
   if (href && !disabled) {
     return (
       <Link
+        aria-label={ariaLabel}
         aria-controls={ariaControls}
         aria-current={resolvedAriaCurrent}
         aria-expanded={ariaExpanded}
@@ -162,6 +181,7 @@ export function NavItem({
         rel={rel}
         role={role}
         target={target}
+        title={title}
       >
         {inner}
       </Link>
@@ -171,6 +191,7 @@ export function NavItem({
   if (href && disabled) {
     return (
       <div
+        aria-label={ariaLabel}
         aria-controls={ariaControls}
         aria-current={resolvedAriaCurrent}
         aria-disabled="true"
@@ -178,6 +199,7 @@ export function NavItem({
         aria-haspopup={ariaHaspopup}
         className={cn(classes, "opacity-55")}
         role={role}
+        title={title}
       >
         {inner}
       </div>
@@ -186,6 +208,7 @@ export function NavItem({
 
   return (
     <button
+      aria-label={ariaLabel}
       aria-controls={ariaControls}
       aria-current={resolvedAriaCurrent}
       aria-expanded={ariaExpanded}
@@ -194,6 +217,7 @@ export function NavItem({
       disabled={disabled}
       onClick={onClick}
       role={role}
+      title={title}
       type={type}
     >
       {inner}

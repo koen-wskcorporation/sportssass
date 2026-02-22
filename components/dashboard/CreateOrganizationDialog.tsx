@@ -47,7 +47,6 @@ export function CreateOrganizationDialog() {
       setOrgName("");
       setOrgSlug("");
       router.push(`/${result.orgSlug}/manage`);
-      router.refresh();
     });
   }
 
@@ -58,13 +57,7 @@ export function CreateOrganizationDialog() {
       </Button>
 
       <Dialog onClose={() => setOpen(false)} open={open}>
-        <DialogContent
-          style={{
-            width: "min(92vw, 560px)",
-            minWidth: "min(92vw, 560px)",
-            maxWidth: "min(92vw, 560px)"
-          }}
-        >
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Create organization</DialogTitle>
             <DialogDescription>Set up a new organization workspace and become its first admin.</DialogDescription>

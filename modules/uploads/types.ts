@@ -22,6 +22,7 @@ export type UploadKind = "org" | "account" | "public-org";
 export type UploadPurpose =
   | "org-logo"
   | "org-icon"
+  | "program-cover"
   | "profile-photo"
   | "site-hero"
   | "site-block-image"

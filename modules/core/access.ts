@@ -8,13 +8,17 @@ export type Permission =
   | "org.branding.read"
   | "org.branding.write"
   | "org.pages.read"
-  | "org.pages.write";
+  | "org.pages.write"
+  | "programs.read"
+  | "programs.write"
+  | "forms.read"
+  | "forms.write";
 
 export type PermissionDefinition = {
   permission: Permission;
   label: string;
   description: string;
-  group: "Organization" | "Site Builder";
+  group: "Organization" | "Site Builder" | "Programs" | "Forms";
 };
 
 export type CustomRolePermissionSource = {
@@ -28,7 +32,11 @@ export const allPermissions: Permission[] = [
   "org.branding.read",
   "org.branding.write",
   "org.pages.read",
-  "org.pages.write"
+  "org.pages.write",
+  "programs.read",
+  "programs.write",
+  "forms.read",
+  "forms.write"
 ];
 
 const permissionSet = new Set(allPermissions);
@@ -69,6 +77,30 @@ export const permissionDefinitions: PermissionDefinition[] = [
     label: "Site builder write",
     description: "Create, edit, publish, and delete site pages and blocks.",
     group: "Site Builder"
+  },
+  {
+    permission: "programs.read",
+    label: "Programs read",
+    description: "Read draft programs, divisions, schedules, and registration setup.",
+    group: "Programs"
+  },
+  {
+    permission: "programs.write",
+    label: "Programs write",
+    description: "Create and manage programs, divisions, and schedules.",
+    group: "Programs"
+  },
+  {
+    permission: "forms.read",
+    label: "Forms read",
+    description: "Review form configurations and submissions.",
+    group: "Forms"
+  },
+  {
+    permission: "forms.write",
+    label: "Forms write",
+    description: "Create, publish, and operate registration forms.",
+    group: "Forms"
   }
 ];
 

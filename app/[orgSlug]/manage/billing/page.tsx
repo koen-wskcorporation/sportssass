@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 export default function OrgBillingSettingsPage() {
   return (
     <>
-      <PageHeader description="Review plan, invoice, and payment settings for this organization." title="Billing" />
+      <PageHeader description="Review plan, invoice, and payment settings for this organization." showBorder={false} title="Billing" />
 
       <Card>
         <CardHeader>

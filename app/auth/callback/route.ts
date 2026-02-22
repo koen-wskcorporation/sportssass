@@ -3,11 +3,22 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { createSupabaseServerForRequest } from "@/lib/supabase/server";
 
 function normalizeNextPath(nextPath: string | null, fallbackPath: string) {
-  if (!nextPath || !nextPath.startsWith("/")) {
+  const candidate = nextPath?.trim();
+
+  if (!candidate || !candidate.startsWith("/")) {
     return fallbackPath;
   }
 
-  return nextPath;
+  // Reject protocol-relative, malformed, and absolute-style redirects.
+  if (candidate.startsWith("//") || candidate.startsWith("/\\") || candidate.includes("://")) {
+    return fallbackPath;
+  }
+
+  if (candidate.includes("\n") || candidate.includes("\r") || candidate.includes("\0")) {
+    return fallbackPath;
+  }
+
+  return candidate;
 }
 
 export async function GET(request: NextRequest) {

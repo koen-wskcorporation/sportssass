@@ -16,6 +16,28 @@ function isLikelyEmail(value: string) {
   return value.includes("@") && value.includes(".");
 }
 
+function normalizeNextPath(value: FormDataEntryValue | null, fallbackPath = "/") {
+  if (typeof value !== "string") {
+    return fallbackPath;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.startsWith("/auth/login")) {
+    return fallbackPath;
+  }
+
+  return trimmed;
+}
+
+function withNext(path: string, nextPath: string) {
+  if (!nextPath || nextPath === "/") {
+    return path;
+  }
+
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}next=${encodeURIComponent(nextPath)}`;
+}
+
 async function getRequestOrigin() {
   const headerStore = await headers();
   const forwardedProto = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
@@ -34,9 +56,10 @@ async function getRequestOrigin() {
 export async function signInAction(formData: FormData) {
   const email = cleanValue(formData.get("email")).toLowerCase();
   const password = cleanValue(formData.get("password"));
+  const nextPath = normalizeNextPath(formData.get("next"));
 
   if (!isLikelyEmail(email) || !password) {
-    redirect("/auth/login?error=1");
+    redirect(withNext("/auth/login?error=1", nextPath));
   }
 
   const supabase = await createSupabaseServer();
@@ -46,18 +69,19 @@ export async function signInAction(formData: FormData) {
   });
 
   if (error) {
-    redirect("/auth/login?error=1");
+    redirect(withNext("/auth/login?error=1", nextPath));
   }
 
-  redirect("/");
+  redirect(nextPath);
 }
 
 export async function signUpAction(formData: FormData) {
   const email = cleanValue(formData.get("email")).toLowerCase();
   const password = cleanValue(formData.get("password"));
+  const nextPath = normalizeNextPath(formData.get("next"));
 
   if (!isLikelyEmail(email) || password.length < 8) {
-    redirect("/auth/login?mode=signup&error=1");
+    redirect(withNext("/auth/login?mode=signup&error=1", nextPath));
   }
 
   const supabase = await createSupabaseServer();
@@ -67,14 +91,14 @@ export async function signUpAction(formData: FormData) {
   });
 
   if (error) {
-    redirect("/auth/login?mode=signup&error=1");
+    redirect(withNext("/auth/login?mode=signup&error=1", nextPath));
   }
 
   if (!data.session) {
-    redirect("/auth/login?mode=signin&message=signup_check_email");
+    redirect(withNext("/auth/login?mode=signin&message=signup_check_email", nextPath));
   }
 
-  redirect("/");
+  redirect(nextPath);
 }
 
 export async function signOutAction(_formData: FormData) {

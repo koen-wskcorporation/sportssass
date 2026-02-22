@@ -38,6 +38,7 @@ Global routes:
 - `/auth/reset`
 - `/auth/callback`
 - `/account`
+- `/account/players`
 - `/forbidden`
 - `/api/auth/debug`
 
@@ -52,6 +53,14 @@ Org routes (`orgSlug` is always first segment):
 - `/[orgSlug]/manage/branding`
 - `/[orgSlug]/manage/access`
 - `/[orgSlug]/manage/billing`
+- `/[orgSlug]/manage/programs`
+- `/[orgSlug]/manage/programs/[programId]`
+- `/[orgSlug]/manage/forms`
+- `/[orgSlug]/manage/forms/[formId]`
+- `/[orgSlug]/manage/forms/[formId]/submissions`
+- `/[orgSlug]/programs`
+- `/[orgSlug]/programs/[programSlug]`
+- `/[orgSlug]/register/[formSlug]`
 
 ## Branding Model
 
@@ -78,3 +87,10 @@ npm run lint
 - Use `/{orgSlug}/manage/site` to manage pages and navigation.
 - Page content is powered by `org_pages` + `org_page_blocks`.
 - Navigation is powered by `org_nav_items`.
+
+## Programs + Forms Architecture
+
+- Programs data lives in `programs`, `program_nodes`, and `program_schedule_blocks`.
+- Forms data lives in `org_forms`, `org_form_versions`, `org_form_submissions`, and `org_form_submission_entries`.
+- Registration links forms to players and capacity via `program_registrations` and `submit_form_response(...)`.
+- Public discovery and registration routes are canonical at `/{orgSlug}/programs` and `/{orgSlug}/register/{formSlug}`.

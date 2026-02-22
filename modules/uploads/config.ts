@@ -25,6 +25,13 @@ export const uploadPurposeConfigByPurpose: Record<UploadPurpose, UploadPurposeCo
     orgPermission: "org.branding.write",
     defaultAspect: "square"
   },
+  "program-cover": {
+    bucket: "org-assets",
+    maxSizeMB: 10,
+    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
+    orgPermission: "programs.write",
+    defaultAspect: "wide"
+  },
   "profile-photo": {
     bucket: "account-assets",
     maxSizeMB: 5,

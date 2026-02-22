@@ -10,7 +10,8 @@ export default async function OrgMembersSettingsPage({ params }: { params: Promi
     <>
       <PageHeader
         description="Invite users, assign access roles, and handle account recovery."
-        title="Accounts & Access"
+        showBorder={false}
+        title="User Accounts"
       />
       <AccountsAccessPanel
         currentUserPermissions={data.currentUserPermissions}

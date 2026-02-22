@@ -5,7 +5,7 @@ import { ColorPickerInput } from "@/components/ui/color-picker-input";
 import { FormField } from "@/components/ui/form-field";
 import { PageHeader } from "@/components/ui/page-header";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { getSignedOrgAssetUrl } from "@/lib/branding/getSignedOrgAssetUrl";
+import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { can } from "@/lib/permissions/can";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { saveOrgBrandingAction } from "./actions";
@@ -26,18 +26,15 @@ export default async function OrgBrandingSettingsPage({
   const orgContext = await requireOrgPermission(orgSlug, "org.branding.read");
   const canManageBranding = can(orgContext.membershipPermissions, "org.branding.write");
 
-  const [query, logoUrl, iconUrl] = await Promise.all([
-    searchParams,
-    orgContext.branding.logoPath ? getSignedOrgAssetUrl(orgContext.branding.logoPath, 60 * 10) : Promise.resolve(null),
-    orgContext.branding.iconPath ? getSignedOrgAssetUrl(orgContext.branding.iconPath, 60 * 10) : Promise.resolve(null)
-  ]);
-
+  const query = await searchParams;
+  const logoUrl = getOrgAssetPublicUrl(orgContext.branding.logoPath);
+  const iconUrl = getOrgAssetPublicUrl(orgContext.branding.iconPath);
   const errorMessage = query.error ? errorMessageByCode[query.error] : null;
   const saveBranding = saveOrgBrandingAction.bind(null, orgSlug);
 
   return (
     <>
-      <PageHeader description="Control how your organization appears across public and staff routes." title="Branding" />
+      <PageHeader description="Control how your organization appears across public and staff routes." showBorder={false} title="Branding" />
 
       {query.saved === "1" ? <Alert variant="success">Branding saved successfully.</Alert> : null}
       {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
