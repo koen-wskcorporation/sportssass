@@ -1,10 +1,15 @@
 import { notFound, redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
 import { ProgramEditorPanel } from "@/modules/programs/components/ProgramEditorPanel";
 import { getProgramDetailsById } from "@/modules/programs/db/queries";
+
+export const metadata: Metadata = {
+  title: "Program Editor"
+};
 
 export default async function OrgManageProgramDetailPage({
   params

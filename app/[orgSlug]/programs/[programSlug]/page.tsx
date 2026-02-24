@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +9,25 @@ import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 import { listPublishedFormsForProgram } from "@/modules/forms/db/queries";
 import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
+
+function titleFromSlug(slug: string) {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export async function generateMetadata({
+  params
+}: {
+  params: Promise<{ orgSlug: string; programSlug: string }>;
+}): Promise<Metadata> {
+  const { programSlug } = await params;
+  return {
+    title: titleFromSlug(programSlug) || "Program"
+  };
+}
 
 function formatDateRange(startDate: string | null, endDate: string | null) {
   if (startDate && endDate) {
@@ -76,7 +96,7 @@ export default async function OrgProgramDetailPage({
   const forms = await listPublishedFormsForProgram(org.orgId, details.program.id);
 
   return (
-    <main className="app-container py-8 md:py-10">
+    <main className="w-full px-6 py-8 md:px-8 md:py-10">
       <div className="space-y-6">
         <PageHeader
           description={details.program.description ?? "Program details and registration options."}

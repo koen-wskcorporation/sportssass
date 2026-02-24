@@ -24,6 +24,7 @@ const uploadPurposes: UploadPurpose[] = [
   "org-icon",
   "program-cover",
   "profile-photo",
+  "birth-certificate",
   "site-hero",
   "site-block-image",
   "attachment"
@@ -165,7 +166,7 @@ function parseRequest(value: FormDataEntryValue | null): CommitUploadRequest | n
 }
 
 function isImageExtension(extension: string) {
-  return ["png", "jpg", "jpeg", "webp", "svg", "ico"].includes(extension);
+  return ["png", "jpg", "jpeg", "webp", "svg", "ico", "heic", "heif"].includes(extension);
 }
 
 type UploadActor = {
@@ -234,7 +235,7 @@ export async function commitUploadAction(formData: FormData): Promise<CommitUplo
       };
     }
 
-    if (request.kind === "account" && request.purpose !== "profile-photo") {
+    if (request.kind === "account" && request.purpose !== "profile-photo" && request.purpose !== "birth-certificate") {
       return {
         ok: false,
         error: "This upload target is not available for account uploads."

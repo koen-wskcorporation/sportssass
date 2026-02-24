@@ -1,4 +1,5 @@
 import { Alert } from "@/components/ui/alert";
+import type { Metadata } from "next";
 import { AssetTile } from "@/components/ui/asset-tile";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPickerInput } from "@/components/ui/color-picker-input";
@@ -9,6 +10,10 @@ import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { can } from "@/lib/permissions/can";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { saveOrgBrandingAction } from "./actions";
+
+export const metadata: Metadata = {
+  title: "Branding"
+};
 
 const errorMessageByCode: Record<string, string> = {
   invalid_accent: "Accent color must be a valid hex value.",
@@ -69,7 +74,7 @@ export default async function OrgBrandingSettingsPage({
                     orgSlug={orgSlug}
                     previewAlt={`${orgContext.orgName} logo`}
                     purpose="org-logo"
-                    specificationText="PNG, JPG, WEBP, or SVG"
+                    specificationText="PNG, JPG, WEBP, HEIC, or SVG"
                     title="Org Logo"
                   />
                 </FormField>
@@ -95,7 +100,7 @@ export default async function OrgBrandingSettingsPage({
                     orgSlug={orgSlug}
                     previewAlt={`${orgContext.orgName} icon`}
                     purpose="org-icon"
-                    specificationText="PNG, ICO, JPG, or SVG"
+                    specificationText="PNG, ICO, JPG, HEIC, or SVG"
                     title="Org Icon"
                   />
                 </FormField>

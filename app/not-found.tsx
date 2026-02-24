@@ -9,7 +9,7 @@ export default function NotFoundPage() {
 
   return (
     <main className="app-container flex min-h-[60vh] items-center py-10">
-      <Card className="mx-auto w-full max-w-3xl">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle>Page Not Found</CardTitle>
           <CardDescription>The page you requested does not exist.</CardDescription>

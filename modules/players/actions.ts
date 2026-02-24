@@ -25,7 +25,8 @@ const createPlayerSchema = z.object({
   dateOfBirth: z.string().trim().optional(),
   gender: textSchema.max(40).optional(),
   jerseySize: textSchema.max(40).optional(),
-  medicalNotes: textSchema.max(4000).optional()
+  medicalNotes: textSchema.max(4000).optional(),
+  birthCertificatePath: textSchema.max(500).optional()
 });
 
 const updatePlayerSchema = createPlayerSchema.extend({
@@ -146,7 +147,12 @@ export async function createPlayerAction(input: z.input<typeof createPlayerSchem
       dateOfBirth: normalizeOptional(payload.dateOfBirth),
       gender: normalizeOptional(payload.gender),
       jerseySize: normalizeOptional(payload.jerseySize),
-      medicalNotes: normalizeOptional(payload.medicalNotes)
+      medicalNotes: normalizeOptional(payload.medicalNotes),
+      metadataJson: payload.birthCertificatePath
+        ? {
+            birthCertificatePath: payload.birthCertificatePath
+          }
+        : {}
     });
 
     revalidatePath("/account/players");

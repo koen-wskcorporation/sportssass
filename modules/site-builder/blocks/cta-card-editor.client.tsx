@@ -98,7 +98,7 @@ export function CtaCardBlockEditorClient({ block, onChange, context }: BlockEdit
             orgSlug={context.orgSlug}
             previewAlt="CTA card preview"
             purpose="site-block-image"
-            specificationText="PNG, JPG, WEBP, or SVG"
+            specificationText="PNG, JPG, WEBP, HEIC, or SVG"
             title="Card image"
           />
         </FormField>

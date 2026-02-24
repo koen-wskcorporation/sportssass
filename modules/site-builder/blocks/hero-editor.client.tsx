@@ -88,7 +88,7 @@ export function HeroBlockEditorClient({ block, context, onChange }: BlockEditorP
             orgSlug={context.orgSlug}
             previewAlt="Hero preview"
             purpose="site-hero"
-            specificationText="PNG, JPG, WEBP, or SVG"
+            specificationText="PNG, JPG, WEBP, HEIC, or SVG"
             title="Hero background image"
           />
         </FormField>

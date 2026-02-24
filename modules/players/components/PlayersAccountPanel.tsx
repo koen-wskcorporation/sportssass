@@ -3,11 +3,13 @@
 import { Pencil, Plus } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { Alert } from "@/components/ui/alert";
+import { AssetTile } from "@/components/ui/asset-tile";
 import { Button } from "@/components/ui/button";
+import { CalendarPicker } from "@/components/ui/calendar-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
@@ -42,6 +44,17 @@ const GENDER_PRESET_OPTIONS = [
   { value: "other", label: "Other" }
 ] as const;
 
+const GUARDIAN_RELATIONSHIP_PRESET_OPTIONS = [
+  { value: "", label: "Select relationship" },
+  { value: "parent", label: "Parent" },
+  { value: "legal guardian", label: "Legal guardian" },
+  { value: "grandparent", label: "Grandparent" },
+  { value: "sibling", label: "Sibling" },
+  { value: "relative", label: "Relative" },
+  { value: "family friend", label: "Family friend" },
+  { value: "other", label: "Other (custom)" }
+] as const;
+
 function isPresetGender(value: string) {
   return value === "male" || value === "female" || value === "non-binary";
 }
@@ -72,18 +85,22 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
   const [players, setPlayers] = useState<PlayerWithGuardians[]>(() => sortPlayers(initialPlayers));
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isLinkGuardianOpen, setIsLinkGuardianOpen] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
 
   const [createDraftState, setCreateDraftState] = useState<PlayerDraft>(() => createDraft());
   const [editDraftState, setEditDraftState] = useState<PlayerDraft>(() => createDraft());
+  const [createBirthCertificatePath, setCreateBirthCertificatePath] = useState("");
   const [createGenderMode, setCreateGenderMode] = useState<string>("");
   const [editGenderMode, setEditGenderMode] = useState<string>("");
+  const [guardianLinkPlayerId, setGuardianLinkPlayerId] = useState<string | null>(null);
+  const [guardianLinkEmail, setGuardianLinkEmail] = useState("");
+  const [guardianRelationshipMode, setGuardianRelationshipMode] = useState<string>("");
+  const [guardianRelationshipValue, setGuardianRelationshipValue] = useState("");
 
   const [isCreating, startCreating] = useTransition();
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [isLinkingByPlayerId, setIsLinkingByPlayerId] = useState<Record<string, boolean>>({});
-  const [guardianEmailByPlayerId, setGuardianEmailByPlayerId] = useState<Record<string, string>>({});
-  const [guardianRelationshipByPlayerId, setGuardianRelationshipByPlayerId] = useState<Record<string, string>>({});
+  const [isLinkingGuardian, setIsLinkingGuardian] = useState(false);
 
   const sortedPlayers = useMemo(() => sortPlayers(players), [players]);
 
@@ -115,6 +132,7 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
     }
     setIsCreateOpen(false);
     setCreateDraftState(createDraft());
+    setCreateBirthCertificatePath("");
     setCreateGenderMode("");
   }
 
@@ -126,6 +144,26 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
     setEditingPlayerId(null);
     setEditDraftState(createDraft());
     setEditGenderMode("");
+  }
+
+  function openGuardianLinkDialog(playerId: string) {
+    setGuardianLinkPlayerId(playerId);
+    setGuardianLinkEmail("");
+    setGuardianRelationshipMode("");
+    setGuardianRelationshipValue("");
+    setIsLinkGuardianOpen(true);
+  }
+
+  function closeGuardianLinkDialog() {
+    if (isLinkingGuardian) {
+      return;
+    }
+
+    setIsLinkGuardianOpen(false);
+    setGuardianLinkPlayerId(null);
+    setGuardianLinkEmail("");
+    setGuardianRelationshipMode("");
+    setGuardianRelationshipValue("");
   }
 
   function updatePlayerInState(updatedPlayer: PlayerProfile) {
@@ -145,7 +183,10 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
     event.preventDefault();
 
     startCreating(async () => {
-      const result = await createPlayerAction(createDraftState);
+      const result = await createPlayerAction({
+        ...createDraftState,
+        birthCertificatePath: createBirthCertificatePath
+      });
 
       if (!result.ok) {
         toast({
@@ -210,26 +251,21 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
     })();
   }
 
-  function handleLinkGuardian(playerId: string) {
-    const email = guardianEmailByPlayerId[playerId] ?? "";
-    const relationship = guardianRelationshipByPlayerId[playerId] ?? "";
+  function handleLinkGuardian() {
+    if (!guardianLinkPlayerId) {
+      return;
+    }
 
-    setIsLinkingByPlayerId((current) => ({
-      ...current,
-      [playerId]: true
-    }));
+    setIsLinkingGuardian(true);
 
     void (async () => {
       const result = await linkGuardianByEmailAction({
-        playerId,
-        email,
-        relationship
+        playerId: guardianLinkPlayerId,
+        email: guardianLinkEmail,
+        relationship: guardianRelationshipValue
       });
 
-      setIsLinkingByPlayerId((current) => ({
-        ...current,
-        [playerId]: false
-      }));
+      setIsLinkingGuardian(false);
 
       if (!result.ok) {
         toast({
@@ -242,7 +278,7 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
 
       setPlayers((current) =>
         current.map((item) => {
-          if (item.player.id !== playerId) {
+          if (item.player.id !== guardianLinkPlayerId) {
             return item;
           }
 
@@ -253,27 +289,19 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
         })
       );
 
-      setGuardianEmailByPlayerId((current) => ({
-        ...current,
-        [playerId]: ""
-      }));
-      setGuardianRelationshipByPlayerId((current) => ({
-        ...current,
-        [playerId]: ""
-      }));
-
       toast({
         title: "Guardian linked",
         variant: "success"
       });
+      closeGuardianLinkDialog();
     })();
   }
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
+        <CardHeader className="p-4">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>Players</CardTitle>
               <CardDescription>Add and manage player profiles for registrations.</CardDescription>
@@ -324,186 +352,219 @@ export function PlayersAccountPanel({ currentUserId, initialPlayers }: PlayersAc
         })}
       </div>
 
-      <Dialog onClose={closeCreate} open={isCreateOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle>Add player</DialogTitle>
-            <DialogDescription>Create a new player profile for registration.</DialogDescription>
-          </DialogHeader>
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={handleCreatePlayer}>
-            <FormField label="First name">
-              <Input
-                onChange={(event) => setCreateDraftState((current) => ({ ...current, firstName: event.target.value }))}
-                required
-                value={createDraftState.firstName}
-              />
-            </FormField>
-            <FormField label="Last name">
-              <Input
-                onChange={(event) => setCreateDraftState((current) => ({ ...current, lastName: event.target.value }))}
-                required
-                value={createDraftState.lastName}
-              />
-            </FormField>
-            <FormField label="Date of birth">
-              <Input onChange={(event) => setCreateDraftState((current) => ({ ...current, dateOfBirth: event.target.value }))} type="date" value={createDraftState.dateOfBirth} />
-            </FormField>
-            <FormField label="Gender">
-              <Select
-                onChange={(event) => {
-                  const mode = event.target.value;
-                  setCreateGenderMode(mode);
+      <Panel
+        footer={
+          <>
+            <Button disabled={isCreating} onClick={closeCreate} type="button" variant="ghost">
+              Cancel
+            </Button>
+            <Button disabled={isCreating} form="create-player-form" loading={isCreating} type="submit">
+              {isCreating ? "Saving..." : "Create player"}
+            </Button>
+          </>
+        }
+        onClose={closeCreate}
+        open={isCreateOpen}
+        subtitle="Create a new player profile for registration."
+        title="Add player"
+      >
+        <form className="grid gap-3 md:grid-cols-2" id="create-player-form" onSubmit={handleCreatePlayer}>
+          <FormField label="First name">
+            <Input
+              onChange={(event) => setCreateDraftState((current) => ({ ...current, firstName: event.target.value }))}
+              required
+              value={createDraftState.firstName}
+            />
+          </FormField>
+          <FormField label="Last name">
+            <Input
+              onChange={(event) => setCreateDraftState((current) => ({ ...current, lastName: event.target.value }))}
+              required
+              value={createDraftState.lastName}
+            />
+          </FormField>
+          <FormField label="Date of birth">
+            <CalendarPicker onChange={(value) => setCreateDraftState((current) => ({ ...current, dateOfBirth: value }))} value={createDraftState.dateOfBirth} />
+          </FormField>
+          <FormField label="Gender">
+            <Select
+              onChange={(event) => {
+                const mode = event.target.value;
+                setCreateGenderMode(mode);
 
-                  if (mode === "other" || mode === "") {
-                    if (mode === "") {
-                      setCreateDraftState((current) => ({ ...current, gender: "" }));
-                    }
-                    return;
+                if (mode === "other" || mode === "") {
+                  if (mode === "") {
+                    setCreateDraftState((current) => ({ ...current, gender: "" }));
                   }
+                  return;
+                }
 
-                  setCreateDraftState((current) => ({ ...current, gender: mode }));
-                }}
-                options={GENDER_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={createGenderMode}
-              />
+                setCreateDraftState((current) => ({ ...current, gender: mode }));
+              }}
+              options={GENDER_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              value={createGenderMode}
+            />
+          </FormField>
+          {createGenderMode === "other" ? (
+            <FormField label="Gender (other)">
+              <Input onChange={(event) => setCreateDraftState((current) => ({ ...current, gender: event.target.value }))} value={createDraftState.gender} />
             </FormField>
-            {createGenderMode === "other" ? (
-              <FormField label="Gender (other)">
-                <Input onChange={(event) => setCreateDraftState((current) => ({ ...current, gender: event.target.value }))} value={createDraftState.gender} />
-              </FormField>
-            ) : null}
-            <FormField label="Jersey size">
-              <Input onChange={(event) => setCreateDraftState((current) => ({ ...current, jerseySize: event.target.value }))} value={createDraftState.jerseySize} />
-            </FormField>
-            <FormField className="md:col-span-2" label="Medical notes">
-              <Textarea
-                className="min-h-[90px]"
-                onChange={(event) => setCreateDraftState((current) => ({ ...current, medicalNotes: event.target.value }))}
-                value={createDraftState.medicalNotes}
-              />
-            </FormField>
-            <div className="md:col-span-2 flex items-center gap-2">
-              <Button disabled={isCreating} loading={isCreating} type="submit">
-                {isCreating ? "Saving..." : "Create player"}
-              </Button>
-              <Button disabled={isCreating} onClick={closeCreate} type="button" variant="ghost">
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          ) : null}
+          <FormField className="md:col-span-2" label="Birth certificate (optional)">
+            <AssetTile
+              constraints={{
+                accept: ".pdf,image/*",
+                maxSizeMB: 10,
+                aspect: "free"
+              }}
+              emptyLabel="Upload birth certificate"
+              fit="contain"
+              kind="account"
+              onChange={(asset) => setCreateBirthCertificatePath(asset.path)}
+              onRemove={() => setCreateBirthCertificatePath("")}
+              previewAlt="Birth certificate upload"
+              purpose="birth-certificate"
+              specificationText="PDF, JPG, PNG, WEBP, HEIC, or HEIF"
+              title="Birth certificate"
+            />
+          </FormField>
+          <FormField className="md:col-span-2" label="Medical notes">
+            <Textarea
+              className="min-h-[90px]"
+              onChange={(event) => setCreateDraftState((current) => ({ ...current, medicalNotes: event.target.value }))}
+              value={createDraftState.medicalNotes}
+            />
+          </FormField>
+        </form>
+      </Panel>
 
-      <Dialog onClose={closeEdit} open={isEditOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle>Edit player</DialogTitle>
-            <DialogDescription>
-              {editingPlayer ? `${editingPlayer.firstName} ${editingPlayer.lastName}` : "Update player details."}
-            </DialogDescription>
-          </DialogHeader>
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={handleUpdatePlayer}>
-            <FormField label="First name">
-              <Input onChange={(event) => setEditDraftState((current) => ({ ...current, firstName: event.target.value }))} required value={editDraftState.firstName} />
-            </FormField>
-            <FormField label="Last name">
-              <Input onChange={(event) => setEditDraftState((current) => ({ ...current, lastName: event.target.value }))} required value={editDraftState.lastName} />
-            </FormField>
-            <FormField label="Date of birth">
-              <Input disabled value={editDraftState.dateOfBirth || "Not set"} />
-            </FormField>
-            <FormField label="Gender">
-              <Select
-                onChange={(event) => {
-                  const mode = event.target.value;
-                  setEditGenderMode(mode);
+      <Panel
+        footer={
+          <>
+            <Button disabled={isSavingEdit} onClick={closeEdit} type="button" variant="ghost">
+              Cancel
+            </Button>
+            <Button disabled={isSavingEdit} form="edit-player-form" loading={isSavingEdit} type="submit">
+              {isSavingEdit ? "Saving..." : "Save player"}
+            </Button>
+          </>
+        }
+        onClose={closeEdit}
+        open={isEditOpen}
+        subtitle={editingPlayer ? `${editingPlayer.firstName} ${editingPlayer.lastName}` : "Update player details."}
+        title="Edit player"
+      >
+        <form className="grid gap-3 md:grid-cols-2" id="edit-player-form" onSubmit={handleUpdatePlayer}>
+          <FormField label="First name">
+            <Input onChange={(event) => setEditDraftState((current) => ({ ...current, firstName: event.target.value }))} required value={editDraftState.firstName} />
+          </FormField>
+          <FormField label="Last name">
+            <Input onChange={(event) => setEditDraftState((current) => ({ ...current, lastName: event.target.value }))} required value={editDraftState.lastName} />
+          </FormField>
+          <FormField label="Date of birth">
+            <Input disabled value={editDraftState.dateOfBirth || "Not set"} />
+          </FormField>
+          <FormField label="Gender">
+            <Select
+              onChange={(event) => {
+                const mode = event.target.value;
+                setEditGenderMode(mode);
 
-                  if (mode === "other" || mode === "") {
-                    if (mode === "") {
-                      setEditDraftState((current) => ({ ...current, gender: "" }));
-                    }
-                    return;
+                if (mode === "other" || mode === "") {
+                  if (mode === "") {
+                    setEditDraftState((current) => ({ ...current, gender: "" }));
                   }
+                  return;
+                }
 
-                  setEditDraftState((current) => ({ ...current, gender: mode }));
-                }}
-                options={GENDER_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={editGenderMode}
-              />
+                setEditDraftState((current) => ({ ...current, gender: mode }));
+              }}
+              options={GENDER_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              value={editGenderMode}
+            />
+          </FormField>
+          {editGenderMode === "other" ? (
+            <FormField label="Gender (other)">
+              <Input onChange={(event) => setEditDraftState((current) => ({ ...current, gender: event.target.value }))} value={editDraftState.gender} />
             </FormField>
-            {editGenderMode === "other" ? (
-              <FormField label="Gender (other)">
-                <Input onChange={(event) => setEditDraftState((current) => ({ ...current, gender: event.target.value }))} value={editDraftState.gender} />
-              </FormField>
-            ) : null}
-            <FormField label="Jersey size">
-              <Input onChange={(event) => setEditDraftState((current) => ({ ...current, jerseySize: event.target.value }))} value={editDraftState.jerseySize} />
-            </FormField>
-            <FormField className="md:col-span-2" label="Medical notes">
-              <Textarea className="min-h-[90px]" onChange={(event) => setEditDraftState((current) => ({ ...current, medicalNotes: event.target.value }))} value={editDraftState.medicalNotes} />
-            </FormField>
-            <div className="space-y-2 md:col-span-2">
-              <p className="text-sm font-semibold text-text">Guardians</p>
-              {editingPlayerWithGuardians && editingPlayerWithGuardians.guardians.length === 0 ? <Alert variant="info">No guardians linked.</Alert> : null}
-              {editingPlayerWithGuardians?.guardians.map((guardian) => (
-                <div className="rounded-control border bg-surface px-3 py-2 text-xs text-text-muted" key={guardian.id}>
-                  <p>User ID: {guardian.guardianUserId}</p>
-                  <p>
-                    Relationship: {guardian.relationship ?? "Unspecified"} · {guardian.canManage ? "Can manage" : "Read only"}
-                  </p>
-                </div>
-              ))}
-            </div>
-            {editingPlayerId ? (
-              <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
-                <FormField className="md:col-span-2" label="Link guardian by existing account email">
-                  <Input
-                    onChange={(event) =>
-                      setGuardianEmailByPlayerId((current) => ({
-                        ...current,
-                        [editingPlayerId]: event.target.value
-                      }))
-                    }
-                    required
-                    type="email"
-                    value={guardianEmailByPlayerId[editingPlayerId] ?? ""}
-                  />
-                </FormField>
-                <FormField className="md:col-span-2" label="Relationship">
-                  <Input
-                    onChange={(event) =>
-                      setGuardianRelationshipByPlayerId((current) => ({
-                        ...current,
-                        [editingPlayerId]: event.target.value
-                      }))
-                    }
-                    value={guardianRelationshipByPlayerId[editingPlayerId] ?? ""}
-                  />
-                </FormField>
-                <div className="md:col-span-2">
-                  <Button
-                    disabled={isLinkingByPlayerId[editingPlayerId] ?? false}
-                    loading={isLinkingByPlayerId[editingPlayerId] ?? false}
-                    onClick={() => handleLinkGuardian(editingPlayerId)}
-                    type="button"
-                    variant="secondary"
-                  >
-                    {isLinkingByPlayerId[editingPlayerId] ? "Linking..." : "Link guardian"}
-                  </Button>
-                </div>
+          ) : null}
+          <FormField label="Jersey size">
+            <Input onChange={(event) => setEditDraftState((current) => ({ ...current, jerseySize: event.target.value }))} value={editDraftState.jerseySize} />
+          </FormField>
+          <FormField className="md:col-span-2" label="Medical notes">
+            <Textarea className="min-h-[90px]" onChange={(event) => setEditDraftState((current) => ({ ...current, medicalNotes: event.target.value }))} value={editDraftState.medicalNotes} />
+          </FormField>
+          <div className="space-y-2 md:col-span-2">
+            <p className="text-sm font-semibold text-text">Guardians</p>
+            {editingPlayerWithGuardians && editingPlayerWithGuardians.guardians.length === 0 ? <Alert variant="info">No guardians linked.</Alert> : null}
+            {editingPlayerWithGuardians?.guardians.map((guardian) => (
+              <div className="rounded-control border bg-surface px-3 py-2 text-xs text-text-muted" key={guardian.id}>
+                <p>User ID: {guardian.guardianUserId}</p>
+                <p>
+                  Relationship: {guardian.relationship ?? "Unspecified"} · {guardian.canManage ? "Can manage" : "Read only"}
+                </p>
               </div>
+            ))}
+            {editingPlayerId ? (
+              <Button onClick={() => openGuardianLinkDialog(editingPlayerId)} type="button" variant="secondary">
+                Link guardian
+              </Button>
             ) : null}
-            <div className="md:col-span-2 flex items-center gap-2">
-              <Button disabled={isSavingEdit} loading={isSavingEdit} type="submit" variant="secondary">
-                {isSavingEdit ? "Saving..." : "Save player"}
-              </Button>
-              <Button disabled={isSavingEdit} onClick={closeEdit} type="button" variant="ghost">
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </form>
+      </Panel>
+
+      <Panel
+        footer={
+          <>
+            <Button disabled={isLinkingGuardian} onClick={closeGuardianLinkDialog} type="button" variant="ghost">
+              Cancel
+            </Button>
+            <Button
+              disabled={!guardianLinkPlayerId || !guardianLinkEmail || isLinkingGuardian}
+              loading={isLinkingGuardian}
+              onClick={handleLinkGuardian}
+              type="button"
+            >
+              {isLinkingGuardian ? "Linking..." : "Link guardian"}
+            </Button>
+          </>
+        }
+        onClose={closeGuardianLinkDialog}
+        open={isLinkGuardianOpen}
+        subtitle="Invite an existing account to access this player and set their relationship."
+        title="Link guardian"
+      >
+        <div className="space-y-3">
+          <FormField label="Guardian account email">
+            <Input onChange={(event) => setGuardianLinkEmail(event.target.value)} required type="email" value={guardianLinkEmail} />
+          </FormField>
+          <FormField label="Relationship to player">
+            <Select
+              onChange={(event) => {
+                const mode = event.target.value;
+                setGuardianRelationshipMode(mode);
+
+                if (mode === "other" || mode === "") {
+                  if (mode === "") {
+                    setGuardianRelationshipValue("");
+                  }
+                  return;
+                }
+
+                setGuardianRelationshipValue(mode);
+              }}
+              options={GUARDIAN_RELATIONSHIP_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              value={guardianRelationshipMode}
+            />
+          </FormField>
+          {guardianRelationshipMode === "other" ? (
+            <FormField label="Relationship (custom)">
+              <Input onChange={(event) => setGuardianRelationshipValue(event.target.value)} value={guardianRelationshipValue} />
+            </FormField>
+          ) : null}
+        </div>
+      </Panel>
     </div>
   );
 }

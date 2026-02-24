@@ -10,52 +10,60 @@ export type UploadPurposeConfig = {
   defaultAspect?: UploadAspectMode;
 };
 
+const defaultImageExtensions = ["png", "jpg", "jpeg", "webp", "svg", "heic", "heif"];
+
 export const uploadPurposeConfigByPurpose: Record<UploadPurpose, UploadPurposeConfig> = {
   "org-logo": {
     bucket: "org-assets",
     maxSizeMB: 10,
-    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
+    allowedExtensions: defaultImageExtensions,
     orgPermission: "org.branding.write",
     defaultAspect: "free"
   },
   "org-icon": {
     bucket: "org-assets",
     maxSizeMB: 10,
-    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg", "ico"],
+    allowedExtensions: [...defaultImageExtensions, "ico"],
     orgPermission: "org.branding.write",
     defaultAspect: "square"
   },
   "program-cover": {
     bucket: "org-assets",
     maxSizeMB: 10,
-    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
+    allowedExtensions: defaultImageExtensions,
     orgPermission: "programs.write",
     defaultAspect: "wide"
   },
   "profile-photo": {
     bucket: "account-assets",
     maxSizeMB: 5,
-    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
+    allowedExtensions: defaultImageExtensions,
     defaultAspect: "square"
+  },
+  "birth-certificate": {
+    bucket: "account-assets",
+    maxSizeMB: 10,
+    allowedExtensions: ["pdf", "png", "jpg", "jpeg", "webp", "heic", "heif"],
+    defaultAspect: "free"
   },
   "site-hero": {
     bucket: "org-site-assets",
     maxSizeMB: 10,
-    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
+    allowedExtensions: defaultImageExtensions,
     orgPermission: "org.pages.write",
     defaultAspect: "wide"
   },
   "site-block-image": {
     bucket: "org-site-assets",
     maxSizeMB: 10,
-    allowedExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
+    allowedExtensions: defaultImageExtensions,
     orgPermission: "org.pages.write",
     defaultAspect: "wide"
   },
   attachment: {
     bucket: "org-site-assets",
     maxSizeMB: 10,
-    allowedExtensions: ["pdf", "txt", "csv", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg", "webp", "svg"],
+    allowedExtensions: ["pdf", "txt", "csv", "doc", "docx", "xls", "xlsx", ...defaultImageExtensions],
     orgPermission: "org.manage.read",
     defaultAspect: "free"
   }

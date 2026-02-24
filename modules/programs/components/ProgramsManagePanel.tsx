@@ -7,9 +7,10 @@ import { Plus } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CalendarPicker } from "@/components/ui/calendar-picker";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetTile } from "@/components/ui/asset-tile";
@@ -108,7 +109,7 @@ export function ProgramsManagePanel({ orgSlug, programs, canWrite = true }: Prog
       setStartDate("");
       setEndDate("");
       setCoverImagePath("");
-      router.push(`/${orgSlug}/manage/programs/${result.data.programId}`);
+      router.push(`/${orgSlug}/tools/programs/${result.data.programId}`);
     });
   }
 
@@ -128,7 +129,7 @@ export function ProgramsManagePanel({ orgSlug, programs, canWrite = true }: Prog
         <CardContent className="space-y-3">
           {sortedPrograms.length === 0 ? <Alert variant="info">No programs yet.</Alert> : null}
           {sortedPrograms.map((program) => (
-            <Link className="block rounded-control border bg-surface px-3 py-3 hover:bg-surface-muted" href={`/${orgSlug}/manage/programs/${program.id}`} key={program.id}>
+            <Link className="block rounded-control border bg-surface px-3 py-3 hover:bg-surface-muted" href={`/${orgSlug}/tools/programs/${program.id}`} key={program.id}>
               <p className="font-semibold text-text">{program.name}</p>
               <p className="text-xs text-text-muted">
                 {program.programType === "custom" ? program.customTypeLabel ?? "Custom" : program.programType} · {program.status}
@@ -139,101 +140,102 @@ export function ProgramsManagePanel({ orgSlug, programs, canWrite = true }: Prog
         </CardContent>
       </Card>
 
-      <Dialog onClose={() => setIsCreateOpen(false)} open={isCreateOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle>Create program</DialogTitle>
-            <DialogDescription>Set up leagues, seasons, clinics, and custom programs.</DialogDescription>
-          </DialogHeader>
-          <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreate}>
-            <FormField label="Program name">
-              <Input disabled={!canWrite} onChange={(event) => setName(event.target.value)} required value={name} />
+      <Panel
+        footer={
+          <>
+            <Button onClick={() => setIsCreateOpen(false)} type="button" variant="ghost">
+              Cancel
+            </Button>
+            <Button disabled={isSaving || !canWrite} form="create-program-form" loading={isSaving} type="submit">
+              {isSaving ? "Saving..." : "Create program"}
+            </Button>
+          </>
+        }
+        onClose={() => setIsCreateOpen(false)}
+        open={isCreateOpen}
+        subtitle="Set up leagues, seasons, clinics, and custom programs."
+        title="Create program"
+      >
+        <form className="grid gap-4 md:grid-cols-2" id="create-program-form" onSubmit={handleCreate}>
+          <FormField label="Program name">
+            <Input disabled={!canWrite} onChange={(event) => setName(event.target.value)} required value={name} />
+          </FormField>
+          <FormField hint="Auto-generated from name if blank." label="Slug">
+            <Input
+              disabled={!canWrite}
+              onChange={(event) => setSlug(slugify(event.target.value))}
+              slugValidation={{
+                kind: "program",
+                orgSlug
+              }}
+              value={slug}
+            />
+          </FormField>
+          <FormField label="Type">
+            <Select
+              disabled={!canWrite}
+              onChange={(event) => setProgramType(event.target.value as "league" | "season" | "clinic" | "custom")}
+              options={[
+                { value: "league", label: "League" },
+                { value: "season", label: "Season" },
+                { value: "clinic", label: "Clinic" },
+                { value: "custom", label: "Custom" }
+              ]}
+              value={programType}
+            />
+          </FormField>
+          <FormField label="Status">
+            <Select
+              disabled={!canWrite}
+              onChange={(event) => setStatus(event.target.value as "draft" | "published" | "archived")}
+              options={[
+                { value: "draft", label: "Draft" },
+                { value: "published", label: "Published" },
+                { value: "archived", label: "Archived" }
+              ]}
+              value={status}
+            />
+          </FormField>
+          {programType === "custom" ? (
+            <FormField className="md:col-span-2" label="Custom type label">
+              <Input disabled={!canWrite} onChange={(event) => setCustomTypeLabel(event.target.value)} required value={customTypeLabel} />
             </FormField>
-            <FormField hint="Auto-generated from name if blank." label="Slug">
-              <Input
-                disabled={!canWrite}
-                onChange={(event) => setSlug(slugify(event.target.value))}
-                slugValidation={{
-                  kind: "program",
-                  orgSlug
-                }}
-                value={slug}
-              />
-            </FormField>
-            <FormField label="Type">
-              <Select
-                disabled={!canWrite}
-                onChange={(event) => setProgramType(event.target.value as "league" | "season" | "clinic" | "custom")}
-                options={[
-                  { value: "league", label: "League" },
-                  { value: "season", label: "Season" },
-                  { value: "clinic", label: "Clinic" },
-                  { value: "custom", label: "Custom" }
-                ]}
-                value={programType}
-              />
-            </FormField>
-            <FormField label="Status">
-              <Select
-                disabled={!canWrite}
-                onChange={(event) => setStatus(event.target.value as "draft" | "published" | "archived")}
-                options={[
-                  { value: "draft", label: "Draft" },
-                  { value: "published", label: "Published" },
-                  { value: "archived", label: "Archived" }
-                ]}
-                value={status}
-              />
-            </FormField>
-            {programType === "custom" ? (
-              <FormField className="md:col-span-2" label="Custom type label">
-                <Input disabled={!canWrite} onChange={(event) => setCustomTypeLabel(event.target.value)} required value={customTypeLabel} />
-              </FormField>
-            ) : null}
-            <FormField className="md:col-span-2" label="Description">
-              <Textarea className="min-h-[90px]" disabled={!canWrite} onChange={(event) => setDescription(event.target.value)} value={description} />
-            </FormField>
-            <FormField className="md:col-span-2" label="Cover photo">
-              <AssetTile
-                constraints={{
-                  accept: "image/*,.svg",
-                  maxSizeMB: 10,
-                  aspect: "wide",
-                  recommendedPx: {
-                    w: 1600,
-                    h: 900
-                  }
-                }}
-                disabled={!canWrite}
-                fit="cover"
-                initialPath={coverImagePath || null}
-                initialUrl={getOrgAssetPublicUrl(coverImagePath)}
-                kind="org"
-                onChange={(asset) => setCoverImagePath(asset.path)}
-                onRemove={() => setCoverImagePath("")}
-                orgSlug={orgSlug}
-                purpose="program-cover"
-                specificationText="PNG, JPG, WEBP, or SVG"
-                title="Program cover"
-              />
-            </FormField>
-            <FormField label="Start date">
-              <Input disabled={!canWrite} onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
-            </FormField>
-            <FormField label="End date">
-              <Input disabled={!canWrite} onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
-            </FormField>
-            <div className="md:col-span-2 flex gap-2">
-              <Button disabled={isSaving || !canWrite} loading={isSaving} type="submit">
-                {isSaving ? "Saving..." : "Create program"}
-              </Button>
-              <Button onClick={() => setIsCreateOpen(false)} type="button" variant="ghost">
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          ) : null}
+          <FormField className="md:col-span-2" label="Description">
+            <Textarea className="min-h-[90px]" disabled={!canWrite} onChange={(event) => setDescription(event.target.value)} value={description} />
+          </FormField>
+          <FormField className="md:col-span-2" label="Cover photo">
+            <AssetTile
+              constraints={{
+                accept: "image/*,.svg",
+                maxSizeMB: 10,
+                aspect: "wide",
+                recommendedPx: {
+                  w: 1600,
+                  h: 900
+                }
+              }}
+              disabled={!canWrite}
+              fit="cover"
+              initialPath={coverImagePath || null}
+              initialUrl={getOrgAssetPublicUrl(coverImagePath)}
+              kind="org"
+              onChange={(asset) => setCoverImagePath(asset.path)}
+              onRemove={() => setCoverImagePath("")}
+              orgSlug={orgSlug}
+              purpose="program-cover"
+              specificationText="PNG, JPG, WEBP, HEIC, or SVG"
+              title="Program cover"
+            />
+          </FormField>
+          <FormField label="Start date">
+            <CalendarPicker disabled={!canWrite} onChange={setStartDate} value={startDate} />
+          </FormField>
+          <FormField label="End date">
+            <CalendarPicker disabled={!canWrite} onChange={setEndDate} value={endDate} />
+          </FormField>
+        </form>
+      </Panel>
     </div>
   );
 }

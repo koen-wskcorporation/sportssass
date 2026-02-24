@@ -1,10 +1,16 @@
 import { notFound, redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
+import { FormPageTabs } from "@/modules/forms/components/FormPageTabs";
 import { FormSubmissionsPanel } from "@/modules/forms/components/FormSubmissionsPanel";
 import { getFormById, listFormSubmissions } from "@/modules/forms/db/queries";
+
+export const metadata: Metadata = {
+  title: "Form Submissions"
+};
 
 export default async function OrgManageFormSubmissionsPage({
   params
@@ -35,6 +41,7 @@ export default async function OrgManageFormSubmissionsPage({
         showBorder={false}
         title={`${form.name} Submissions`}
       />
+      <FormPageTabs active="submissions" formId={form.id} orgSlug={orgContext.orgSlug} />
       {!canWriteForms ? <Alert variant="info">You have read-only access to submissions.</Alert> : null}
       <FormSubmissionsPanel canWrite={canWriteForms} formId={form.id} orgSlug={orgContext.orgSlug} submissions={submissions} />
     </div>

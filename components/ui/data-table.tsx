@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowDown, ArrowUp, ArrowUpDown, GripVertical, Search, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
@@ -181,6 +181,8 @@ export function DataTable<TItem>({
   rowActionsLabel = "Actions",
   renderRowActions
 }: DataTableProps<TItem>) {
+  const [isHydrated, setIsHydrated] = useState(false);
+  const dndContextId = useId();
   const [searchQuery, setSearchQuery] = useState("");
   const [isColumnsDialogOpen, setIsColumnsDialogOpen] = useState(false);
   const sensors = useSensors(
@@ -212,6 +214,10 @@ export function DataTable<TItem>({
   const [sortDirection, setSortDirection] = useState<SortDirection>(defaultSort?.direction ?? "asc");
 
   const columnByKey = useMemo(() => new Map(columns.map((column) => [column.key, column])), [columns]);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     setColumnOrderKeys((current) => normalizeColumnOrder(current, allColumnKeys));
@@ -409,26 +415,122 @@ export function DataTable<TItem>({
           </div>
         </div>
 
-        <DndContext collisionDetection={closestCenter} onDragEnd={handleInlineHeaderReorder} sensors={sensors}>
+        {isHydrated ? (
+          <DndContext collisionDetection={closestCenter} id={dndContextId} onDragEnd={handleInlineHeaderReorder} sensors={sensors}>
+            <Table aria-label={ariaLabel}>
+              <TableHeader className="sticky top-0 z-10 bg-surface-muted/90 backdrop-blur supports-[backdrop-filter]:bg-surface-muted/75">
+                <SortableContext items={visibleColumns.map((column) => column.key)} strategy={horizontalListSortingStrategy}>
+                  <TableRow>
+                    {visibleColumns.map((column) => (
+                      <SortableHeaderCell
+                        columnKey={column.key}
+                        headerClassName={column.headerClassName}
+                        isSorted={sortColumnKey === column.key}
+                        key={column.key}
+                        label={column.label}
+                        onSortToggle={handleSortToggle}
+                        sortDirection={sortDirection}
+                        sortable={Boolean(column.sortable)}
+                      />
+                    ))}
+                    {renderRowActions ? <TableHead className="text-right">{rowActionsLabel}</TableHead> : null}
+                  </TableRow>
+                </SortableContext>
+              </TableHeader>
+              <TableBody>
+                {filteredAndSortedRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell className="py-10 text-center text-text-muted" colSpan={visibleColumns.length + (renderRowActions ? 1 : 0)}>
+                      {emptyState}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredAndSortedRows.map((item) => {
+                    const key = rowKey(item);
+                    const isSelected = selectedRowKey === key;
+
+                    return (
+                      <TableRow
+                        className={cn(
+                          onRowClick ? "cursor-pointer" : undefined,
+                          isSelected ? "bg-surface-muted/60" : undefined,
+                          getRowClassName?.(item)
+                        )}
+                        key={key}
+                        onClick={(event) => {
+                          if (!onRowClick || isInteractiveTarget(event.target)) {
+                            return;
+                          }
+
+                          onRowClick(item);
+                        }}
+                        onKeyDown={(event) => {
+                          if (!onRowClick || isInteractiveTarget(event.target)) {
+                            return;
+                          }
+
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onRowClick(item);
+                          }
+                        }}
+                        role={onRowClick ? "button" : undefined}
+                        tabIndex={onRowClick ? 0 : undefined}
+                      >
+                        {visibleColumns.map((column) => (
+                          <TableCell className={cn(column.className)} key={column.key}>
+                            {column.renderCell(item)}
+                          </TableCell>
+                        ))}
+                        {renderRowActions ? (
+                          <TableCell className="w-1 whitespace-nowrap text-right">
+                            <div className="inline-flex items-center gap-1" data-row-action="true">
+                              {renderRowActions(item)}
+                            </div>
+                          </TableCell>
+                        ) : null}
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </DndContext>
+        ) : (
           <Table aria-label={ariaLabel}>
             <TableHeader className="sticky top-0 z-10 bg-surface-muted/90 backdrop-blur supports-[backdrop-filter]:bg-surface-muted/75">
-              <SortableContext items={visibleColumns.map((column) => column.key)} strategy={horizontalListSortingStrategy}>
-                <TableRow>
-                  {visibleColumns.map((column) => (
-                    <SortableHeaderCell
-                      columnKey={column.key}
-                      headerClassName={column.headerClassName}
-                      isSorted={sortColumnKey === column.key}
-                      key={column.key}
-                      label={column.label}
-                      onSortToggle={handleSortToggle}
-                      sortDirection={sortDirection}
-                      sortable={Boolean(column.sortable)}
-                    />
-                  ))}
-                  {renderRowActions ? <TableHead className="text-right">{rowActionsLabel}</TableHead> : null}
-                </TableRow>
-              </SortableContext>
+              <TableRow>
+                {visibleColumns.map((column) => (
+                  <TableHead className={cn(column.headerClassName)} key={column.key}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-control text-text-muted">
+                        <GripVertical aria-hidden className="h-3.5 w-3.5" />
+                      </span>
+                      {column.sortable ? (
+                        <button
+                          className="inline-flex items-center gap-1 text-left text-[12px] font-semibold text-text-muted hover:text-text"
+                          onClick={() => handleSortToggle(column.key)}
+                          type="button"
+                        >
+                          {column.label}
+                          {sortColumnKey === column.key ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp aria-hidden className="h-3.5 w-3.5" />
+                            ) : (
+                              <ArrowDown aria-hidden className="h-3.5 w-3.5" />
+                            )
+                          ) : (
+                            <ArrowUpDown aria-hidden className="h-3.5 w-3.5 opacity-60" />
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-[12px] font-semibold text-text-muted">{column.label}</span>
+                      )}
+                    </div>
+                  </TableHead>
+                ))}
+                {renderRowActions ? <TableHead className="text-right">{rowActionsLabel}</TableHead> : null}
+              </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAndSortedRows.length === 0 ? (
@@ -488,36 +590,12 @@ export function DataTable<TItem>({
               )}
             </TableBody>
           </Table>
-        </DndContext>
+        )}
       </div>
 
-      <Dialog onClose={() => setIsColumnsDialogOpen(false)} open={isColumnsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Table columns</DialogTitle>
-            <DialogDescription>Show or hide columns. Drag headers inline to reorder.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            {orderedColumns.map((column) => {
-              const checked = visibleColumnKeys.includes(column.key);
-
-              return (
-                <label
-                  className={cn(
-                    "flex items-center justify-between gap-3 rounded-control border bg-surface px-3 py-2 text-sm",
-                    !checked ? "opacity-80" : undefined
-                  )}
-                  key={column.key}
-                >
-                  <span>{column.label}</span>
-                  <input checked={checked} onChange={(event) => handleColumnToggle(column.key, event.target.checked)} type="checkbox" />
-                </label>
-              );
-            })}
-          </div>
-
-          <DialogFooter>
+      <Panel
+        footer={
+          <>
             <Button
               onClick={() => {
                 setColumnOrderKeys(allColumnKeys);
@@ -530,9 +608,32 @@ export function DataTable<TItem>({
             <Button onClick={() => setIsColumnsDialogOpen(false)} variant="secondary">
               Done
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+        onClose={() => setIsColumnsDialogOpen(false)}
+        open={isColumnsDialogOpen}
+        subtitle="Show or hide columns. Drag headers inline to reorder."
+        title="Table columns"
+      >
+        <div className="space-y-2">
+          {orderedColumns.map((column) => {
+            const checked = visibleColumnKeys.includes(column.key);
+
+            return (
+              <label
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-control border bg-surface px-3 py-2 text-sm",
+                  !checked ? "opacity-80" : undefined
+                )}
+                key={column.key}
+              >
+                <span>{column.label}</span>
+                <input checked={checked} onChange={(event) => handleColumnToggle(column.key, event.target.checked)} type="checkbox" />
+              </label>
+            );
+          })}
+        </div>
+      </Panel>
     </>
   );
 }

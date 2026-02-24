@@ -16,7 +16,7 @@ type DashboardSectionProps = {
 
 export function DashboardShell({ title, subtitle, actions, children }: DashboardShellProps) {
   return (
-    <main className="app-container py-8 md:py-10">
+    <main className="app-shell w-full px-6 py-8 md:px-8 md:py-10">
       <div className="space-y-8">
         <PageHeader actions={actions} description={subtitle} title={title} />
         <div className="space-y-8">{children}</div>

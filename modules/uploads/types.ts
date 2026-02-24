@@ -24,6 +24,7 @@ export type UploadPurpose =
   | "org-icon"
   | "program-cover"
   | "profile-photo"
+  | "birth-certificate"
   | "site-hero"
   | "site-block-image"
   | "attachment";

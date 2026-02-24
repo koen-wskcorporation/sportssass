@@ -220,8 +220,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }
 
     const image = isImageFile(file);
-    const canAdjustPosition = image && !shouldSkipImagePositionStep(activeRequest.options.purpose);
     const imageDimensions = image ? await readImageDimensions(file) : null;
+    const canAdjustPosition = image && Boolean(imageDimensions) && !shouldSkipImagePositionStep(activeRequest.options.purpose);
 
     setActiveRequest((current) => {
       if (!current || current.id !== requestId) {

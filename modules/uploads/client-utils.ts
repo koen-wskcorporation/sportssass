@@ -1,6 +1,6 @@
 import type { UploadCrop } from "@/modules/uploads/types";
 
-const imageExtensions = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif", "avif", "bmp", "ico"]);
+const imageExtensions = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif", "avif", "bmp", "ico", "heic", "heif"]);
 
 function normalizeExtension(value: string) {
   const normalized = value.trim().toLowerCase().replace(/^\./, "");
@@ -20,7 +20,16 @@ function matchesAcceptToken(file: File, tokenRaw: string) {
 
   if (token.endsWith("/*")) {
     const major = token.slice(0, -1);
-    return file.type.toLowerCase().startsWith(major);
+    if (file.type.toLowerCase().startsWith(major)) {
+      return true;
+    }
+
+    if (major === "image/") {
+      const extension = normalizeExtension(file.name.split(".").pop() ?? "");
+      return imageExtensions.has(extension);
+    }
+
+    return false;
   }
 
   return file.type.toLowerCase() === token;

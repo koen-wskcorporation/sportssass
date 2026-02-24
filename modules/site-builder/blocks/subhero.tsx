@@ -37,7 +37,7 @@ export function createDefaultSubheroConfig(context: BlockContext) {
 export function SubheroBlockRender({ block, context }: BlockRenderProps<"subhero">) {
   return (
     <section className="rounded-card border bg-surface p-6 shadow-card md:p-10">
-      <div className="max-w-3xl space-y-4">
+      <div className="w-full space-y-4">
         <h1 className="text-3xl font-semibold text-text md:text-5xl">{block.config.headline}</h1>
         <p className="text-sm text-text-muted md:text-lg">{block.config.subheadline}</p>
         {block.config.buttons.length > 0 ? (

@@ -118,7 +118,7 @@ export function AssetTile({
   return (
     <div className={cn("space-y-3", className)}>
       <div
-        className="relative w-full rounded-card border bg-surface p-4 shadow-card"
+        className="relative w-full overflow-hidden rounded-card border bg-surface p-4 shadow-card"
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
             setIsOverlayVisible(false);
@@ -147,40 +147,41 @@ export function AssetTile({
             </div>
           )}
 
-          <div
-            className={cn(
-              "absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[inherit] p-3 text-center text-white transition-opacity duration-200",
-              isOverlayVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-            )}
-            style={{ backgroundColor: overlayBackground }}
-          >
-            <div className="flex flex-wrap items-center justify-center gap-2">
+        </div>
+
+        <div
+          className={cn(
+            "absolute inset-0 z-10 flex flex-col items-center justify-center p-3 text-center text-white transition-opacity duration-200",
+            isOverlayVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          )}
+          style={{ backgroundColor: overlayBackground }}
+        >
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button
+              aria-label={title ? `Change ${title}` : "Change asset"}
+              disabled={disabled || isUploading}
+              loading={isUploading}
+              onClick={handleChangeAsset}
+              size="sm"
+              variant="secondary"
+            >
+              {changeLabel}
+            </Button>
+
+            {hasSelection ? (
               <Button
-                aria-label={title ? `Change ${title}` : "Change asset"}
-                disabled={disabled || isUploading}
-                loading={isUploading}
-                onClick={handleChangeAsset}
+                aria-label={title ? `Remove ${title}` : "Remove asset"}
+                disabled={disabled}
+                onClick={handleRemoveAsset}
                 size="sm"
                 variant="secondary"
               >
-                {changeLabel}
+                Remove
               </Button>
-
-              {hasSelection ? (
-                <Button
-                  aria-label={title ? `Remove ${title}` : "Remove asset"}
-                  disabled={disabled}
-                  onClick={handleRemoveAsset}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Remove
-                </Button>
-              ) : null}
-            </div>
-
-            {specificationText ? <p className="mt-2 text-[11px] text-white/85">{specificationText}</p> : null}
+            ) : null}
           </div>
+
+          {specificationText ? <p className="mt-2 text-[11px] text-white/85">{specificationText}</p> : null}
         </div>
       </div>
 

@@ -1,0 +1,820 @@
+"use client";
+
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { AlignLeft, CalendarDays, CheckSquare, GripVertical, Hash, List, Mail, Plus, Settings2, Trash2, Type } from "lucide-react";
+import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from "react";
+import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { CardDescription } from "@/components/ui/card";
+import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { FormField as FormFieldDefinition, FormFieldOption, FormFieldType, FormSchema } from "@/modules/forms/types";
+
+type FormFieldsVisualEditorProps = {
+  formName: string;
+  formDescription: string;
+  schema: FormSchema;
+  onChange: (nextSchema: FormSchema) => void;
+  view: "editor" | "preview";
+  disabled?: boolean;
+};
+
+type PaletteFieldConfig = {
+  type: FormFieldType;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
+type ActiveDrag =
+  | {
+      kind: "canvas";
+      fieldId: string;
+    };
+
+const paletteFields: PaletteFieldConfig[] = [
+  {
+    type: "text",
+    label: "Short text",
+    description: "Single-line response",
+    icon: Type
+  },
+  {
+    type: "textarea",
+    label: "Paragraph",
+    description: "Long-form response",
+    icon: AlignLeft
+  },
+  {
+    type: "email",
+    label: "Email",
+    description: "Valid email address",
+    icon: Mail
+  },
+  {
+    type: "number",
+    label: "Number",
+    description: "Numeric input",
+    icon: Hash
+  },
+  {
+    type: "date",
+    label: "Date",
+    description: "Date picker",
+    icon: CalendarDays
+  },
+  {
+    type: "select",
+    label: "Dropdown",
+    description: "Pick one option",
+    icon: List
+  },
+  {
+    type: "checkbox",
+    label: "Checkbox",
+    description: "True/false choice",
+    icon: CheckSquare
+  }
+];
+
+function toFieldName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+function makeId(prefix: string) {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function ensureUniqueFieldName(baseName: string, fields: FormFieldDefinition[], excludeFieldId?: string) {
+  const normalizedBase = toFieldName(baseName) || "field";
+
+  if (!fields.some((field) => field.id !== excludeFieldId && field.name === normalizedBase)) {
+    return normalizedBase;
+  }
+
+  let suffix = 2;
+  while (fields.some((field) => field.id !== excludeFieldId && field.name === `${normalizedBase}_${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${normalizedBase}_${suffix}`;
+}
+
+function getDefaultLabel(fieldType: FormFieldType) {
+  switch (fieldType) {
+    case "text":
+      return "Short text";
+    case "textarea":
+      return "Paragraph";
+    case "email":
+      return "Email";
+    case "number":
+      return "Number";
+    case "date":
+      return "Date";
+    case "select":
+      return "Dropdown";
+    case "checkbox":
+      return "Checkbox";
+    default:
+      return "Field";
+  }
+}
+
+function createFieldForType(fieldType: FormFieldType, fields: FormFieldDefinition[]): FormFieldDefinition {
+  const label = getDefaultLabel(fieldType);
+  const fieldName = ensureUniqueFieldName(label, fields);
+
+  return {
+    id: makeId("field"),
+    name: fieldName,
+    label,
+    type: fieldType,
+    required: false,
+    placeholder: fieldType === "checkbox" ? null : "",
+    helpText: null,
+    options:
+      fieldType === "select"
+        ? [
+            {
+              value: "option_1",
+              label: "Option 1"
+            },
+            {
+              value: "option_2",
+              label: "Option 2"
+            }
+          ]
+        : []
+  };
+}
+
+function ensureUniqueOptionValue(baseValue: string, options: FormFieldOption[], excludeIndex?: number) {
+  const normalizedBase = toFieldName(baseValue) || "option";
+  const hasCollision = (value: string) => options.some((option, index) => index !== excludeIndex && option.value === value);
+
+  if (!hasCollision(normalizedBase)) {
+    return normalizedBase;
+  }
+
+  let suffix = 2;
+  while (hasCollision(`${normalizedBase}_${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${normalizedBase}_${suffix}`;
+}
+
+function getPrimarySection(schema: FormSchema) {
+  const first = schema.sections[0];
+  if (first) {
+    return {
+      ...first,
+      fields: first.fields ?? []
+    };
+  }
+
+  return {
+    id: "section-general",
+    title: "General",
+    description: null,
+    fields: []
+  };
+}
+
+function transformToCss(transform: { x: number; y: number; scaleX: number; scaleY: number } | null) {
+  if (!transform) {
+    return undefined;
+  }
+
+  return `translate3d(${transform.x}px, ${transform.y}px, 0)`;
+}
+
+function PaletteItem({ config, disabled, onAdd }: { config: PaletteFieldConfig; disabled: boolean; onAdd: (fieldType: FormFieldType) => void }) {
+  const Icon = config.icon;
+
+  return (
+    <div className={cn("rounded-control border bg-surface px-3 py-3", disabled ? "opacity-55" : "")}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="mt-[1px] rounded-[8px] border bg-surface-muted p-1.5">
+          <Icon className="h-3.5 w-3.5 text-text-muted" />
+        </span>
+        <span className="flex-1">
+          <p className="text-sm font-semibold text-text">{config.label}</p>
+          <p className="text-xs text-text-muted">{config.description}</p>
+        </span>
+        <Button disabled={disabled} onClick={() => onAdd(config.type)} size="sm" type="button" variant="secondary">
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SortableCanvasField({
+  field,
+  selected,
+  disabled,
+  onDelete,
+  onSelect,
+  onOpenSettings
+}: {
+  field: FormFieldDefinition;
+  selected: boolean;
+  disabled: boolean;
+  onDelete: (fieldId: string) => void;
+  onSelect: (fieldId: string) => void;
+  onOpenSettings: (fieldId: string) => void;
+}) {
+  const { attributes, listeners, isDragging, setNodeRef, transform, transition } = useSortable({
+    id: field.id,
+    disabled
+  });
+
+  const style: CSSProperties = {
+    transform: transformToCss(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+    opacity: isDragging ? 0.7 : 1
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div
+        className="rounded-control border bg-surface p-3 transition-colors hover:bg-surface-muted"
+      >
+        <div className="flex items-start gap-2">
+          <button
+            aria-label="Drag field"
+            className={cn(
+              "mt-[2px] rounded-[8px] border bg-surface-muted p-1 text-text-muted",
+              disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
+            )}
+            disabled={disabled}
+            type="button"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+
+          <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(field.id)} type="button">
+            <p className="truncate text-sm font-semibold text-text">
+              {field.label || "Untitled field"}
+              {field.required ? <span className="ml-1 text-accent">*</span> : null}
+            </p>
+            <p className="truncate text-xs text-text-muted">
+              {field.type} · {field.name}
+            </p>
+          </button>
+
+          <Button
+            aria-label="Field settings"
+            className="h-8 w-8 px-0"
+            disabled={disabled}
+            onClick={() => onOpenSettings(field.id)}
+            type="button"
+            variant="ghost"
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
+
+          <Button
+            aria-label="Remove field"
+            className="h-8 w-8 px-0"
+            disabled={disabled}
+            onClick={() => onDelete(field.id)}
+            type="button"
+            variant="ghost"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderPreviewField(field: FormFieldDefinition) {
+  const label = field.required ? `${field.label || "Untitled field"} *` : field.label || "Untitled field";
+
+  if (field.type === "textarea") {
+    return (
+      <FormField key={field.id} label={label}>
+        <Textarea defaultValue="" disabled placeholder={field.placeholder ?? undefined} readOnly />
+        {field.helpText ? <p className="text-xs text-text-muted">{field.helpText}</p> : null}
+      </FormField>
+    );
+  }
+
+  if (field.type === "select") {
+    return (
+      <FormField key={field.id} label={label}>
+        <Select
+          disabled
+          options={[
+            { value: "", label: "Select" },
+            ...field.options.map((option) => ({
+              value: option.value,
+              label: option.label
+            }))
+          ]}
+          value=""
+        />
+        {field.helpText ? <p className="text-xs text-text-muted">{field.helpText}</p> : null}
+      </FormField>
+    );
+  }
+
+  if (field.type === "checkbox") {
+    return (
+      <div className="space-y-1" key={field.id}>
+        <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text">
+          <input disabled type="checkbox" />
+          {label}
+        </label>
+        {field.helpText ? <p className="text-xs text-text-muted">{field.helpText}</p> : null}
+      </div>
+    );
+  }
+
+  const inputType = field.type === "email" ? "email" : field.type === "number" ? "number" : field.type === "date" ? "date" : "text";
+
+  return (
+    <FormField key={field.id} label={label}>
+      <Input defaultValue="" disabled placeholder={field.placeholder ?? undefined} readOnly type={inputType} />
+      {field.helpText ? <p className="text-xs text-text-muted">{field.helpText}</p> : null}
+    </FormField>
+  );
+}
+
+export function FormFieldsVisualEditor({ formName, formDescription, schema, onChange, view, disabled = false }: FormFieldsVisualEditorProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8
+      }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  );
+  const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [libraryPanelOpen, setLibraryPanelOpen] = useState(false);
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+
+  const section = useMemo(() => getPrimarySection(schema), [schema]);
+  const fields = section.fields;
+
+  const { isOver: isCanvasDropTarget, setNodeRef: setCanvasDropRef } = useDroppable({
+    id: "canvas-dropzone",
+    disabled
+  });
+
+  useEffect(() => {
+    if (fields.length === 0) {
+      setSelectedFieldId(null);
+      return;
+    }
+
+    if (!selectedFieldId || !fields.some((field) => field.id === selectedFieldId)) {
+      setSelectedFieldId(fields[0].id);
+    }
+  }, [fields, selectedFieldId]);
+
+  const selectedField = selectedFieldId ? fields.find((field) => field.id === selectedFieldId) ?? null : null;
+
+  function updateFields(updater: (current: FormFieldDefinition[]) => FormFieldDefinition[]) {
+    const nextFields = updater(section.fields);
+    onChange({
+      ...schema,
+      sections: [
+        {
+          ...section,
+          fields: nextFields
+        }
+      ]
+    });
+  }
+
+  function updateField(fieldId: string, updater: (field: FormFieldDefinition) => FormFieldDefinition) {
+    updateFields((current) => current.map((field) => (field.id === fieldId ? updater(field) : field)));
+  }
+
+  function insertField(fieldType: FormFieldType, overId: string | null) {
+    const newField = createFieldForType(fieldType, fields);
+
+    updateFields((current) => {
+      const next = [...current];
+      const overIndex = overId ? current.findIndex((field) => field.id === overId) : -1;
+      const insertIndex = overIndex >= 0 ? overIndex : next.length;
+      next.splice(insertIndex, 0, newField);
+      return next;
+    });
+
+    setSelectedFieldId(newField.id);
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const activeId = String(event.active.id);
+
+    setActiveDrag({
+      kind: "canvas",
+      fieldId: activeId
+    });
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const overId = event.over ? String(event.over.id) : null;
+
+    if (!activeDrag) {
+      return;
+    }
+
+    if (!overId) {
+      setActiveDrag(null);
+      return;
+    }
+
+    updateFields((current) => {
+      const oldIndex = current.findIndex((field) => field.id === activeDrag.fieldId);
+      if (oldIndex < 0) {
+        return current;
+      }
+
+      const newIndex = overId === "canvas-dropzone" ? current.length - 1 : current.findIndex((field) => field.id === overId);
+      if (newIndex < 0 || newIndex === oldIndex) {
+        return current;
+      }
+
+      return arrayMove(current, oldIndex, newIndex);
+    });
+
+    setSelectedFieldId(activeDrag.fieldId);
+    setActiveDrag(null);
+  }
+
+  function deleteField(fieldId: string) {
+    updateFields((current) => current.filter((field) => field.id !== fieldId));
+
+    if (selectedFieldId === fieldId) {
+      const nextField = fields.find((field) => field.id !== fieldId) ?? null;
+      setSelectedFieldId(nextField?.id ?? null);
+      if (!nextField) {
+        setSettingsPanelOpen(false);
+      }
+    }
+  }
+
+  function addSelectOption(fieldId: string) {
+    updateField(fieldId, (field) => {
+      if (field.type !== "select") {
+        return field;
+      }
+
+      const nextIndex = field.options.length + 1;
+      const optionLabel = `Option ${nextIndex}`;
+      const optionValue = ensureUniqueOptionValue(optionLabel, field.options);
+
+      return {
+        ...field,
+        options: [
+          ...field.options,
+          {
+            value: optionValue,
+            label: optionLabel
+          }
+        ]
+      };
+    });
+  }
+
+  function updateSelectOption(fieldId: string, optionIndex: number, updater: (option: FormFieldOption) => FormFieldOption) {
+    updateField(fieldId, (field) => {
+      if (field.type !== "select") {
+        return field;
+      }
+
+      return {
+        ...field,
+        options: field.options.map((option, index) => (index === optionIndex ? updater(option) : option))
+      };
+    });
+  }
+
+  function removeSelectOption(fieldId: string, optionIndex: number) {
+    updateField(fieldId, (field) => {
+      if (field.type !== "select") {
+        return field;
+      }
+
+      return {
+        ...field,
+        options: field.options.filter((_, index) => index !== optionIndex)
+      };
+    });
+  }
+
+  const activeCanvasField = activeDrag?.kind === "canvas" ? fields.find((field) => field.id === activeDrag.fieldId) ?? null : null;
+
+  return (
+    <div className="space-y-4">
+      {view === "editor" ? (
+        <DndContext
+          collisionDetection={closestCenter}
+          onDragCancel={() => setActiveDrag(null)}
+          onDragEnd={handleDragEnd}
+          onDragStart={handleDragStart}
+          sensors={sensors}
+        >
+          <div
+            className={cn(
+              "rounded-control border border-dashed bg-surface-muted/40 p-4",
+              isCanvasDropTarget ? "border-accent bg-accent/10" : "border-border"
+            )}
+            ref={setCanvasDropRef}
+          >
+            {fields.length === 0 ? (
+              <div className="space-y-4 py-8">
+                <div className="flex items-center justify-center">
+                  <Alert className="max-w-md" variant="info">
+                    Open the field library panel and add a field to start building your form.
+                  </Alert>
+                </div>
+                <div className="flex justify-center">
+                  <Button disabled={disabled} onClick={() => setLibraryPanelOpen(true)} type="button" variant="secondary">
+                    <Plus className="h-4 w-4" />
+                    Open field library
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <SortableContext items={fields.map((field) => field.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2.5">
+                  {fields.map((field) => (
+                    <SortableCanvasField
+                      disabled={disabled}
+                      field={field}
+                      key={field.id}
+                      onDelete={deleteField}
+                      onOpenSettings={(fieldId) => {
+                        setSelectedFieldId(fieldId);
+                        setSettingsPanelOpen(true);
+                      }}
+                      onSelect={setSelectedFieldId}
+                      selected={selectedFieldId === field.id}
+                    />
+                  ))}
+                  <div className="pt-1">
+                    <Button disabled={disabled} onClick={() => setLibraryPanelOpen(true)} type="button" variant="secondary">
+                      <Plus className="h-4 w-4" />
+                      Open field library
+                    </Button>
+                  </div>
+                </div>
+              </SortableContext>
+            )}
+          </div>
+
+          <DragOverlay>
+            {activeCanvasField ? (
+              <div className="rounded-control border bg-surface px-3 py-2 shadow-card">
+                <p className="text-sm font-semibold text-text">{activeCanvasField.label || "Untitled field"}</p>
+                <p className="text-xs text-text-muted">{activeCanvasField.type}</p>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        <div className="space-y-4">
+          <div className="rounded-control border bg-surface p-4">
+            <h3 className="text-lg font-semibold text-text">{formName || "Untitled form"}</h3>
+            {formDescription.trim().length > 0 ? <p className="mt-1 text-sm text-text-muted">{formDescription}</p> : null}
+          </div>
+
+          {fields.length === 0 ? (
+            <Alert variant="info">No fields yet. Open the field library to add fields.</Alert>
+          ) : (
+            <div className="space-y-3 rounded-control border bg-surface p-4">{fields.map((field) => renderPreviewField(field))}</div>
+          )}
+
+          <p className="text-xs text-text-muted">Preview is non-interactive in the editor.</p>
+        </div>
+      )}
+
+      <Panel
+        onClose={() => setSettingsPanelOpen(false)}
+        open={settingsPanelOpen}
+        subtitle="Configure the selected field."
+        title={selectedField ? `Field settings: ${selectedField.label || "Untitled field"}` : "Field settings"}
+      >
+        {selectedField ? (
+          <div className="space-y-3">
+                  <FormField label="Label">
+                    <Input
+                      disabled={disabled}
+                      onChange={(event) => {
+                        const nextLabel = event.target.value;
+                        updateField(selectedField.id, (field) => ({
+                          ...field,
+                          label: nextLabel
+                        }));
+                      }}
+                      value={selectedField.label}
+                    />
+                  </FormField>
+
+                  <FormField hint="Unique key used in submission answers." label="Field key">
+                    <Input
+                      disabled={disabled}
+                      onChange={(event) => {
+                        updateField(selectedField.id, (field) => ({
+                          ...field,
+                          name: ensureUniqueFieldName(event.target.value, fields, selectedField.id)
+                        }));
+                      }}
+                      value={selectedField.name}
+                    />
+                  </FormField>
+
+                  <FormField label="Field type">
+                    <Select
+                      disabled={disabled}
+                      onChange={(event) => {
+                        const nextType = event.target.value as FormFieldType;
+
+                        updateField(selectedField.id, (field) => ({
+                          ...field,
+                          type: nextType,
+                          placeholder: nextType === "checkbox" ? null : field.placeholder,
+                          options:
+                            nextType === "select"
+                              ? field.options.length > 0
+                                ? field.options
+                                : [
+                                    {
+                                      value: "option_1",
+                                      label: "Option 1"
+                                    }
+                                  ]
+                              : []
+                        }));
+                      }}
+                      options={paletteFields.map((field) => ({
+                        value: field.type,
+                        label: field.label
+                      }))}
+                      value={selectedField.type}
+                    />
+                  </FormField>
+
+                  {selectedField.type !== "checkbox" ? (
+                    <FormField label="Placeholder">
+                      <Input
+                        disabled={disabled}
+                        onChange={(event) => {
+                          updateField(selectedField.id, (field) => ({
+                            ...field,
+                            placeholder: event.target.value
+                          }));
+                        }}
+                        value={selectedField.placeholder ?? ""}
+                      />
+                    </FormField>
+                  ) : null}
+
+                  <FormField label="Help text">
+                    <Textarea
+                      className="min-h-[80px]"
+                      disabled={disabled}
+                      onChange={(event) => {
+                        updateField(selectedField.id, (field) => ({
+                          ...field,
+                          helpText: event.target.value
+                        }));
+                      }}
+                      value={selectedField.helpText ?? ""}
+                    />
+                  </FormField>
+
+                  <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text">
+                    <input
+                      checked={selectedField.required}
+                      disabled={disabled}
+                      onChange={(event) => {
+                        updateField(selectedField.id, (field) => ({
+                          ...field,
+                          required: event.target.checked
+                        }));
+                      }}
+                      type="checkbox"
+                    />
+                    Required field
+                  </label>
+
+                  {selectedField.type === "select" ? (
+                    <div className="space-y-2 rounded-control border bg-surface-muted/40 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-text">Options</p>
+                        <Button disabled={disabled} onClick={() => addSelectOption(selectedField.id)} size="sm" type="button" variant="secondary">
+                          <Plus className="h-3.5 w-3.5" />
+                          Add option
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        {selectedField.options.length === 0 ? <Alert variant="warning">Dropdown fields need at least one option.</Alert> : null}
+                        {selectedField.options.map((option, optionIndex) => (
+                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2" key={`${selectedField.id}-option-${optionIndex}`}>
+                            <Input
+                              disabled={disabled}
+                              onChange={(event) => {
+                                const nextLabel = event.target.value;
+                                updateSelectOption(selectedField.id, optionIndex, (currentOption) => ({
+                                  ...currentOption,
+                                  label: nextLabel
+                                }));
+                              }}
+                              placeholder="Label"
+                              value={option.label}
+                            />
+                            <Input
+                              disabled={disabled}
+                              onChange={(event) => {
+                                updateSelectOption(selectedField.id, optionIndex, (currentOption) => ({
+                                  ...currentOption,
+                                  value: ensureUniqueOptionValue(event.target.value, selectedField.options, optionIndex)
+                                }));
+                              }}
+                              placeholder="Value"
+                              value={option.value}
+                            />
+                            <Button
+                              aria-label="Remove option"
+                              className="h-10 w-10 px-0"
+                              disabled={disabled}
+                              onClick={() => removeSelectOption(selectedField.id, optionIndex)}
+                              type="button"
+                              variant="ghost"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+          </div>
+        ) : (
+          <Alert variant="info">Select a field and open settings from its gear icon.</Alert>
+        )}
+      </Panel>
+
+      <Panel
+        onClose={() => setLibraryPanelOpen(false)}
+        open={libraryPanelOpen}
+        subtitle="Click a field to add it to the canvas. Reorder fields directly on the canvas by dragging."
+        title="Field library"
+      >
+        <div className="space-y-2">
+          {paletteFields.map((field) => (
+            <PaletteItem
+              config={field}
+              disabled={disabled}
+              key={field.type}
+              onAdd={(fieldType) => {
+                insertField(fieldType, null);
+                setLibraryPanelOpen(false);
+              }}
+            />
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}

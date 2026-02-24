@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +7,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 import { listPublishedProgramsForCatalog } from "@/modules/programs/db/queries";
+
+export const metadata: Metadata = {
+  title: "Programs"
+};
 
 function formatDateRange(startDate: string | null, endDate: string | null) {
   if (startDate && endDate) {
@@ -37,7 +42,7 @@ export default async function OrgProgramsCatalogPage({ params }: { params: Promi
   const programs = await listPublishedProgramsForCatalog(org.orgId);
 
   return (
-    <main className="app-container py-8 md:py-10">
+    <main className="w-full px-6 py-8 md:px-8 md:py-10">
       <div className="space-y-6">
         <PageHeader description="Browse active programs and open registration details." title="Programs" />
 

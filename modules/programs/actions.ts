@@ -198,7 +198,7 @@ export async function createProgramAction(input: z.input<typeof createProgramSch
       settingsJson: {}
     });
 
-    revalidatePath(`/${org.orgSlug}/manage/programs`);
+    revalidatePath(`/${org.orgSlug}/tools/programs`);
     revalidatePath(`/${org.orgSlug}/programs`);
 
     return {
@@ -239,8 +239,8 @@ export async function updateProgramAction(input: z.input<typeof updateProgramSch
       settingsJson: {}
     });
 
-    revalidatePath(`/${org.orgSlug}/manage/programs`);
-    revalidatePath(`/${org.orgSlug}/manage/programs/${updated.id}`);
+    revalidatePath(`/${org.orgSlug}/tools/programs`);
+    revalidatePath(`/${org.orgSlug}/tools/programs/${updated.id}`);
     revalidatePath(`/${org.orgSlug}/programs`);
     revalidatePath(`/${org.orgSlug}/programs/${updated.slug}`);
 
@@ -299,7 +299,7 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
       return asError("Program not found.");
     }
 
-    revalidatePath(`/${org.orgSlug}/manage/programs/${payload.programId}`);
+    revalidatePath(`/${org.orgSlug}/tools/programs/${payload.programId}`);
     revalidatePath(`/${org.orgSlug}/programs/${program.slug}`);
 
     return {
@@ -361,7 +361,7 @@ export async function saveProgramScheduleAction(input: z.input<typeof saveSchedu
       return asError("Program not found.");
     }
 
-    revalidatePath(`/${org.orgSlug}/manage/programs/${payload.programId}`);
+    revalidatePath(`/${org.orgSlug}/tools/programs/${payload.programId}`);
     revalidatePath(`/${org.orgSlug}/programs/${program.slug}`);
 
     return {

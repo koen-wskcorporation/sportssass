@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Plus, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { createDefaultRuntimeBlock, getRuntimeBlockDefinition } from "@/modules/site-builder/blocks/runtime-registry";
 import { loadOrgPageAction, saveOrgPageAction } from "@/modules/site-builder/actions";
-import { ORG_SITE_OPEN_EDITOR_EVENT, ORG_SITE_OPEN_EDITOR_REQUEST_KEY } from "@/modules/site-builder/events";
+import { ORG_SITE_EDITOR_STATE_EVENT, ORG_SITE_OPEN_EDITOR_EVENT, ORG_SITE_OPEN_EDITOR_REQUEST_KEY, ORG_SITE_SET_EDITOR_EVENT } from "@/modules/site-builder/events";
 import { useUnsavedChangesWarning } from "@/modules/site-builder/hooks/useUnsavedChangesWarning";
 import type { BlockContext, OrgPageBlock, OrgSiteBlockType, OrgSitePage as OrgSitePageType, OrgSiteRuntimeData } from "@/modules/site-builder/types";
 
@@ -39,7 +40,6 @@ type OrgSitePageProps = {
   initialBlocks: OrgPageBlock[];
   initialRuntimeData: OrgSiteRuntimeData;
   canEdit: boolean;
-  initialMode?: "view" | "edit";
 };
 
 function updateDraftBlock(blocks: OrgPageBlock[], nextBlock: OrgPageBlock) {
@@ -59,8 +59,7 @@ export function OrgSitePage({
   initialPage,
   initialBlocks,
   initialRuntimeData,
-  canEdit,
-  initialMode = "view"
+  canEdit
 }: OrgSitePageProps) {
   const [page, setPage] = useState(initialPage);
   const [blocks, setBlocks] = useState(initialBlocks);
@@ -73,6 +72,7 @@ export function OrgSitePage({
 
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
 
   const [, startLoadingEditor] = useTransition();
   const [isSaving, startSaving] = useTransition();
@@ -152,13 +152,31 @@ export function OrgSitePage({
   }, [canEdit, enterEditMode]);
 
   useEffect(() => {
-    if (!canEdit || initialMode !== "edit" || autoOpenHandledRef.current) {
+    if (!canEdit) {
       return;
     }
 
-    autoOpenHandledRef.current = true;
-    enterEditMode();
-  }, [canEdit, enterEditMode, initialMode]);
+    const onSetEditor = (event: Event) => {
+      const detail = (event as CustomEvent<{ pathname?: string; isEditing?: boolean }>).detail;
+
+      if (detail?.pathname && detail.pathname !== window.location.pathname) {
+        return;
+      }
+
+      if (detail?.isEditing) {
+        enterEditMode();
+        return;
+      }
+
+      cancelEditing();
+    };
+
+    window.addEventListener(ORG_SITE_SET_EDITOR_EVENT, onSetEditor);
+
+    return () => {
+      window.removeEventListener(ORG_SITE_SET_EDITOR_EVENT, onSetEditor);
+    };
+  }, [canEdit, enterEditMode]);
 
   useEffect(() => {
     if (!canEdit || autoOpenHandledRef.current) {
@@ -175,6 +193,49 @@ export function OrgSitePage({
     sessionStorage.removeItem(ORG_SITE_OPEN_EDITOR_REQUEST_KEY);
     enterEditMode();
   }, [canEdit, enterEditMode]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const syncHost = () => {
+      setToolbarHost(document.getElementById("org-page-editor-toolbar-host"));
+    };
+
+    syncHost();
+    const frameId = window.requestAnimationFrame(syncHost);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (!canEdit || typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(ORG_SITE_EDITOR_STATE_EVENT, {
+        detail: {
+          pathname: window.location.pathname,
+          isEditing
+        }
+      })
+    );
+
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent(ORG_SITE_EDITOR_STATE_EVENT, {
+          detail: {
+            pathname: window.location.pathname,
+            isEditing: false
+          }
+        })
+      );
+    };
+  }, [canEdit, isEditing]);
 
   function cancelEditing() {
     setDraftTitle(page.title);
@@ -255,52 +316,46 @@ export function OrgSitePage({
     enabled: hasUnsavedChanges
   });
 
+  const editorToolbar = canEdit && isEditing ? (
+    <div className="flex flex-wrap items-center gap-2">
+      <Input
+        className="h-9 w-[260px]"
+        onChange={(event) => {
+          setDraftTitle(event.target.value);
+        }}
+        value={draftTitle}
+      />
+      <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-1.5 text-sm">
+        <input
+          checked={draftIsPublished}
+          onChange={(event) => {
+            setDraftIsPublished(event.target.checked);
+          }}
+          type="checkbox"
+        />
+        Published
+      </label>
+      <Button onClick={() => setLibraryOpen(true)} size="sm" variant="secondary">
+        <Plus className="h-4 w-4" />
+        Add block
+      </Button>
+      <Button disabled={isSaving} loading={isSaving} onClick={saveDraft} size="sm">
+        <Save className="h-4 w-4" />
+        {isSaving ? "Saving..." : "Save"}
+      </Button>
+      <Button disabled={isSaving} onClick={cancelEditing} size="sm" variant="ghost">
+        <X className="h-4 w-4" />
+        Cancel
+      </Button>
+      {hasUnsavedChanges ? (
+        <span className="ml-auto rounded-control border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-semibold text-text">Unsaved changes</span>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <main className="app-container pb-10 pt-0 md:pb-10 md:pt-0">
       <div className="space-y-6">
-        {canEdit ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {isEditing ? (
-              <>
-            <Input
-              className="h-9 w-[260px]"
-              onChange={(event) => {
-                setDraftTitle(event.target.value);
-              }}
-              value={draftTitle}
-            />
-            <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-1.5 text-sm">
-              <input
-                checked={draftIsPublished}
-                onChange={(event) => {
-                  setDraftIsPublished(event.target.checked);
-                }}
-                type="checkbox"
-              />
-              Published
-            </label>
-            <Button onClick={() => setLibraryOpen(true)} size="sm" variant="secondary">
-              <Plus className="h-4 w-4" />
-              Add block
-            </Button>
-            <Button disabled={isSaving} loading={isSaving} onClick={saveDraft} size="sm">
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save"}
-            </Button>
-            <Button disabled={isSaving} onClick={cancelEditing} size="sm" variant="ghost">
-              <X className="h-4 w-4" />
-              Cancel
-            </Button>
-            {hasUnsavedChanges ? (
-              <span className="ml-auto rounded-control border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-semibold text-text">
-                Unsaved changes
-              </span>
-            ) : null}
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
         {!isEditing ? (
           <div className="space-y-6">
             {viewBlocks.map((block) => {
@@ -354,6 +409,8 @@ export function OrgSitePage({
         onClose={() => setSelectedBlockId(null)}
         open={Boolean(selectedBlock)}
       />
+
+      {editorToolbar ? (toolbarHost ? createPortal(editorToolbar, toolbarHost) : editorToolbar) : null}
     </main>
   );
 }

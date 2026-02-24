@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AccountSidebar, AccountSidebarMobile } from "@/components/account/AccountSidebar";
-import { OrgAdminAreaShell } from "@/components/manage/OrgAdminAreaShell";
+import { UniversalAppShell } from "@/components/shared/UniversalAppShell";
 import { requireAuth } from "@/lib/auth/requireAuth";
 
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
@@ -10,5 +10,5 @@ export default async function AccountLayout({ children }: { children: React.Reac
     redirect("/auth/login");
   }
 
-  return <OrgAdminAreaShell mobileSidebar={<AccountSidebarMobile />} sidebar={<AccountSidebar />}>{children}</OrgAdminAreaShell>;
+  return <UniversalAppShell mobileSidebar={<AccountSidebarMobile />} sidebar={<AccountSidebar />}>{children}</UniversalAppShell>;
 }

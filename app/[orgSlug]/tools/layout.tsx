@@ -1,3 +1,2 @@
-export default function OrgToolsLegacyLayout({ children }: { children: React.ReactNode }) {
-  return children;
-}
+export { metadata } from "@/app/[orgSlug]/manage/layout";
+export { default } from "@/app/[orgSlug]/manage/layout";

@@ -1,17 +1,33 @@
 import { notFound, redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { OrgSitePage } from "@/modules/site-builder/components/OrgSitePage";
 import { getOrgSitePageForRender } from "@/modules/site-builder/server/getOrgSitePageForRender";
 
-export default async function OrgPublicPageBySlug({
-  params,
-  searchParams
+function titleFromSlug(slug: string) {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export async function generateMetadata({
+  params
 }: {
   params: Promise<{ orgSlug: string; pageSlug: string }>;
-  searchParams: Promise<{ edit?: string }>;
+}): Promise<Metadata> {
+  const { pageSlug } = await params;
+  return {
+    title: pageSlug.toLowerCase() === "home" ? "Home" : titleFromSlug(pageSlug) || "Page"
+  };
+}
+
+export default async function OrgPublicPageBySlug({
+  params
+}: {
+  params: Promise<{ orgSlug: string; pageSlug: string }>;
 }) {
   const { orgSlug, pageSlug } = await params;
-  const query = await searchParams;
-  const initialMode = query.edit === "1" ? "edit" : "view";
 
   if (pageSlug.toLowerCase() === "home") {
     redirect(`/${orgSlug}`);
@@ -30,7 +46,6 @@ export default async function OrgPublicPageBySlug({
     <OrgSitePage
       canEdit={pageData.canEdit}
       initialBlocks={pageData.blocks}
-      initialMode={initialMode}
       initialPage={pageData.page}
       initialRuntimeData={pageData.runtimeData}
       orgName={pageData.orgContext.orgName}

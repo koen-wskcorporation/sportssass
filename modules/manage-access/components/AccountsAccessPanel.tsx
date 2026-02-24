@@ -7,9 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { can } from "@/lib/permissions/can";
@@ -67,7 +67,19 @@ function formatDateTime(value: string | null, formatter: Intl.DateTimeFormat) {
     return "-";
   }
 
-  return formatter.format(date);
+  const parts = formatter.formatToParts(date);
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  const year = parts.find((part) => part.type === "year")?.value;
+  const hour = parts.find((part) => part.type === "hour")?.value;
+  const minute = parts.find((part) => part.type === "minute")?.value;
+  const dayPeriod = parts.find((part) => part.type === "dayPeriod")?.value;
+
+  if (!month || !day || !year || !hour || !minute || !dayPeriod) {
+    return "-";
+  }
+
+  return `${month} ${day}, ${year} at ${hour}:${minute} ${dayPeriod}`;
 }
 
 function getDefaultInviteRole(options: SelectOption[]) {
@@ -101,9 +113,14 @@ export function AccountsAccessPanel({
 
   const dateFormatter = useMemo(
     () =>
-      new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short"
+      new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: "UTC"
       }),
     []
   );
@@ -523,129 +540,117 @@ export function AccountsAccessPanel({
         </CardContent>
       </Card>
 
-      <Dialog
+      <Panel
+        footer={
+          selectedMember ? (
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                disabled={!canManageActions || !canEditAdminMembership(currentUserRole, selectedMember.role) || activeRoleSaveId === selectedMember.membershipId}
+                loading={activeRoleSaveId === selectedMember.membershipId}
+                onClick={() => handleRoleSave(selectedMember)}
+                variant="secondary"
+              >
+                {activeRoleSaveId === selectedMember.membershipId ? "Saving..." : "Save role"}
+              </Button>
+              <Button
+                disabled={!canManageActions || !selectedMember.email || activeResetMembershipId === selectedMember.membershipId}
+                loading={activeResetMembershipId === selectedMember.membershipId}
+                onClick={() => handleSendReset(selectedMember)}
+                variant="ghost"
+              >
+                {activeResetMembershipId === selectedMember.membershipId ? "Sending..." : "Send password reset"}
+              </Button>
+              <Button
+                disabled={!canManageActions || !canEditAdminMembership(currentUserRole, selectedMember.role) || isRemoving}
+                onClick={() => setRemoveTarget(selectedMember)}
+                variant="destructive"
+              >
+                Remove access
+              </Button>
+            </div>
+          ) : null
+        }
         onClose={() => {
           if (!isRemoving) {
             setSelectedMembershipId(null);
           }
         }}
         open={Boolean(selectedMember)}
+        subtitle="Manage role, account recovery, and access for this user."
+        title={selectedMember ? displayUser(selectedMember) : "Member profile"}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selectedMember ? displayUser(selectedMember) : "Member profile"}</DialogTitle>
-            <DialogDescription>Manage role, account recovery, and access for this user.</DialogDescription>
-          </DialogHeader>
+        {selectedMember ? (
+          <div className="space-y-4">
+            <Card className="shadow-none">
+              <CardContent className="grid gap-3 py-6 md:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Status</p>
+                  <Badge className="mt-1" variant={statusBadgeVariant(selectedMember.status)}>
+                    {statusLabel(selectedMember.status)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Role</p>
+                  <Badge className="mt-1" variant={roleBadgeVariant(selectedMember.role)}>
+                    {resolveRoleLabel(selectedMember.role)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Joined</p>
+                  <p className="mt-1 text-sm text-text">{formatDateTime(selectedMember.joinedAt, dateFormatter)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Last activity</p>
+                  <p className="mt-1 text-sm text-text">{formatDateTime(selectedMember.lastActivityAt, dateFormatter)}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">User ID</p>
+                  <p className="mt-1 break-all font-mono text-xs text-text-muted">{selectedMember.userId}</p>
+                </div>
+              </CardContent>
+            </Card>
 
-          {selectedMember ? (
-            <div className="space-y-4">
-              <Card className="shadow-none">
-                <CardContent className="grid gap-3 py-6 md:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Status</p>
-                    <Badge className="mt-1" variant={statusBadgeVariant(selectedMember.status)}>
-                      {statusLabel(selectedMember.status)}
-                    </Badge>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Role</p>
-                    <Badge className="mt-1" variant={roleBadgeVariant(selectedMember.role)}>
-                      {resolveRoleLabel(selectedMember.role)}
-                    </Badge>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Joined</p>
-                    <p className="mt-1 text-sm text-text">{formatDateTime(selectedMember.joinedAt, dateFormatter)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Last activity</p>
-                    <p className="mt-1 text-sm text-text">{formatDateTime(selectedMember.lastActivityAt, dateFormatter)}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">User ID</p>
-                    <p className="mt-1 break-all font-mono text-xs text-text-muted">{selectedMember.userId}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-                <FormField label="Change role">
-                  <Select
-                    disabled={!canManageActions || !canEditAdminMembership(currentUserRole, selectedMember.role) || activeRoleSaveId === selectedMember.membershipId}
-                    onChange={(event) => {
-                      setRoleDraftByMembershipId((current) => ({
-                        ...current,
-                        [selectedMember.membershipId]: event.target.value as OrgRole
-                      }));
-                    }}
-                    options={selectedRoleOptions}
-                    value={selectedRoleValue}
-                  />
-                </FormField>
-                <Button
-                  className="md:mb-px"
+            <div className="grid gap-3">
+              <FormField label="Change role">
+                <Select
                   disabled={!canManageActions || !canEditAdminMembership(currentUserRole, selectedMember.role) || activeRoleSaveId === selectedMember.membershipId}
-                  loading={activeRoleSaveId === selectedMember.membershipId}
-                  onClick={() => handleRoleSave(selectedMember)}
-                  variant="secondary"
-                >
-                  {activeRoleSaveId === selectedMember.membershipId ? "Saving..." : "Save role"}
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-2 border-t pt-4">
-                <Button
-                  disabled={!canManageActions || !selectedMember.email || activeResetMembershipId === selectedMember.membershipId}
-                  loading={activeResetMembershipId === selectedMember.membershipId}
-                  onClick={() => handleSendReset(selectedMember)}
-                  variant="ghost"
-                >
-                  {activeResetMembershipId === selectedMember.membershipId ? "Sending..." : "Send password reset"}
-                </Button>
-                <Button
-                  disabled={!canManageActions || !canEditAdminMembership(currentUserRole, selectedMember.role) || isRemoving}
-                  onClick={() => setRemoveTarget(selectedMember)}
-                  variant="destructive"
-                >
-                  Remove access
-                </Button>
-              </div>
+                  onChange={(event) => {
+                    setRoleDraftByMembershipId((current) => ({
+                      ...current,
+                      [selectedMember.membershipId]: event.target.value as OrgRole
+                    }));
+                  }}
+                  options={selectedRoleOptions}
+                  value={selectedRoleValue}
+                />
+              </FormField>
             </div>
-          ) : null}
+          </div>
+        ) : null}
+      </Panel>
 
-          <DialogFooter>
-            <Button onClick={() => setSelectedMembershipId(null)} variant="secondary">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        onClose={() => {
-          if (!isRemoving) {
-            setRemoveTarget(null);
-          }
-        }}
-        open={Boolean(removeTarget)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove access</DialogTitle>
-            <DialogDescription>
-              {removeTarget ? `Remove ${displayUser(removeTarget)} from this organization?` : "Remove this membership?"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+      <Panel
+        footer={
+          <>
             <Button disabled={isRemoving} onClick={() => setRemoveTarget(null)} variant="ghost">
               Cancel
             </Button>
             <Button disabled={isRemoving} loading={isRemoving} onClick={handleRemoveConfirm} variant="destructive">
               {isRemoving ? "Removing..." : "Confirm remove"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+        onClose={() => {
+          if (!isRemoving) {
+            setRemoveTarget(null);
+          }
+        }}
+        open={Boolean(removeTarget)}
+        subtitle={removeTarget ? `Remove ${displayUser(removeTarget)} from this organization?` : "Remove this membership?"}
+        title="Remove access"
+      >
+        <div />
+      </Panel>
     </div>
   );
 }

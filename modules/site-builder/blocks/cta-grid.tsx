@@ -49,23 +49,20 @@ export function CtaGridBlockRender({ block, context }: BlockRenderProps<"cta_gri
       <h2 className="text-2xl font-semibold text-text">{block.config.title}</h2>
       <div className="grid items-stretch gap-4 md:grid-cols-3">
         {block.config.items.map((item) => (
-          <div className="flex h-full min-w-0" key={item.id}>
+          <a
+            className="flex h-full min-w-0"
+            href={resolveLinkHref(context.orgSlug, item.link)}
+            key={item.id}
+            rel={isExternalLink(item.link) ? "noreferrer" : undefined}
+            target={isExternalLink(item.link) ? "_blank" : undefined}
+          >
             <Card className="flex h-full w-full min-w-0 flex-col transition-colors hover:bg-surface-muted">
-              <CardHeader className="flex h-full min-w-0 flex-col justify-start items-start text-left pb-6">
-                <CardTitle className="min-w-0 text-base whitespace-normal break-words break-all">
-                  <a
-                    className="underline-offset-4 hover:underline focus-visible:underline"
-                    href={resolveLinkHref(context.orgSlug, item.link)}
-                    rel={isExternalLink(item.link) ? "noreferrer" : undefined}
-                    target={isExternalLink(item.link) ? "_blank" : undefined}
-                  >
-                    {item.title}
-                  </a>
-                </CardTitle>
+              <CardHeader className="flex h-full min-w-0 flex-col items-start justify-start pb-6 text-left">
+                <CardTitle className="min-w-0 break-all whitespace-normal text-base">{item.title}</CardTitle>
                 <ReadMoreDescription>{item.description}</ReadMoreDescription>
               </CardHeader>
             </Card>
-          </div>
+          </a>
         ))}
       </div>
     </section>

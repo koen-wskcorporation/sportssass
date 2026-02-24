@@ -1,10 +1,2 @@
-import { permanentRedirect } from "next/navigation";
-
-export default async function OrgManageFormSubmissionsLegacyPage({
-  params
-}: {
-  params: Promise<{ orgSlug: string; formId: string }>;
-}) {
-  const { orgSlug, formId } = await params;
-  permanentRedirect(`/${orgSlug}/manage/forms/${formId}/submissions`);
-}
+export { metadata } from "@/app/[orgSlug]/manage/forms/[formId]/submissions/page";
+export { default } from "@/app/[orgSlug]/manage/forms/[formId]/submissions/page";

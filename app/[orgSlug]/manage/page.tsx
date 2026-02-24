@@ -1,10 +1,15 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
+
+export const metadata: Metadata = {
+  title: "Manage"
+};
 
 export default async function OrgManageOverviewPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
@@ -16,28 +21,28 @@ export default async function OrgManageOverviewPage({ params }: { params: Promis
     {
       title: "Org Info",
       description: "View core organization metadata and identifiers.",
-      href: `/${orgSlug}/manage/info`,
+      href: `/${orgSlug}/tools/manage/info`,
       cta: "Open Org Info",
       enabled: canManageOrg
     },
     {
       title: "Branding",
       description: "Update logo, icon, and organization accent color.",
-      href: `/${orgSlug}/manage/branding`,
+      href: `/${orgSlug}/tools/manage/branding`,
       cta: "Open Branding",
       enabled: canReadBranding
     },
     {
       title: "User Accounts",
       description: "Invite users, manage core access levels, and account recovery.",
-      href: `/${orgSlug}/manage/access`,
+      href: `/${orgSlug}/tools/manage/access`,
       cta: "Open Accounts & Access",
       enabled: canManageOrg
     },
     {
       title: "Billing",
       description: "View subscription details and billing controls.",
-      href: `/${orgSlug}/manage/billing`,
+      href: `/${orgSlug}/tools/manage/billing`,
       cta: "Open Billing",
       enabled: canManageOrg
     }

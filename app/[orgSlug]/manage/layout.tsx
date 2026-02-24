@@ -1,8 +1,13 @@
 import { redirect } from "next/navigation";
-import { OrgAdminAreaShell } from "@/components/manage/OrgAdminAreaShell";
+import type { Metadata } from "next";
 import { ToolsSidebar, ToolsSidebarMobile } from "@/components/manage/ToolsSidebar";
+import { UniversalAppShell } from "@/components/shared/UniversalAppShell";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { getOrgCapabilities } from "@/lib/permissions/orgCapabilities";
+
+export const metadata: Metadata = {
+  title: "Manage"
+};
 
 export default async function OrgManageLayout({
   children,
@@ -20,11 +25,11 @@ export default async function OrgManageLayout({
   }
 
   return (
-    <OrgAdminAreaShell
+    <UniversalAppShell
       mobileSidebar={<ToolsSidebarMobile orgSlug={orgContext.orgSlug} />}
       sidebar={<ToolsSidebar orgSlug={orgContext.orgSlug} />}
     >
       {children}
-    </OrgAdminAreaShell>
+    </UniversalAppShell>
   );
 }

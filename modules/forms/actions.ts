@@ -186,7 +186,7 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
       });
     }
 
-    revalidatePath(`/${org.orgSlug}/manage/forms`);
+    revalidatePath(`/${org.orgSlug}/tools/forms`);
 
     return {
       ok: true,
@@ -231,8 +231,8 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
       }
     });
 
-    revalidatePath(`/${org.orgSlug}/manage/forms`);
-    revalidatePath(`/${org.orgSlug}/manage/forms/${updated.id}`);
+    revalidatePath(`/${org.orgSlug}/tools/forms`);
+    revalidatePath(`/${org.orgSlug}/tools/forms/${updated.id}/editor`);
 
     return {
       ok: true,
@@ -287,8 +287,8 @@ export async function publishFormVersionAction(input: z.input<typeof publishForm
       settingsJson: form.settingsJson
     });
 
-    revalidatePath(`/${org.orgSlug}/manage/forms`);
-    revalidatePath(`/${org.orgSlug}/manage/forms/${form.id}`);
+    revalidatePath(`/${org.orgSlug}/tools/forms`);
+    revalidatePath(`/${org.orgSlug}/tools/forms/${form.id}/editor`);
     revalidatePath(`/${org.orgSlug}/register/${form.slug}`);
 
     return {
@@ -336,7 +336,7 @@ export async function setSubmissionStatusAction(input: z.input<typeof submission
       status: payload.status
     });
 
-    revalidatePath(`/${org.orgSlug}/manage/forms/${payload.formId}/submissions`);
+    revalidatePath(`/${org.orgSlug}/tools/forms/${payload.formId}/submissions`);
 
     return {
       ok: true,

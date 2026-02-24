@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { CalendarPicker } from "@/components/ui/calendar-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,29 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function splitDateTimeLocal(value: string) {
+  if (!value) {
+    return {
+      date: "",
+      time: ""
+    };
+  }
+
+  const [datePart = "", timePart = ""] = value.split("T");
+  return {
+    date: datePart,
+    time: timePart.slice(0, 5)
+  };
+}
+
+function combineDateTimeLocal(date: string, time: string) {
+  if (!date) {
+    return "";
+  }
+
+  return `${date}T${time || "00:00"}`;
 }
 
 export function ProgramEditorPanel({ orgSlug, data }: ProgramEditorPanelProps) {
@@ -63,6 +87,7 @@ export function ProgramEditorPanel({ orgSlug, data }: ProgramEditorPanelProps) {
   const [scheduleEndTime, setScheduleEndTime] = useState("");
   const [scheduleByDay, setScheduleByDay] = useState("");
   const [scheduleOneOffAt, setScheduleOneOffAt] = useState("");
+  const scheduleOneOffParts = splitDateTimeLocal(scheduleOneOffAt);
 
   const parentOptions = useMemo(
     () => [
@@ -328,15 +353,15 @@ export function ProgramEditorPanel({ orgSlug, data }: ProgramEditorPanelProps) {
                 onRemove={() => setCoverImagePath("")}
                 orgSlug={orgSlug}
                 purpose="program-cover"
-                specificationText="PNG, JPG, WEBP, or SVG"
+                specificationText="PNG, JPG, WEBP, HEIC, or SVG"
                 title="Program cover"
               />
             </FormField>
             <FormField label="Start date">
-              <Input onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
+              <CalendarPicker onChange={setStartDate} value={startDate} />
             </FormField>
             <FormField label="End date">
-              <Input onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
+              <CalendarPicker onChange={setEndDate} value={endDate} />
             </FormField>
             <div className="md:col-span-2">
               <Button disabled={isSavingProgram} loading={isSavingProgram} type="submit">
@@ -434,16 +459,28 @@ export function ProgramEditorPanel({ orgSlug, data }: ProgramEditorPanelProps) {
             {scheduleType !== "one_off" ? (
               <>
                 <FormField label="Start date">
-                  <Input onChange={(event) => setScheduleStartDate(event.target.value)} type="date" value={scheduleStartDate} />
+                  <CalendarPicker onChange={setScheduleStartDate} value={scheduleStartDate} />
                 </FormField>
                 <FormField label="End date">
-                  <Input onChange={(event) => setScheduleEndDate(event.target.value)} type="date" value={scheduleEndDate} />
+                  <CalendarPicker onChange={setScheduleEndDate} value={scheduleEndDate} />
                 </FormField>
               </>
             ) : (
-              <FormField label="One-off at">
-                <Input onChange={(event) => setScheduleOneOffAt(event.target.value)} type="datetime-local" value={scheduleOneOffAt} />
-              </FormField>
+              <>
+                <FormField label="One-off date">
+                  <CalendarPicker
+                    onChange={(nextDate) => setScheduleOneOffAt(combineDateTimeLocal(nextDate, scheduleOneOffParts.time))}
+                    value={scheduleOneOffParts.date}
+                  />
+                </FormField>
+                <FormField label="One-off time">
+                  <Input
+                    onChange={(event) => setScheduleOneOffAt(combineDateTimeLocal(scheduleOneOffParts.date, event.target.value))}
+                    type="time"
+                    value={scheduleOneOffParts.time}
+                  />
+                </FormField>
+              </>
             )}
             <FormField hint="For meeting pattern only. Example: 2,4 (Tue/Thu)." label="By day">
               <Input onChange={(event) => setScheduleByDay(event.target.value)} value={scheduleByDay} />

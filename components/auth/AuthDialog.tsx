@@ -5,9 +5,9 @@ import { useEffect, useId, useState, type CSSProperties } from "react";
 import { signInAction, signUpAction } from "@/app/auth/actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { SubmitButton } from "@/components/ui/submit-button";
 
 export type AuthMode = "signin" | "signup";
@@ -50,13 +50,14 @@ export function AuthDialog({
   } as CSSProperties;
 
   return (
-    <Dialog onClose={onClose} open={open}>
-      <DialogContent style={appBrandingVars}>
-        <DialogHeader>
-          <DialogTitle>Account Access</DialogTitle>
-          <DialogDescription>Sign in or create an account to open your dashboard and organizations.</DialogDescription>
-        </DialogHeader>
-
+    <Panel
+      onClose={onClose}
+      open={open}
+      panelStyle={appBrandingVars}
+      subtitle="Sign in or create an account to open your dashboard and organizations."
+      title="Account Access"
+    >
+      <div className="space-y-4">
         {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
         {infoMessage ? <Alert variant="info">{infoMessage}</Alert> : null}
 
@@ -99,7 +100,7 @@ export function AuthDialog({
             </SubmitButton>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </Panel>
   );
 }

@@ -95,7 +95,7 @@ export function HeroBlockRender({ block, context }: BlockRenderProps<"hero">) {
         {hasImage ? <div className="absolute inset-0 bg-text/45" /> : null}
 
         <div className="relative z-10 flex min-h-[300px] items-center p-6 md:min-h-[360px] md:p-10">
-          <div className="max-w-3xl space-y-4">
+          <div className="w-full space-y-4">
             <h1 className={hasImage ? "text-3xl font-semibold text-white md:text-5xl" : "text-3xl font-semibold text-text md:text-5xl"}>
               {block.config.headline}
             </h1>

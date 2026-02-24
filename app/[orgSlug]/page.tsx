@@ -1,17 +1,18 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { OrgSitePage } from "@/modules/site-builder/components/OrgSitePage";
 import { getOrgSitePageForRender } from "@/modules/site-builder/server/getOrgSitePageForRender";
 
+export const metadata: Metadata = {
+  title: "Home"
+};
+
 export default async function OrgPublicHomePage({
-  params,
-  searchParams
+  params
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ edit?: string }>;
 }) {
   const { orgSlug } = await params;
-  const query = await searchParams;
-  const initialMode = query.edit === "1" ? "edit" : "view";
   const pageData = await getOrgSitePageForRender({
     orgSlug,
     pageSlug: "home"
@@ -25,7 +26,6 @@ export default async function OrgPublicHomePage({
     <OrgSitePage
       canEdit={pageData.canEdit}
       initialBlocks={pageData.blocks}
-      initialMode={initialMode}
       initialPage={pageData.page}
       initialRuntimeData={pageData.runtimeData}
       orgName={pageData.orgContext.orgName}

@@ -1,6 +1,11 @@
 import { PageHeader } from "@/components/ui/page-header";
+import type { Metadata } from "next";
 import { getAccountsAccessPageData } from "@/modules/manage-access/actions";
 import { AccountsAccessPanel } from "@/modules/manage-access/components/AccountsAccessPanel";
+
+export const metadata: Metadata = {
+  title: "User Accounts"
+};
 
 export default async function OrgMembersSettingsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;

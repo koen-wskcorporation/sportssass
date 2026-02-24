@@ -1,4 +1,5 @@
 import { Alert } from "@/components/ui/alert";
+import type { Metadata } from "next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,6 +11,10 @@ import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { getRoleLabel } from "@/modules/core/access";
 import { OrgInfoPageToasts } from "./OrgInfoPageToasts";
 import { saveOrgGoverningBodyAction } from "./actions";
+
+export const metadata: Metadata = {
+  title: "Org Info"
+};
 
 const successMessageByCode: Record<string, string> = {
   "1": "Organization details updated successfully."

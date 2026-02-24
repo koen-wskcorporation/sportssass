@@ -24,7 +24,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "manage-overview",
       label: "Overview",
-      href: `/${orgSlug}/manage`,
+      href: `/${orgSlug}/tools/manage`,
       description: "Open the organization admin overview.",
       icon: "wrench",
       showInHome: false
@@ -32,7 +32,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "manage-general",
       label: "General",
-      href: `/${orgSlug}/manage/info`,
+      href: `/${orgSlug}/tools/manage/info`,
       description: "View organization metadata and governing body settings.",
       icon: "building",
       parentKey: "manage",
@@ -41,7 +41,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "manage-branding",
       label: "Branding",
-      href: `/${orgSlug}/manage/branding`,
+      href: `/${orgSlug}/tools/manage/branding`,
       description: "Update logo, icon, and organization accent color.",
       icon: "palette",
       parentKey: "manage",
@@ -50,7 +50,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "manage-accounts",
       label: "Accounts",
-      href: `/${orgSlug}/manage/access`,
+      href: `/${orgSlug}/tools/manage/access`,
       description: "Invite users and manage organization roles.",
       icon: "users",
       parentKey: "manage",
@@ -59,7 +59,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "manage-billing",
       label: "Billing",
-      href: `/${orgSlug}/manage/billing`,
+      href: `/${orgSlug}/tools/manage/billing`,
       description: "Review subscription and billing controls.",
       icon: "credit-card",
       parentKey: "manage",
@@ -68,7 +68,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "programs",
       label: "Programs",
-      href: `/${orgSlug}/manage/programs`,
+      href: `/${orgSlug}/tools/programs`,
       description: "Create and edit programs, divisions, and schedules.",
       icon: "calendar",
       showInHome: true
@@ -76,7 +76,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "forms",
       label: "Forms",
-      href: `/${orgSlug}/manage/forms`,
+      href: `/${orgSlug}/tools/forms`,
       description: "Build forms and process submissions.",
       icon: "file-text",
       showInHome: true
@@ -84,7 +84,7 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
     {
       key: "manage",
       label: "Manage",
-      href: `/${orgSlug}/manage`,
+      href: `/${orgSlug}/tools/manage`,
       description: "Organization management settings and access controls.",
       icon: "settings",
       showInHome: true

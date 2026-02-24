@@ -1,10 +1,15 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
 import { ProgramsManagePanel } from "@/modules/programs/components/ProgramsManagePanel";
 import { listProgramsForManage } from "@/modules/programs/db/queries";
+
+export const metadata: Metadata = {
+  title: "Programs"
+};
 
 export default async function OrgManageProgramsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;

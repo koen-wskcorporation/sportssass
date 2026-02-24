@@ -1,26 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   Building2,
   CalendarDays,
   ChevronDown,
   CreditCard,
+  Eye,
+  EyeOff,
   FileText,
+  GripVertical,
   LayoutDashboard,
   Palette,
   Pencil,
+  Plus,
   Settings,
+  SlidersHorizontal,
   Users,
   Wrench,
   type LucideIcon
 } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { SortableCanvas, type SortableRenderMeta } from "@/components/editor/SortableCanvas";
+import { EditorSettingsDialog } from "@/components/shared/EditorSettingsDialog";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { NavItem } from "@/components/ui/nav-item";
+import { useToast } from "@/components/ui/toast";
 import { getOrgAdminNavItems, type OrgAdminNavIcon } from "@/lib/org/toolsNav";
 import { cn } from "@/lib/utils";
+import { saveOrgPagesAction, savePageSettingsAction } from "@/modules/site-builder/actions";
+import {
+  ORG_SITE_EDITOR_STATE_EVENT,
+  ORG_SITE_OPEN_EDITOR_EVENT,
+  ORG_SITE_OPEN_EDITOR_REQUEST_KEY,
+  ORG_SITE_SET_EDITOR_EVENT
+} from "@/modules/site-builder/events";
 import type { OrgManagePage } from "@/modules/site-builder/types";
 
 type OrgHeaderProps = {
@@ -95,14 +111,116 @@ function sortedPages(pages: OrgManagePage[]) {
   return [...pages].sort((a, b) => a.sortIndex - b.sortIndex || a.createdAt.localeCompare(b.createdAt));
 }
 
+function withReindexedSortOrder(pages: OrgManagePage[]) {
+  return pages.map((page, index) => ({
+    ...page,
+    sortIndex: index
+  }));
+}
+
+function EditableMenuItem({
+  page,
+  orgSlug,
+  isSaving,
+  onToggleVisibility,
+  onOpenSettings,
+  onOpenEditor,
+  meta
+}: {
+  page: OrgManagePage;
+  orgSlug: string;
+  isSaving: boolean;
+  onToggleVisibility: (page: OrgManagePage) => void;
+  onOpenSettings: (page: OrgManagePage) => void;
+  onOpenEditor: (href: string) => void;
+  meta: SortableRenderMeta;
+}) {
+  const href = pageHref(orgSlug, page.slug);
+
+  return (
+    <div className={cn("flex min-w-[268px] items-center gap-2 rounded-control border bg-surface px-2 py-1.5", meta.isDragging ? "shadow-card" : "shadow-none")}>
+      <button
+        aria-label={`Drag ${page.title}`}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-text-muted hover:text-text"
+        disabled={isSaving}
+        type="button"
+        {...meta.handleProps.attributes}
+        {...meta.handleProps.listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 truncate text-xs font-semibold leading-none text-text">
+          <span
+            aria-hidden
+            className="shrink-0 text-[11px] leading-none"
+            style={{
+              color: page.isPublished ? "hsl(145 65% 42%)" : "hsl(220 10% 55%)"
+            }}
+          >
+            ●
+          </span>
+          <span className="truncate">{page.title}</span>
+        </p>
+      </div>
+
+      <Button
+        className="h-8 w-8 p-0"
+        disabled={isSaving || page.slug === "home"}
+        onClick={() => onToggleVisibility(page)}
+        size="sm"
+        title={page.isPublished ? "Hide from menu" : "Show in menu"}
+        variant="secondary"
+      >
+        {page.isPublished ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </Button>
+
+      <Button className="h-8 w-8 p-0" disabled={isSaving} onClick={() => onOpenSettings(page)} size="sm" title="Page settings" variant="secondary">
+        <SlidersHorizontal className="h-4 w-4" />
+      </Button>
+
+      <Button className="h-8 w-8 p-0" disabled={isSaving} onClick={() => onOpenEditor(href)} size="sm" title="Edit page" variant="secondary">
+        <Pencil className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, governingBodyName, canManageOrg, canEditPages, pages }: OrgHeaderProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [hasHydrated, setHasHydrated] = useState(false);
+
   const orgBasePath = `/${orgSlug}`;
-  const canEditCurrentPage = canEditPages && isEditablePublicOrgPath(pathname, orgBasePath);
+  const currentPathname = hasHydrated ? pathname : "";
+  const canEditCurrentPage = canEditPages && hasHydrated && isEditablePublicOrgPath(currentPathname, orgBasePath);
+
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
   const [expandedToolsParents, setExpandedToolsParents] = useState<Record<string, boolean>>({});
   const [isScrolled, setIsScrolled] = useState(false);
+
+  const [isMenuEditMode, setIsMenuEditMode] = useState(false);
+  const [menuPages, setMenuPages] = useState<OrgManagePage[]>(() => sortedPages(pages));
+
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createSlug, setCreateSlug] = useState("");
+  const [createPublished, setCreatePublished] = useState(true);
+
+  const [settingsPageId, setSettingsPageId] = useState<string | null>(null);
+  const [settingsTitle, setSettingsTitle] = useState("");
+  const [settingsSlug, setSettingsSlug] = useState("");
+  const [settingsPublished, setSettingsPublished] = useState(true);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [isPageContentEditing, setIsPageContentEditing] = useState(false);
+
+  const [isSavingMenu, startSavingMenu] = useTransition();
+
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
 
   const toolsNavItems = useMemo(() => getOrgAdminNavItems(orgSlug), [orgSlug]);
   const toolsNavTopLevelItems = useMemo(() => toolsNavItems.filter((item) => !item.parentKey), [toolsNavItems]);
@@ -122,15 +240,134 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
     return map;
   }, [toolsNavItems]);
 
-  const orderedPages = useMemo(() => sortedPages(pages), [pages]);
-  const navPages = useMemo(() => orderedPages.filter((page) => page.isPublished), [orderedPages]);
+  useEffect(() => {
+    setMenuPages(sortedPages(pages));
+  }, [pages]);
 
-  const editHref = useMemo(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("edit", "1");
-    const queryString = params.toString();
-    return queryString ? `${pathname}?${queryString}` : pathname;
-  }, [pathname, searchParams]);
+  const orderedPages = useMemo(() => sortedPages(menuPages), [menuPages]);
+  const navPages = useMemo(() => orderedPages.filter((page) => page.isPublished), [orderedPages]);
+  const selectedSettingsPage = useMemo(() => {
+    if (!settingsPageId) {
+      return null;
+    }
+
+    return orderedPages.find((page) => page.id === settingsPageId) ?? null;
+  }, [orderedPages, settingsPageId]);
+
+  const openEditorOnPath = useCallback(
+    (targetPath: string) => {
+      const normalizedTarget = normalizePath(targetPath);
+      const normalizedCurrent = normalizePath(currentPathname || pathname);
+
+      if (normalizedTarget === normalizedCurrent) {
+        window.dispatchEvent(
+          new CustomEvent(ORG_SITE_OPEN_EDITOR_EVENT, {
+            detail: { pathname: normalizedTarget }
+          })
+        );
+        return;
+      }
+
+      sessionStorage.setItem(ORG_SITE_OPEN_EDITOR_REQUEST_KEY, normalizedTarget);
+      router.push(normalizedTarget);
+    },
+    [currentPathname, pathname, router]
+  );
+
+  const onToggleVisibility = useCallback(
+    (page: OrgManagePage) => {
+      const nextPublished = !page.isPublished;
+
+      setMenuPages((current) =>
+        current.map((currentPage) => {
+          if (currentPage.id !== page.id) {
+            return currentPage;
+          }
+
+          return {
+            ...currentPage,
+            isPublished: nextPublished
+          };
+        })
+      );
+
+      startSavingMenu(async () => {
+        const result = await saveOrgPagesAction({
+          orgSlug,
+          action: {
+            type: "set-published",
+            pageId: page.id,
+            isPublished: nextPublished
+          }
+        });
+
+        if (!result.ok) {
+          setMenuPages((current) =>
+            current.map((currentPage) => {
+              if (currentPage.id !== page.id) {
+                return currentPage;
+              }
+
+              return {
+                ...currentPage,
+                isPublished: page.isPublished
+              };
+            })
+          );
+
+          toast({
+            title: "Unable to update visibility",
+            description: result.error,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setMenuPages(sortedPages(result.pages));
+      });
+    },
+    [orgSlug, toast]
+  );
+
+  const onReorderPages = useCallback(
+    (nextPages: OrgManagePage[]) => {
+      const previous = menuPages;
+      const reindexed = withReindexedSortOrder(nextPages);
+
+      setMenuPages(reindexed);
+
+      startSavingMenu(async () => {
+        const result = await saveOrgPagesAction({
+          orgSlug,
+          action: {
+            type: "reorder",
+            pageIds: reindexed.map((page) => page.id)
+          }
+        });
+
+        if (!result.ok) {
+          setMenuPages(previous);
+          toast({
+            title: "Unable to reorder menu",
+            description: result.error,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setMenuPages(sortedPages(result.pages));
+      });
+    },
+    [menuPages, orgSlug, toast]
+  );
+
+  const onOpenSettings = useCallback((page: OrgManagePage) => {
+    setSettingsPageId(page.id);
+    setSettingsTitle(page.title);
+    setSettingsSlug(page.slug);
+    setSettingsPublished(page.isPublished);
+    setSettingsDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 8);
@@ -145,6 +382,8 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
     setIsToolsMenuOpen(false);
   }, [pathname]);
 
+  const hasInlineEditingActive = isMenuEditMode || isPageContentEditing;
+
   useEffect(() => {
     setExpandedToolsParents((current) => {
       const next = { ...current };
@@ -155,7 +394,7 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
           continue;
         }
 
-        const isActive = isActivePrefixPath(pathname, item.href) || children.some((child) => isActivePrefixPath(pathname, child.href));
+        const isActive = isActivePrefixPath(currentPathname, item.href) || children.some((child) => isActivePrefixPath(currentPathname, child.href));
         if (isActive) {
           next[item.key] = true;
         } else if (!(item.key in next)) {
@@ -165,9 +404,27 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
 
       return next;
     });
-  }, [pathname, toolsNavChildrenByParent, toolsNavTopLevelItems]);
+  }, [currentPathname, toolsNavChildrenByParent, toolsNavTopLevelItems]);
 
-  const hasHeaderActions = canEditCurrentPage || canManageOrg;
+  useEffect(() => {
+    const onEditorState = (event: Event) => {
+      const detail = (event as CustomEvent<{ pathname?: string; isEditing?: boolean }>).detail;
+
+      if (!detail?.pathname || normalizePath(detail.pathname) !== normalizePath(currentPathname || pathname)) {
+        return;
+      }
+
+      setIsPageContentEditing(Boolean(detail.isEditing));
+    };
+
+    window.addEventListener(ORG_SITE_EDITOR_STATE_EVENT, onEditorState);
+
+    return () => {
+      window.removeEventListener(ORG_SITE_EDITOR_STATE_EVENT, onEditorState);
+    };
+  }, [currentPathname, pathname]);
+
+  const hasHeaderActions = canEditPages || canManageOrg;
 
   return (
     <div className="app-container sticky top-0 z-40 py-4">
@@ -203,29 +460,104 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
           </div>
 
           <nav className="hidden min-w-0 flex-1 md:block">
-            <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto pb-1">
-              {navPages.map((page) => {
-                const href = pageHref(orgSlug, page.slug);
-                return (
-                  <NavItem active={isActivePath(pathname, href)} href={href} key={page.id} variant="header">
-                    {page.title}
-                  </NavItem>
-                );
-              })}
-            </div>
+            {!isMenuEditMode ? (
+              <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto pb-1">
+                {navPages.map((page) => {
+                  const href = pageHref(orgSlug, page.slug);
+                  return (
+                    <NavItem active={hasHydrated ? isActivePath(currentPathname, href) : false} href={href} key={page.id} variant="header">
+                      {page.title}
+                    </NavItem>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto pb-1">
+                <SortableCanvas
+                  className="flex min-w-0 items-center justify-end gap-2"
+                  getId={(page) => page.id}
+                  items={orderedPages}
+                  onReorder={onReorderPages}
+                  renderItem={(page, meta) => (
+                    <EditableMenuItem
+                      isSaving={isSavingMenu}
+                      meta={meta}
+                      onOpenEditor={(href) => {
+                        setIsMenuEditMode(false);
+                        openEditorOnPath(href);
+                      }}
+                      onOpenSettings={onOpenSettings}
+                      onToggleVisibility={onToggleVisibility}
+                      orgSlug={orgSlug}
+                      page={page}
+                    />
+                  )}
+                  sortingStrategy="horizontal"
+                />
+                <Button
+                  className="h-[38px] shrink-0 px-2"
+                  onClick={() => {
+                    setCreateDialogOpen(true);
+                  }}
+                  size="sm"
+                  variant="secondary"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </nav>
 
           {hasHeaderActions ? <span aria-hidden className="hidden h-6 w-px shrink-0 bg-border md:block" /> : null}
 
           <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
-            {canEditCurrentPage ? (
-              <Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={editHref} prefetch>
-                <Pencil className="h-4 w-4" />
-                Edit page
-              </Link>
+            {canEditPages && hasInlineEditingActive ? (
+              <button
+                className={buttonVariants({ size: "sm", variant: "primary" })}
+                onClick={() => {
+                  setIsMenuEditMode(false);
+                  setCreateDialogOpen(false);
+                  setSettingsDialogOpen(false);
+                  setIsToolsMenuOpen(false);
+                  window.dispatchEvent(
+                    new CustomEvent(ORG_SITE_SET_EDITOR_EVENT, {
+                      detail: {
+                        pathname: currentPathname || pathname,
+                        isEditing: false
+                      }
+                    })
+                  );
+                }}
+                type="button"
+              >
+                Done
+              </button>
             ) : null}
 
-            {canManageOrg ? (
+            {canEditCurrentPage && !hasInlineEditingActive ? (
+              <button className={buttonVariants({ size: "sm", variant: "secondary" })} onClick={() => openEditorOnPath(currentPathname || orgBasePath)} type="button">
+                <Pencil className="h-4 w-4" />
+                Edit page
+              </button>
+            ) : null}
+
+            {canEditPages && !hasInlineEditingActive ? (
+              <button
+                className={buttonVariants({ size: "sm", variant: "secondary" })}
+                onClick={() => {
+                  setIsMenuEditMode(true);
+                  setCreateDialogOpen(false);
+                  setSettingsDialogOpen(false);
+                  setIsToolsMenuOpen(false);
+                }}
+                type="button"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Edit menu
+              </button>
+            ) : null}
+
+            {canManageOrg && !hasInlineEditingActive ? (
               <div
                 className="relative"
                 onBlurCapture={(event) => {
@@ -249,7 +581,7 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
                   <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[20rem] max-w-[calc(100vw-1rem)] rounded-card border bg-surface p-2 shadow-floating">
                     {toolsNavTopLevelItems.map((item) => {
                       const children = toolsNavChildrenByParent.get(item.key) ?? [];
-                      const isActive = isActivePrefixPath(pathname, item.href) || children.some((child) => isActivePrefixPath(pathname, child.href));
+                      const isActive = isActivePrefixPath(currentPathname, item.href) || children.some((child) => isActivePrefixPath(currentPathname, child.href));
                       const isExpanded = Boolean(expandedToolsParents[item.key]);
 
                       return (
@@ -295,7 +627,7 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
                             <div className="space-y-1 pb-1 pl-[14px]">
                               {children.map((child) => (
                                 <NavItem
-                                  active={isActivePrefixPath(pathname, child.href)}
+                                  active={isActivePrefixPath(currentPathname, child.href)}
                                   href={child.href}
                                   icon={(() => {
                                     const Icon = toolsNavIconMap[child.icon];
@@ -320,14 +652,163 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
             ) : null}
           </div>
         </div>
+
+        {canEditPages && isPageContentEditing ? (
+          <div className="border-t px-3 py-3 md:px-[18px]">
+            <div id="org-page-editor-toolbar-host" />
+          </div>
+        ) : null}
       </div>
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none h-3 rounded-b-card border-b border-border/60 bg-surface transition-opacity",
-          isScrolled ? "opacity-100" : "opacity-0"
-        )}
-      />
+
+      <EditorSettingsDialog
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                setCreateDialogOpen(false);
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={isSavingMenu || !createTitle.trim()}
+              loading={isSavingMenu}
+              onClick={() => {
+                startSavingMenu(async () => {
+                  const result = await saveOrgPagesAction({
+                    orgSlug,
+                    action: {
+                      type: "create",
+                      title: createTitle,
+                      slug: createSlug.trim() ? createSlug : undefined,
+                      isPublished: createPublished
+                    }
+                  });
+
+                  if (!result.ok) {
+                    toast({
+                      title: "Unable to create page",
+                      description: result.error,
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+
+                  setMenuPages(sortedPages(result.pages));
+                  setCreateTitle("");
+                  setCreateSlug("");
+                  setCreatePublished(true);
+                  setCreateDialogOpen(false);
+                });
+              }}
+              size="sm"
+            >
+              Create
+            </Button>
+          </>
+        }
+        onClose={() => {
+          setCreateDialogOpen(false);
+        }}
+        open={createDialogOpen}
+        size="md"
+        title="Create page"
+      >
+        <div className="space-y-3">
+          <Input onChange={(event) => setCreateTitle(event.target.value)} placeholder="Page title" value={createTitle} />
+          <Input onChange={(event) => setCreateSlug(event.target.value)} placeholder="URL slug (optional)" value={createSlug} />
+          <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm">
+            <input
+              checked={createPublished}
+              onChange={(event) => {
+                setCreatePublished(event.target.checked);
+              }}
+              type="checkbox"
+            />
+            Visible in menu
+          </label>
+        </div>
+      </EditorSettingsDialog>
+
+      <EditorSettingsDialog
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                setSettingsDialogOpen(false);
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={isSavingMenu}
+              loading={isSavingMenu}
+              onClick={() => {
+                if (!settingsPageId) {
+                  return;
+                }
+
+                startSavingMenu(async () => {
+                  const result = await savePageSettingsAction({
+                    orgSlug,
+                    pageId: settingsPageId,
+                    title: settingsTitle,
+                    pageSlug: settingsSlug,
+                    isPublished: settingsPublished
+                  });
+
+                  if (!result.ok) {
+                    toast({
+                      title: "Unable to save page settings",
+                      description: result.error,
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+
+                  setMenuPages(sortedPages(result.pages));
+                  setSettingsDialogOpen(false);
+                });
+              }}
+              size="sm"
+            >
+              Save
+            </Button>
+          </>
+        }
+        onClose={() => {
+          setSettingsDialogOpen(false);
+        }}
+        open={settingsDialogOpen}
+        size="md"
+        title="Page settings"
+      >
+        <div className="space-y-3">
+          <Input onChange={(event) => setSettingsTitle(event.target.value)} placeholder="Page title" value={settingsTitle} />
+          <Input
+            disabled={selectedSettingsPage?.slug === "home"}
+            onChange={(event) => setSettingsSlug(event.target.value)}
+            placeholder="URL slug"
+            value={settingsSlug}
+          />
+          <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm">
+            <input
+              checked={settingsPublished}
+              disabled={selectedSettingsPage?.slug === "home"}
+              onChange={(event) => {
+                setSettingsPublished(event.target.checked);
+              }}
+              type="checkbox"
+            />
+            Visible in menu
+          </label>
+          {selectedSettingsPage?.slug === "home" ? <p className="text-xs text-text-muted">Home always uses /.</p> : null}
+        </div>
+      </EditorSettingsDialog>
     </div>
   );
 }

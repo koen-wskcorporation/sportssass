@@ -167,18 +167,23 @@ export async function updatePlayerRecord(input: {
   metadataJson?: Record<string, unknown>;
 }): Promise<PlayerProfile> {
   const supabase = await createSupabaseServer();
+  const updatePayload: Record<string, unknown> = {
+    first_name: input.firstName,
+    last_name: input.lastName,
+    preferred_name: input.preferredName,
+    date_of_birth: input.dateOfBirth,
+    gender: input.gender,
+    jersey_size: input.jerseySize,
+    medical_notes: input.medicalNotes
+  };
+
+  if (input.metadataJson !== undefined) {
+    updatePayload.metadata_json = input.metadataJson;
+  }
+
   const { data, error } = await supabase
     .from("players")
-    .update({
-      first_name: input.firstName,
-      last_name: input.lastName,
-      preferred_name: input.preferredName,
-      date_of_birth: input.dateOfBirth,
-      gender: input.gender,
-      jersey_size: input.jerseySize,
-      medical_notes: input.medicalNotes,
-      metadata_json: input.metadataJson ?? {}
-    })
+    .update(updatePayload)
     .eq("id", input.playerId)
     .select(playerSelect)
     .single();

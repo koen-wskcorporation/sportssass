@@ -1,10 +1,10 @@
-import { permanentRedirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
-export default async function OrgManageFormDetailLegacyPage({
+export default async function OrgToolsFormDetailPage({
   params
 }: {
   params: Promise<{ orgSlug: string; formId: string }>;
 }) {
   const { orgSlug, formId } = await params;
-  permanentRedirect(`/${orgSlug}/manage/forms/${formId}`);
+  redirect(`/${orgSlug}/tools/forms/${formId}/editor`);
 }

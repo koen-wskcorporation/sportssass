@@ -1,4 +1,4 @@
-import { permanentRedirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
 type SearchParams = {
   saved?: string;
@@ -25,5 +25,5 @@ export default async function OrgInfoLegacyPage({
   }
 
   const suffix = nextQuery.toString();
-  permanentRedirect(`/${orgSlug}/manage/info${suffix ? `?${suffix}` : ""}`);
+  redirect(`/${orgSlug}/tools/manage/info${suffix ? `?${suffix}` : ""}`);
 }

@@ -3,9 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CalendarPicker } from "@/components/ui/calendar-picker";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
@@ -330,14 +331,15 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
                   );
                 }
 
-                const inputType =
-                  field.type === "number"
-                    ? "number"
-                    : field.type === "date"
-                      ? "date"
-                      : field.type === "email"
-                        ? "email"
-                        : "text";
+                const inputType = field.type === "number" ? "number" : field.type === "email" ? "email" : "text";
+
+                if (field.type === "date") {
+                  return (
+                    <FormField key={field.id} label={required ? `${field.label} *` : field.label}>
+                      <CalendarPicker onChange={(nextValue) => updateAnswer(field.name, nextValue)} value={asString(value)} />
+                    </FormField>
+                  );
+                }
 
                 return (
                   <FormField key={field.id} label={required ? `${field.label} *` : field.label}>
@@ -414,62 +416,62 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
         </Button>
       </form>
 
-      <Dialog onClose={() => setPlayerModalOpen(false)} open={playerModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add player</DialogTitle>
-            <DialogDescription>Create a player profile and continue registration.</DialogDescription>
-          </DialogHeader>
-          <form className="space-y-3" onSubmit={handleCreatePlayer}>
-            <FormField label="First name">
-              <Input onChange={(event) => setNewPlayerFirstName(event.target.value)} required value={newPlayerFirstName} />
-            </FormField>
-            <FormField label="Last name">
-              <Input onChange={(event) => setNewPlayerLastName(event.target.value)} required value={newPlayerLastName} />
-            </FormField>
-            <FormField label="Date of birth">
-              <Input onChange={(event) => setNewPlayerDob(event.target.value)} type="date" value={newPlayerDob} />
-            </FormField>
-            <FormField label="Gender">
-              <Select
-                onChange={(event) => {
-                  const mode = event.target.value;
-                  setNewPlayerGenderMode(mode);
-                  if (mode === "other" || mode === "") {
-                    if (mode === "") {
-                      setNewPlayerGender("");
-                    }
-                    return;
+      <Panel
+        footer={
+          <>
+            <Button onClick={() => setPlayerModalOpen(false)} type="button" variant="ghost">
+              Cancel
+            </Button>
+            <Button disabled={isCreatingPlayer} form="registration-create-player-form" loading={isCreatingPlayer} type="submit">
+              {isCreatingPlayer ? "Saving..." : "Add player"}
+            </Button>
+          </>
+        }
+        onClose={() => setPlayerModalOpen(false)}
+        open={playerModalOpen}
+        subtitle="Create a player profile and continue registration."
+        title="Add player"
+      >
+        <form className="space-y-3" id="registration-create-player-form" onSubmit={handleCreatePlayer}>
+          <FormField label="First name">
+            <Input onChange={(event) => setNewPlayerFirstName(event.target.value)} required value={newPlayerFirstName} />
+          </FormField>
+          <FormField label="Last name">
+            <Input onChange={(event) => setNewPlayerLastName(event.target.value)} required value={newPlayerLastName} />
+          </FormField>
+          <FormField label="Date of birth">
+            <CalendarPicker onChange={setNewPlayerDob} value={newPlayerDob} />
+          </FormField>
+          <FormField label="Gender">
+            <Select
+              onChange={(event) => {
+                const mode = event.target.value;
+                setNewPlayerGenderMode(mode);
+                if (mode === "other" || mode === "") {
+                  if (mode === "") {
+                    setNewPlayerGender("");
                   }
-                  setNewPlayerGender(mode);
-                }}
-                options={[
-                  { value: "", label: "Select gender" },
-                  { value: "male", label: "Male" },
-                  { value: "female", label: "Female" },
-                  { value: "non-binary", label: "Non-binary" },
-                  { value: "other", label: "Other" }
-                ]}
-                value={newPlayerGenderMode}
-              />
+                  return;
+                }
+                setNewPlayerGender(mode);
+              }}
+              options={[
+                { value: "", label: "Select gender" },
+                { value: "male", label: "Male" },
+                { value: "female", label: "Female" },
+                { value: "non-binary", label: "Non-binary" },
+                { value: "other", label: "Other" }
+              ]}
+              value={newPlayerGenderMode}
+            />
+          </FormField>
+          {newPlayerGenderMode === "other" ? (
+            <FormField label="Gender (other)">
+              <Input onChange={(event) => setNewPlayerGender(event.target.value)} value={newPlayerGender} />
             </FormField>
-            {newPlayerGenderMode === "other" ? (
-              <FormField label="Gender (other)">
-                <Input onChange={(event) => setNewPlayerGender(event.target.value)} value={newPlayerGender} />
-              </FormField>
-            ) : null}
-
-            <DialogFooter>
-              <Button onClick={() => setPlayerModalOpen(false)} type="button" variant="ghost">
-                Cancel
-              </Button>
-              <Button disabled={isCreatingPlayer} loading={isCreatingPlayer} type="submit">
-                {isCreatingPlayer ? "Saving..." : "Add player"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          ) : null}
+        </form>
+      </Panel>
     </div>
   );
 }

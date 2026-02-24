@@ -1,6 +1,11 @@
 import { Alert } from "@/components/ui/alert";
+import type { Metadata } from "next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+
+export const metadata: Metadata = {
+  title: "Billing"
+};
 
 export default function OrgBillingSettingsPage() {
   return (

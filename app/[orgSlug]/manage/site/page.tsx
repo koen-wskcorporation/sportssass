@@ -1,9 +1,14 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { getOrgCapabilities } from "@/lib/permissions/orgCapabilities";
 import { redirect } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Site"
+};
 
 export default async function OrgManageSitePage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;

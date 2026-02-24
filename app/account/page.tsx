@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
 import { AssetTile } from "@/components/ui/asset-tile";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import { requireAuth } from "@/lib/auth/requireAuth";
+
+export const metadata: Metadata = {
+  title: "Account"
+};
 
 const successMessageByCode: Record<string, string> = {
   profile: "Profile updated successfully.",
@@ -44,7 +47,7 @@ export default async function AccountPage({
 
   return (
     <>
-      <PageHeader description="Manage your profile details and account security." title="Account" />
+      <PageHeader description="Manage your profile details and account security." showBorder={false} title="Account" />
 
       {successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
       {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
@@ -78,30 +81,30 @@ export default async function AccountPage({
               <FormField label="Last name">
                 <Input defaultValue={currentUser.lastName ?? ""} name="lastName" />
               </FormField>
+              <FormField label="Profile picture">
+                <AssetTile
+                  constraints={{
+                    accept: "image/*",
+                    maxSizeMB: 5,
+                    aspect: "square",
+                    recommendedPx: {
+                      w: 640,
+                      h: 640
+                    }
+                  }}
+                  emptyLabel="Upload profile picture"
+                  fit="contain"
+                  initialPath={currentUser.avatarPath}
+                  initialUrl={currentUser.avatarUrl}
+                  kind="account"
+                  name="avatarPath"
+                  previewAlt={`${fullName} avatar`}
+                  purpose="profile-photo"
+                  specificationText="PNG, JPG, WEBP, HEIC, or SVG"
+                  title="Profile picture"
+                />
+              </FormField>
             </div>
-            <FormField label="Profile picture">
-              <AssetTile
-                constraints={{
-                  accept: "image/*",
-                  maxSizeMB: 5,
-                  aspect: "square",
-                  recommendedPx: {
-                    w: 640,
-                    h: 640
-                  }
-                }}
-                emptyLabel="Upload profile picture"
-                fit="contain"
-                initialPath={currentUser.avatarPath}
-                initialUrl={currentUser.avatarUrl}
-                kind="account"
-                name="avatarPath"
-                previewAlt={`${fullName} avatar`}
-                purpose="profile-photo"
-                specificationText="PNG, JPG, WEBP, or SVG"
-                title="Profile picture"
-              />
-            </FormField>
             <SubmitButton>Save profile</SubmitButton>
           </form>
         </CardContent>
@@ -122,17 +125,6 @@ export default async function AccountPage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Players</CardTitle>
-          <CardDescription>Manage player profiles and guardian linking for registrations.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Link className={buttonVariants({ variant: "secondary" })} href="/account/players">
-            Manage Players
-          </Link>
-        </CardContent>
-      </Card>
     </>
   );
 }

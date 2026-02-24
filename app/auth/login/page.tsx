@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { AuthLoginPagePopup } from "@/components/auth/AuthLoginPagePopup";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import type { AuthMode } from "@/components/auth/AuthDialog";
+
+export const metadata: Metadata = {
+  title: "Sign In"
+};
 
 const errorMessageByCode: Record<string, string> = {
   "1": "Unable to continue. Check your details and try again."

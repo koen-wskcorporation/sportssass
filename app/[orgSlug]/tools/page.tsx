@@ -1,6 +1,6 @@
-import { permanentRedirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
 export default async function OrgToolsHomePage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
-  permanentRedirect(`/${orgSlug}/manage`);
+  redirect(`/${orgSlug}/tools/manage`);
 }

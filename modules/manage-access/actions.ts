@@ -458,7 +458,7 @@ export async function inviteUserToOrgAction(input: {
       return asFailure("action_failed", insertError.message);
     }
 
-    revalidatePath(`/${orgSlug}/manage/access`);
+    revalidatePath(`/${orgSlug}/tools/manage/access`);
 
     const members = await listAccessMembersForOrg({
       supabase,
@@ -558,7 +558,7 @@ export async function updateMembershipRoleAction(input: {
       return asFailure("action_failed", updateError.message);
     }
 
-    revalidatePath(`/${orgSlug}/manage/access`);
+    revalidatePath(`/${orgSlug}/tools/manage/access`);
 
     const members = await listAccessMembersForOrg({
       supabase,
@@ -628,7 +628,7 @@ export async function removeMembershipAction(input: {
       return asFailure("action_failed", deleteError.message);
     }
 
-    revalidatePath(`/${orgSlug}/manage/access`);
+    revalidatePath(`/${orgSlug}/tools/manage/access`);
 
     const members = await listAccessMembersForOrg({
       supabase,

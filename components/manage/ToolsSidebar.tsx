@@ -27,7 +27,7 @@ function navConfig(orgSlug: string): OrgAreaSidebarConfig {
   const items = getOrgAdminNavItems(orgSlug);
 
   const topLevel = items.filter((item) => !item.parentKey);
-  const toolsHome = topLevel.find((item) => item.href.endsWith("/manage"));
+  const toolsHome = topLevel.find((item) => item.href.endsWith("/tools/manage"));
 
   if (!toolsHome) {
     throw new Error("Org admin navigation is missing an overview item.");
@@ -46,7 +46,7 @@ function navConfig(orgSlug: string): OrgAreaSidebarConfig {
         label: item.label,
         icon,
         href: item.href,
-        match: item.href.endsWith("/manage") ? ("exact" as const) : ("prefix" as const)
+        match: item.href.endsWith("/tools/manage") ? ("exact" as const) : ("prefix" as const)
       };
     }
 

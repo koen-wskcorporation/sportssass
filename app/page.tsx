@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { CreateOrganizationDialog } from "@/components/dashboard/CreateOrganizationDialog";
 import { DashboardSection, DashboardShell } from "@/components/dashboard/DashboardShell";
 import { EmptyState } from "@/components/dashboard/EmptyState";
@@ -7,6 +8,10 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { buttonVariants } from "@/components/ui/button";
 import { signOutAction } from "@/app/auth/actions";
 import { getDashboardContext } from "@/lib/dashboard/getDashboardContext";
+
+export const metadata: Metadata = {
+  title: "Dashboard"
+};
 
 export default async function HomePage() {
   const { organizations } = await getDashboardContext();
