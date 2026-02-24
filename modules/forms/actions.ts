@@ -23,6 +23,7 @@ import {
   updateFormRecord
 } from "@/modules/forms/db/queries";
 import type { RegistrationPlayerEntryInput, SubmissionStatus } from "@/modules/forms/types";
+import { getProgramById } from "@/modules/programs/db/queries";
 
 const textSchema = z.string().trim();
 const slugSchema = z
@@ -110,6 +111,30 @@ function normalizePlayerEntries(entries: z.infer<typeof submitFormSchema>["playe
   }));
 }
 
+async function getRegistrationFormNameAndValidateLink(params: { orgId: string; formId?: string; programId: string }) {
+  const program = await getProgramById(params.orgId, params.programId);
+  if (!program) {
+    return {
+      ok: false as const,
+      error: "Program not found."
+    };
+  }
+
+  const forms = await listFormsForManage(params.orgId);
+  const existingLinkedForm = forms.find((form) => form.programId === params.programId && form.id !== params.formId);
+  if (existingLinkedForm) {
+    return {
+      ok: false as const,
+      error: "This program already has a linked form."
+    };
+  }
+
+  return {
+    ok: true as const,
+    name: `${program.name} Registration`
+  };
+}
+
 async function requireFormsReadOrWrite(orgSlug: string) {
   const orgContext = await getOrgAuthContext(orgSlug);
   const hasAccess = can(orgContext.membershipPermissions, "forms.read") || can(orgContext.membershipPermissions, "forms.write");
@@ -157,11 +182,30 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
   try {
     const payload = parsed.data;
     const org = await requireOrgPermission(payload.orgSlug, "forms.write");
+    let resolvedName = payload.name;
+
+    if (payload.formKind === "program_registration") {
+      if (!payload.programId) {
+        return asError("Program registration forms require a program.");
+      }
+
+      const result = await getRegistrationFormNameAndValidateLink({
+        orgId: org.orgId,
+        programId: payload.programId
+      });
+
+      if (!result.ok) {
+        return asError(result.error);
+      }
+
+      resolvedName = result.name;
+    }
+
     const created = await createFormRecord({
       orgId: org.orgId,
       createdByUserId: org.userId,
       slug: payload.slug,
-      name: payload.name,
+      name: resolvedName,
       description: normalizeOptional(payload.description),
       formKind: payload.formKind,
       status: payload.status,
@@ -207,18 +251,39 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
   }
 
   const payload = parsed.data;
-  const parsedSchema = parseFormSchemaJson(payload.schemaJson, payload.name);
-  if (parsedSchema.error) {
-    return asError(parsedSchema.error);
-  }
+  let resolvedName = payload.name;
 
   try {
     const org = await requireOrgPermission(payload.orgSlug, "forms.write");
+
+    if (payload.formKind === "program_registration") {
+      if (!payload.programId) {
+        return asError("Program registration forms require a program.");
+      }
+
+      const result = await getRegistrationFormNameAndValidateLink({
+        orgId: org.orgId,
+        formId: payload.formId,
+        programId: payload.programId
+      });
+
+      if (!result.ok) {
+        return asError(result.error);
+      }
+
+      resolvedName = result.name;
+    }
+
+    const parsedSchema = parseFormSchemaJson(payload.schemaJson, resolvedName, payload.formKind);
+    if (parsedSchema.error) {
+      return asError(parsedSchema.error);
+    }
+
     const updated = await updateFormRecord({
       orgId: org.orgId,
       formId: payload.formId,
       slug: payload.slug,
-      name: payload.name,
+      name: resolvedName,
       description: normalizeOptional(payload.description),
       formKind: payload.formKind,
       status: payload.status,

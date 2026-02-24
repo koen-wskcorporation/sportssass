@@ -16,8 +16,12 @@ import {
   getProgramById,
   getProgramDetailsById,
   getProgramDetailsBySlug,
+  listProgramNodes,
   listProgramsForManage,
   listPublishedProgramsForCatalog,
+  updateProgramNodeHierarchyRecord,
+  updateProgramNodeRecord,
+  updateProgramNodeSettingsRecord,
   updateProgramRecord
 } from "@/modules/programs/db/queries";
 import type { ProgramScheduleBlockType, ProgramType } from "@/modules/programs/types";
@@ -77,17 +81,28 @@ const updateProgramSchema = createProgramSchema.extend({
 const saveHierarchySchema = z.object({
   orgSlug: textSchema.min(1),
   programId: z.string().uuid(),
-  action: z.enum(["create", "delete"]),
+  action: z.enum(["create", "delete", "reorder", "set-published", "update"]),
   nodeId: z.string().uuid().optional(),
   parentId: z.string().uuid().nullable().optional(),
   name: textSchema.max(120).optional(),
   slug: slugSchema.optional(),
-  nodeKind: z.enum(["division", "subdivision"]).optional(),
+  nodeKind: z.enum(["division", "team"]).optional(),
   capacity: z
     .union([z.number().int().min(0), z.null()])
     .optional()
     .transform((value) => (typeof value === "number" ? value : null)),
-  waitlistEnabled: z.boolean().optional()
+  waitlistEnabled: z.boolean().optional(),
+  nodes: z
+    .array(
+      z.object({
+        nodeId: z.string().uuid(),
+        parentId: z.string().uuid().nullable(),
+        sortIndex: z.number().int().min(0),
+        nodeKind: z.enum(["division", "team"])
+      })
+    )
+    .optional(),
+  isPublished: z.boolean().optional()
 });
 
 const saveScheduleSchema = z.object({
@@ -259,7 +274,7 @@ export async function updateProgramAction(input: z.input<typeof updateProgramSch
 export async function saveProgramHierarchyAction(input: z.input<typeof saveHierarchySchema>): Promise<ProgramsActionResult<{ details: NonNullable<Awaited<ReturnType<typeof getProgramDetailsById>>> }>> {
   const parsed = saveHierarchySchema.safeParse(input);
   if (!parsed.success) {
-    return asError("Please review division details.");
+    return asError("Please review program structure details.");
   }
 
   try {
@@ -273,7 +288,19 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
 
     if (payload.action === "create") {
       if (!payload.name || !payload.slug || !payload.nodeKind) {
-        return asError("Division name, slug, and type are required.");
+        return asError("Node name, slug, and type are required.");
+      }
+
+      if (payload.parentId) {
+        const existingNodes = await listProgramNodes(payload.programId);
+        const parentNode = existingNodes.find((node) => node.id === payload.parentId);
+        if (!parentNode) {
+          return asError("Parent node not found.");
+        }
+
+        if (parentNode.nodeKind === "team" && payload.nodeKind === "division") {
+          return asError("Teams cannot contain divisions.");
+        }
       }
 
       await createProgramNodeRecord({
@@ -286,12 +313,149 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
         waitlistEnabled: payload.waitlistEnabled ?? false,
         settingsJson: {}
       });
-    } else {
+    } else if (payload.action === "delete") {
       if (!payload.nodeId) {
         return asError("Node id is required for delete.");
       }
 
       await deleteProgramNodeRecord(payload.programId, payload.nodeId);
+    } else if (payload.action === "reorder") {
+      if (!payload.nodes || payload.nodes.length === 0) {
+        return asError("No hierarchy changes were provided.");
+      }
+
+      const existingNodes = await listProgramNodes(payload.programId);
+      if (existingNodes.length === 0) {
+        return asError("No nodes are available to reorder.");
+      }
+
+      const existingIds = new Set(existingNodes.map((node) => node.id));
+      const inputNodeIds = payload.nodes.map((node) => node.nodeId);
+      const uniqueInputNodeIds = new Set(inputNodeIds);
+
+      if (payload.nodes.length !== existingNodes.length || uniqueInputNodeIds.size !== payload.nodes.length) {
+        return asError("Hierarchy changed while editing. Refresh and try again.");
+      }
+
+      for (const nodeId of inputNodeIds) {
+        if (!existingIds.has(nodeId)) {
+          return asError("One or more nodes no longer exist. Refresh and try again.");
+        }
+      }
+
+      for (const node of payload.nodes) {
+        if (node.parentId === node.nodeId) {
+          return asError("A node cannot be its own parent.");
+        }
+
+        if (node.parentId && !existingIds.has(node.parentId)) {
+          return asError("Invalid parent assignment detected. Refresh and try again.");
+        }
+      }
+
+      const parentByNodeId = new Map(payload.nodes.map((node) => [node.nodeId, node.parentId]));
+      for (const nodeId of uniqueInputNodeIds) {
+        const seen = new Set<string>([nodeId]);
+        let currentParentId = parentByNodeId.get(nodeId) ?? null;
+
+        while (currentParentId) {
+          if (seen.has(currentParentId)) {
+            return asError("Invalid hierarchy: recursive parent assignment detected.");
+          }
+
+          seen.add(currentParentId);
+          currentParentId = parentByNodeId.get(currentParentId) ?? null;
+        }
+      }
+
+      const groups = new Map<string, Array<{ nodeId: string; parentId: string | null; sortIndex: number; nodeKind: "division" | "team" }>>();
+      for (const node of payload.nodes) {
+        const key = node.parentId ?? "__root__";
+        const current = groups.get(key) ?? [];
+        current.push(node);
+        groups.set(key, current);
+      }
+
+      const existingSortByNodeId = new Map(existingNodes.map((node) => [node.id, node.sortIndex]));
+      for (const [key, group] of groups.entries()) {
+        group.sort((a, b) => {
+          if (a.sortIndex !== b.sortIndex) {
+            return a.sortIndex - b.sortIndex;
+          }
+
+          return (existingSortByNodeId.get(a.nodeId) ?? 0) - (existingSortByNodeId.get(b.nodeId) ?? 0);
+        });
+
+        for (let index = 0; index < group.length; index += 1) {
+          const item = group[index];
+          await updateProgramNodeHierarchyRecord({
+            programId: payload.programId,
+            nodeId: item.nodeId,
+            parentId: key === "__root__" ? null : key,
+            sortIndex: index,
+            nodeKind: item.nodeKind
+          });
+        }
+      }
+    } else if (payload.action === "set-published") {
+      if (!payload.nodeId || typeof payload.isPublished !== "boolean") {
+        return asError("Node id and publish state are required.");
+      }
+
+      const existingNodes = await listProgramNodes(payload.programId);
+      const targetNode = existingNodes.find((node) => node.id === payload.nodeId);
+
+      if (!targetNode) {
+        return asError("Node not found.");
+      }
+
+      await updateProgramNodeSettingsRecord({
+        programId: payload.programId,
+        nodeId: payload.nodeId,
+        settingsJson: {
+          ...targetNode.settingsJson,
+          published: payload.isPublished
+        }
+      });
+    } else {
+      if (!payload.nodeId || !payload.name || !payload.slug || !payload.nodeKind) {
+        return asError("Node id, name, slug, and type are required.");
+      }
+
+      const existingNodes = await listProgramNodes(payload.programId);
+      const targetNode = existingNodes.find((node) => node.id === payload.nodeId);
+
+      if (!targetNode) {
+        return asError("Node not found.");
+      }
+
+      if (targetNode.parentId) {
+        const parentNode = existingNodes.find((node) => node.id === targetNode.parentId);
+        if (parentNode?.nodeKind === "team" && payload.nodeKind === "division") {
+          return asError("Teams cannot contain divisions.");
+        }
+      }
+
+      await updateProgramNodeRecord({
+        programId: payload.programId,
+        nodeId: payload.nodeId,
+        name: payload.name,
+        slug: payload.slug,
+        nodeKind: payload.nodeKind,
+        capacity: payload.capacity,
+        waitlistEnabled: payload.waitlistEnabled ?? targetNode.waitlistEnabled
+      });
+
+      if (typeof payload.isPublished === "boolean") {
+        await updateProgramNodeSettingsRecord({
+          programId: payload.programId,
+          nodeId: payload.nodeId,
+          settingsJson: {
+            ...targetNode.settingsJson,
+            published: payload.isPublished
+          }
+        });
+      }
     }
 
     const refreshedDetails = await getProgramDetailsById(org.orgId, payload.programId);
@@ -310,7 +474,7 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
     };
   } catch (error) {
     rethrowIfNavigationError(error);
-    return asError("Unable to save divisions right now.");
+    return asError("Unable to save program structure right now.");
   }
 }
 

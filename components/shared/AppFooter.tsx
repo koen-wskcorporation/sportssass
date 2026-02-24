@@ -21,7 +21,7 @@ export function AppFooter() {
 
           <span aria-hidden="true" className="ml-auto h-5 w-px bg-white/25" />
 
-          <p className="whitespace-nowrap text-right text-sm text-white/75">{`© ${year} Koen Stewart. This app is experemental and may not behave properly,`}</p>
+          <p className="whitespace-nowrap text-right text-sm text-white/75">{`© ${year} Koen Stewart. This app is experemental and may not behave as expected.`}</p>
         </div>
       </div>
     </footer>

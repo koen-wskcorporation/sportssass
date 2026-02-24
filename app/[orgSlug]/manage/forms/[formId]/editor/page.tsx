@@ -11,6 +11,7 @@ import { FormEditorPanel } from "@/modules/forms/components/FormEditorPanel";
 import { FormPageTabs } from "@/modules/forms/components/FormPageTabs";
 import { FormPublishToggleButton } from "@/modules/forms/components/FormPublishToggleButton";
 import { getFormById } from "@/modules/forms/db/queries";
+import { listProgramNodes } from "@/modules/programs/db/queries";
 
 export const metadata: Metadata = {
   title: "Form Builder"
@@ -36,6 +37,8 @@ export default async function OrgManageFormEditorPage({
   }
 
   const canWriteForms = can(orgContext.membershipPermissions, "forms.write");
+  const canAccessPrograms = can(orgContext.membershipPermissions, "programs.read") || can(orgContext.membershipPermissions, "programs.write");
+  const programNodes = canAccessPrograms && form.programId ? await listProgramNodes(form.programId) : [];
   const statusLabel = form.status === "published" ? "Published" : "Not published";
   const statusVariant = form.status === "published" ? "success" : "warning";
   const statusClassName =
@@ -50,6 +53,9 @@ export default async function OrgManageFormEditorPage({
           <>
             <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/tools/forms`}>
               Back to forms
+            </Link>
+            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/tools/forms/${form.id}/settings`}>
+              Settings
             </Link>
             <FormPublishToggleButton canWrite={canWriteForms} form={form} orgSlug={orgContext.orgSlug} />
           </>
@@ -67,7 +73,7 @@ export default async function OrgManageFormEditorPage({
       />
       <FormPageTabs active="builder" formId={form.id} orgSlug={orgContext.orgSlug} />
       {!canWriteForms ? <Alert variant="info">You have read-only access to this form.</Alert> : null}
-      <FormEditorPanel canWrite={canWriteForms} form={form} orgSlug={orgContext.orgSlug} />
+      <FormEditorPanel canWrite={canWriteForms} form={form} orgSlug={orgContext.orgSlug} programNodes={programNodes} />
     </div>
   );
 }

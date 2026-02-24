@@ -22,9 +22,9 @@ export type OrgAdminNavItem = {
 export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
   return [
     {
-      key: "manage-overview",
-      label: "Overview",
-      href: `/${orgSlug}/tools/manage`,
+      key: "tools-overview",
+      label: "Tools Overview",
+      href: `/${orgSlug}/tools`,
       description: "Open the organization admin overview.",
       icon: "wrench",
       showInHome: false

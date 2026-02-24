@@ -8,6 +8,20 @@ export type SubmissionStatus = "submitted" | "in_review" | "approved" | "rejecte
 
 export type FormFieldType = "text" | "textarea" | "email" | "number" | "date" | "select" | "checkbox";
 
+export type FormPageKey = "generic_custom" | "registration_player" | "registration_division_questions" | "registration_payment";
+
+export const REGISTRATION_PAGE_KEYS = {
+  player: "registration_player",
+  divisionQuestions: "registration_division_questions",
+  payment: "registration_payment"
+} as const;
+
+export const REGISTRATION_PAGE_ORDER = [
+  REGISTRATION_PAGE_KEYS.player,
+  REGISTRATION_PAGE_KEYS.divisionQuestions,
+  REGISTRATION_PAGE_KEYS.payment
+] as const;
+
 export type FormFieldOption = {
   value: string;
   label: string;
@@ -22,13 +36,17 @@ export type FormField = {
   placeholder: string | null;
   helpText: string | null;
   options: FormFieldOption[];
+  targetNodeIds: string[];
+  includeDescendants: boolean;
 };
 
-export type FormSection = {
+export type FormPage = {
   id: string;
+  pageKey: FormPageKey;
   title: string;
   description: string | null;
   fields: FormField[];
+  locked: boolean;
 };
 
 export type FormRuleOperator = "equals" | "not_equals" | "is_true" | "is_false";
@@ -48,7 +66,7 @@ export type FormSchema = {
   version: number;
   title: string;
   description: string | null;
-  sections: FormSection[];
+  pages: FormPage[];
   rules: FormRule[];
 };
 
@@ -102,6 +120,10 @@ export type FormSubmissionEntry = {
   programNodeId: string | null;
   answersJson: Record<string, unknown>;
   createdAt: string;
+};
+
+export type FormSubmissionWithEntries = FormSubmission & {
+  entries: FormSubmissionEntry[];
 };
 
 export type ProgramRegistration = {

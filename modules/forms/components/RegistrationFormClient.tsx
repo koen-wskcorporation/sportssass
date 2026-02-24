@@ -11,8 +11,9 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { submitFormResponseAction } from "@/modules/forms/actions";
+import { REGISTRATION_PAGE_KEYS } from "@/modules/forms/types";
 import { createPlayerAction } from "@/modules/players/actions";
-import type { OrgForm } from "@/modules/forms/types";
+import type { FormField as FormFieldDefinition, FormPage, OrgForm } from "@/modules/forms/types";
 import type { PlayerPickerItem } from "@/modules/players/types";
 import type { ProgramNode } from "@/modules/programs/types";
 
@@ -22,6 +23,11 @@ type RegistrationFormClientProps = {
   form: OrgForm;
   players: PlayerPickerItem[];
   programNodes: ProgramNode[];
+};
+
+type RuleState = {
+  hiddenFieldNames: Set<string>;
+  requiredFieldNames: Set<string>;
 };
 
 function asString(value: unknown) {
@@ -56,16 +62,111 @@ function evaluateRule(sourceValue: unknown, operator: string, expectedValue: unk
   return false;
 }
 
+function isValueMissing(field: FormFieldDefinition, value: unknown) {
+  if (field.type === "checkbox") {
+    return value !== true;
+  }
+
+  return value === undefined || value === null || value === "";
+}
+
+function computeRuleState(fields: FormFieldDefinition[], rules: OrgForm["schemaJson"]["rules"], answers: Record<string, unknown>): RuleState {
+  const visibleFieldNameSet = new Set(fields.map((field) => field.name));
+  const requiredFieldNames = new Set(fields.filter((field) => field.required).map((field) => field.name));
+  const hiddenFieldNames = new Set<string>();
+
+  for (const rule of rules) {
+    if (!visibleFieldNameSet.has(rule.sourceFieldName) || !visibleFieldNameSet.has(rule.targetFieldName)) {
+      continue;
+    }
+
+    const sourceValue = answers[rule.sourceFieldName];
+    const ruleMatched = evaluateRule(sourceValue, rule.operator, rule.value);
+
+    if (rule.effect === "show" && !ruleMatched) {
+      hiddenFieldNames.add(rule.targetFieldName);
+      continue;
+    }
+
+    if (rule.effect === "require" && ruleMatched) {
+      requiredFieldNames.add(rule.targetFieldName);
+    }
+  }
+
+  return {
+    hiddenFieldNames,
+    requiredFieldNames
+  };
+}
+
+function nodeMatchesFieldTarget(field: FormFieldDefinition, selectedNodeId: string | null, nodeById: Map<string, ProgramNode>) {
+  if (field.targetNodeIds.length === 0) {
+    return true;
+  }
+
+  if (!selectedNodeId) {
+    return false;
+  }
+
+  if (field.targetNodeIds.includes(selectedNodeId)) {
+    return true;
+  }
+
+  if (!field.includeDescendants) {
+    return false;
+  }
+
+  let cursor = nodeById.get(selectedNodeId);
+
+  while (cursor?.parentId) {
+    if (field.targetNodeIds.includes(cursor.parentId)) {
+      return true;
+    }
+
+    cursor = nodeById.get(cursor.parentId);
+  }
+
+  return false;
+}
+
+function getFieldTargetDescription(field: FormFieldDefinition, programNodes: ProgramNode[]) {
+  if (field.targetNodeIds.length === 0) {
+    return "Program-wide";
+  }
+
+  const labels = field.targetNodeIds
+    .map((targetId) => programNodes.find((node) => node.id === targetId)?.name)
+    .filter((name): name is string => Boolean(name));
+
+  if (labels.length === 0) {
+    return "Specific structure nodes";
+  }
+
+  return field.includeDescendants ? `${labels.join(", ")} (+ child nodes)` : labels.join(", ");
+}
+
+function getPageTitle(page: FormPage | undefined, fallback: string) {
+  if (!page) {
+    return fallback;
+  }
+
+  return page.title || fallback;
+}
+
 export function RegistrationFormClient({ orgSlug, formSlug, form, players, programNodes }: RegistrationFormClientProps) {
   const { toast } = useToast();
 
   const allowMultiplePlayers = Boolean(form.settingsJson.allowMultiplePlayers);
   const requiresPlayers = form.formKind === "program_registration";
+  const schemaPages = form.schemaJson.pages;
+  const nodeById = useMemo(() => new Map(programNodes.map((node) => [node.id, node])), [programNodes]);
 
   const [isSubmitting, startSubmitting] = useTransition();
   const [isCreatingPlayer, startCreatingPlayer] = useTransition();
 
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [genericAnswers, setGenericAnswers] = useState<Record<string, unknown>>({});
+  const [answersByPlayerId, setAnswersByPlayerId] = useState<Record<string, Record<string, unknown>>>({});
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [selectedNodeByPlayerId, setSelectedNodeByPlayerId] = useState<Record<string, string>>({});
   const [successState, setSuccessState] = useState<{ submissionId: string; status: string } | null>(null);
@@ -78,69 +179,184 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
   const [newPlayerGender, setNewPlayerGender] = useState("");
   const [newPlayerGenderMode, setNewPlayerGenderMode] = useState("");
 
-  const fields = useMemo(() => {
-    return form.schemaJson.sections.flatMap((section) =>
-      section.fields.map((field) => ({
-        ...field,
-        sectionTitle: section.title
-      }))
-    );
-  }, [form.schemaJson.sections]);
+  const currentPage = schemaPages[currentPageIndex];
+  const isLastPage = currentPageIndex === schemaPages.length - 1;
 
-  const requiredFieldNames = useMemo(() => {
-    const required = new Set(form.schemaJson.sections.flatMap((section) => section.fields.filter((field) => field.required).map((field) => field.name)));
+  const registrationPlayerPage = schemaPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.player);
+  const registrationDivisionPage = schemaPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions);
+  const registrationPaymentPage = schemaPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.payment);
 
-    for (const rule of form.schemaJson.rules) {
-      if (rule.effect !== "require") {
-        continue;
-      }
-
-      const sourceValue = answers[rule.sourceFieldName];
-      if (evaluateRule(sourceValue, rule.operator, rule.value)) {
-        required.add(rule.targetFieldName);
-      }
+  function getEffectiveNodeIdForPlayer(playerId: string): string | null {
+    if (form.targetMode === "locked") {
+      return form.lockedProgramNodeId;
     }
 
-    return required;
-  }, [answers, form.schemaJson.rules, form.schemaJson.sections]);
+    return selectedNodeByPlayerId[playerId] ?? null;
+  }
 
-  const hiddenFieldNames = useMemo(() => {
-    const hidden = new Set<string>();
-
-    for (const rule of form.schemaJson.rules) {
-      if (rule.effect !== "show") {
-        continue;
-      }
-
-      const sourceValue = answers[rule.sourceFieldName];
-      if (!evaluateRule(sourceValue, rule.operator, rule.value)) {
-        hidden.add(rule.targetFieldName);
-      }
-    }
-
-    return hidden;
-  }, [answers, form.schemaJson.rules]);
-
-  const visibleFields = useMemo(() => {
-    return fields.filter((field) => !hiddenFieldNames.has(field.name));
-  }, [fields, hiddenFieldNames]);
-
-  function updateAnswer(fieldName: string, value: unknown) {
-    setAnswers((current) => ({
+  function updateGenericAnswer(fieldName: string, value: unknown) {
+    setGenericAnswers((current) => ({
       ...current,
       [fieldName]: value
     }));
   }
 
+  function updatePlayerAnswer(playerId: string, fieldName: string, value: unknown) {
+    setAnswersByPlayerId((current) => ({
+      ...current,
+      [playerId]: {
+        ...(current[playerId] ?? {}),
+        [fieldName]: value
+      }
+    }));
+  }
+
   function togglePlayer(playerId: string) {
     if (allowMultiplePlayers) {
-      setSelectedPlayerIds((current) =>
-        current.includes(playerId) ? current.filter((id) => id !== playerId) : [...current, playerId]
-      );
+      setSelectedPlayerIds((current) => (current.includes(playerId) ? current.filter((id) => id !== playerId) : [...current, playerId]));
       return;
     }
 
     setSelectedPlayerIds((current) => (current[0] === playerId ? [] : [playerId]));
+  }
+
+  function getPlayerFieldsForNode(playerId: string) {
+    const allFields = registrationDivisionPage?.fields ?? [];
+    const selectedNodeId = getEffectiveNodeIdForPlayer(playerId);
+
+    return allFields.filter((field) => nodeMatchesFieldTarget(field, selectedNodeId, nodeById));
+  }
+
+  function validateGenericPage(page: FormPage) {
+    const ruleState = computeRuleState(page.fields, form.schemaJson.rules, genericAnswers);
+
+    for (const field of page.fields) {
+      if (ruleState.hiddenFieldNames.has(field.name)) {
+        continue;
+      }
+
+      if (!ruleState.requiredFieldNames.has(field.name)) {
+        continue;
+      }
+
+      const value = genericAnswers[field.name];
+      if (isValueMissing(field, value)) {
+        return `${field.label} is required.`;
+      }
+    }
+
+    return null;
+  }
+
+  function validateRegistrationPlayerPage() {
+    if (selectedPlayerIds.length === 0) {
+      return "Select at least one player to continue.";
+    }
+
+    return null;
+  }
+
+  function validateRegistrationDivisionPage() {
+    if (selectedPlayerIds.length === 0) {
+      return "Select at least one player before answering questions.";
+    }
+
+    if (form.targetMode === "choice") {
+      for (const playerId of selectedPlayerIds) {
+        if (!selectedNodeByPlayerId[playerId]) {
+          return "Choose a division for each selected player.";
+        }
+      }
+    }
+
+    for (const playerId of selectedPlayerIds) {
+      const player = localPlayers.find((item) => item.id === playerId);
+      const playerLabel = player?.label ?? "Selected player";
+      const fields = getPlayerFieldsForNode(playerId);
+      const playerAnswers = answersByPlayerId[playerId] ?? {};
+      const ruleState = computeRuleState(fields, form.schemaJson.rules, playerAnswers);
+
+      for (const field of fields) {
+        if (ruleState.hiddenFieldNames.has(field.name)) {
+          continue;
+        }
+
+        if (!ruleState.requiredFieldNames.has(field.name)) {
+          continue;
+        }
+
+        const value = playerAnswers[field.name];
+        if (isValueMissing(field, value)) {
+          return `${playerLabel}: ${field.label} is required.`;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function validateCurrentPage() {
+    if (!currentPage) {
+      return "Form page not found.";
+    }
+
+    if (!requiresPlayers) {
+      return validateGenericPage(currentPage);
+    }
+
+    if (currentPage.pageKey === REGISTRATION_PAGE_KEYS.player) {
+      return validateRegistrationPlayerPage();
+    }
+
+    if (currentPage.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions) {
+      return validateRegistrationDivisionPage();
+    }
+
+    return null;
+  }
+
+  function validateBeforeSubmit() {
+    if (!requiresPlayers) {
+      for (const page of schemaPages) {
+        const error = validateGenericPage(page);
+        if (error) {
+          return error;
+        }
+      }
+
+      return null;
+    }
+
+    const playerError = validateRegistrationPlayerPage();
+    if (playerError) {
+      return playerError;
+    }
+
+    const divisionError = validateRegistrationDivisionPage();
+    if (divisionError) {
+      return divisionError;
+    }
+
+    return null;
+  }
+
+  function moveToNextPage() {
+    const validationError = validateCurrentPage();
+
+    if (validationError) {
+      toast({
+        title: "Incomplete page",
+        description: validationError,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCurrentPageIndex((index) => Math.min(index + 1, schemaPages.length - 1));
+  }
+
+  function moveToPreviousPage() {
+    setCurrentPageIndex((index) => Math.max(index - 1, 0));
   }
 
   function handleCreatePlayer(event: React.FormEvent<HTMLFormElement>) {
@@ -169,13 +385,8 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
         subtitle: result.data.player.dateOfBirth ? `DOB: ${result.data.player.dateOfBirth}` : null
       } satisfies PlayerPickerItem;
 
-      setLocalPlayers((current) => {
-        const next = [...current, newPlayer].sort((a, b) => a.label.localeCompare(b.label));
-        return next;
-      });
-
+      setLocalPlayers((current) => [...current, newPlayer].sort((a, b) => a.label.localeCompare(b.label)));
       setSelectedPlayerIds((current) => (allowMultiplePlayers ? [...current, newPlayer.id] : [newPlayer.id]));
-
       setPlayerModalOpen(false);
       setNewPlayerFirstName("");
       setNewPlayerLastName("");
@@ -190,41 +401,10 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
     });
   }
 
-  function validateForm() {
-    for (const field of visibleFields) {
-      if (!requiredFieldNames.has(field.name)) {
-        continue;
-      }
-
-      const value = answers[field.name];
-      if (value === undefined || value === null || value === "") {
-        return `${field.label} is required.`;
-      }
-
-      if (field.type === "checkbox" && value !== true) {
-        return `${field.label} is required.`;
-      }
-    }
-
-    if (requiresPlayers && selectedPlayerIds.length === 0) {
-      return "Select at least one player to continue.";
-    }
-
-    if (requiresPlayers && form.targetMode === "choice") {
-      for (const playerId of selectedPlayerIds) {
-        if (!selectedNodeByPlayerId[playerId]) {
-          return "Choose a division/subdivision for each selected player.";
-        }
-      }
-    }
-
-    return null;
-  }
-
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const validationError = validateForm();
+    const validationError = validateBeforeSubmit();
     if (validationError) {
       toast({
         title: "Incomplete form",
@@ -238,20 +418,22 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
       const result = await submitFormResponseAction({
         orgSlug,
         formSlug,
-        answers,
-        playerEntries: selectedPlayerIds.map((playerId) => ({
-          playerId,
-          programNodeId: form.targetMode === "locked" ? form.lockedProgramNodeId : selectedNodeByPlayerId[playerId] ?? null,
-          answers: {}
-        })),
+        answers: requiresPlayers ? {} : genericAnswers,
+        playerEntries: requiresPlayers
+          ? selectedPlayerIds.map((playerId) => ({
+              playerId,
+              programNodeId: getEffectiveNodeIdForPlayer(playerId),
+              answers: answersByPlayerId[playerId] ?? {}
+            }))
+          : [],
         metadata: {
-          source: "registration_form"
+          source: requiresPlayers ? "registration_form" : "generic_form"
         }
       });
 
       if (!result.ok) {
         toast({
-          title: "Unable to submit registration",
+          title: requiresPlayers ? "Unable to submit registration" : "Unable to submit form",
           description: result.error,
           variant: "destructive"
         });
@@ -263,11 +445,85 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
         status: result.data.status
       });
       toast({
-        title: "Registration submitted",
+        title: requiresPlayers ? "Registration submitted" : "Form submitted",
         variant: "success"
       });
     });
   }
+
+  function renderField(
+    field: FormFieldDefinition,
+    value: unknown,
+    required: boolean,
+    onChange: (fieldName: string, nextValue: unknown) => void,
+    keyPrefix: string
+  ) {
+    const fieldLabel = required ? `${field.label} *` : field.label;
+
+    if (field.type === "textarea") {
+      return (
+        <FormField key={`${keyPrefix}-${field.id}`} label={fieldLabel}>
+          <Textarea
+            className="min-h-[100px]"
+            onChange={(event) => onChange(field.name, event.target.value)}
+            placeholder={field.placeholder ?? undefined}
+            value={asString(value)}
+          />
+        </FormField>
+      );
+    }
+
+    if (field.type === "select") {
+      return (
+        <FormField key={`${keyPrefix}-${field.id}`} label={fieldLabel}>
+          <Select
+            onChange={(event) => onChange(field.name, event.target.value)}
+            options={[
+              { value: "", label: "Select" },
+              ...field.options.map((option) => ({ value: option.value, label: option.label }))
+            ]}
+            value={asString(value)}
+          />
+        </FormField>
+      );
+    }
+
+    if (field.type === "checkbox") {
+      return (
+        <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text" key={`${keyPrefix}-${field.id}`}>
+          <input
+            checked={value === true || value === "true" || value === "on"}
+            onChange={(event) => onChange(field.name, event.target.checked)}
+            type="checkbox"
+          />
+          {fieldLabel}
+        </label>
+      );
+    }
+
+    if (field.type === "date") {
+      return (
+        <FormField key={`${keyPrefix}-${field.id}`} label={fieldLabel}>
+          <CalendarPicker onChange={(nextValue) => onChange(field.name, nextValue)} value={asString(value)} />
+        </FormField>
+      );
+    }
+
+    const inputType = field.type === "number" ? "number" : field.type === "email" ? "email" : "text";
+
+    return (
+      <FormField key={`${keyPrefix}-${field.id}`} label={fieldLabel}>
+        <Input
+          onChange={(event) => onChange(field.name, inputType === "number" ? Number(event.target.value) : event.target.value)}
+          placeholder={field.placeholder ?? undefined}
+          type={inputType}
+          value={asString(value)}
+        />
+      </FormField>
+    );
+  }
+
+  const genericCurrentRuleState = currentPage && !requiresPlayers ? computeRuleState(currentPage.fields, form.schemaJson.rules, genericAnswers) : null;
 
   return (
     <div className="space-y-4">
@@ -277,99 +533,50 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
         </Alert>
       ) : null}
 
+      {schemaPages.length > 1 ? (
+        <div className="rounded-control border bg-surface px-3 py-2 text-sm text-text-muted">
+          Step {currentPageIndex + 1} of {schemaPages.length}: {currentPage?.title ?? "Form"}
+        </div>
+      ) : null}
+
       <form className="space-y-4" onSubmit={handleSubmit}>
-        {form.schemaJson.sections.map((section) => (
-          <div className="space-y-3 rounded-card border bg-surface p-4" key={section.id}>
+        {!requiresPlayers && currentPage ? (
+          <div className="space-y-3 rounded-card border bg-surface p-4">
             <div>
-              <h3 className="font-semibold text-text">{section.title}</h3>
-              {section.description ? <p className="text-sm text-text-muted">{section.description}</p> : null}
+              <h3 className="font-semibold text-text">{currentPage.title}</h3>
+              {currentPage.description ? <p className="text-sm text-text-muted">{currentPage.description}</p> : null}
             </div>
-            {section.fields
-              .filter((field) => !hiddenFieldNames.has(field.name))
-              .map((field) => {
-                const required = requiredFieldNames.has(field.name);
-                const value = answers[field.name];
-
-                if (field.type === "textarea") {
-                  return (
-                    <FormField key={field.id} label={required ? `${field.label} *` : field.label}>
-                      <Textarea
-                        className="min-h-[100px]"
-                        onChange={(event) => updateAnswer(field.name, event.target.value)}
-                        placeholder={field.placeholder ?? undefined}
-                        value={asString(value)}
-                      />
-                    </FormField>
-                  );
-                }
-
-                if (field.type === "select") {
-                  return (
-                    <FormField key={field.id} label={required ? `${field.label} *` : field.label}>
-                      <Select
-                        onChange={(event) => updateAnswer(field.name, event.target.value)}
-                        options={[
-                          { value: "", label: "Select" },
-                          ...field.options.map((option) => ({ value: option.value, label: option.label }))
-                        ]}
-                        value={asString(value)}
-                      />
-                    </FormField>
-                  );
-                }
-
-                if (field.type === "checkbox") {
-                  return (
-                    <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text" key={field.id}>
-                      <input
-                        checked={value === true || value === "true" || value === "on"}
-                        onChange={(event) => updateAnswer(field.name, event.target.checked)}
-                        type="checkbox"
-                      />
-                      {required ? `${field.label} *` : field.label}
-                    </label>
-                  );
-                }
-
-                const inputType = field.type === "number" ? "number" : field.type === "email" ? "email" : "text";
-
-                if (field.type === "date") {
-                  return (
-                    <FormField key={field.id} label={required ? `${field.label} *` : field.label}>
-                      <CalendarPicker onChange={(nextValue) => updateAnswer(field.name, nextValue)} value={asString(value)} />
-                    </FormField>
-                  );
-                }
-
-                return (
-                  <FormField key={field.id} label={required ? `${field.label} *` : field.label}>
-                    <Input
-                      onChange={(event) => updateAnswer(field.name, inputType === "number" ? Number(event.target.value) : event.target.value)}
-                      placeholder={field.placeholder ?? undefined}
-                      type={inputType}
-                      value={asString(value)}
-                    />
-                  </FormField>
-                );
-              })}
+            {currentPage.fields
+              .filter((field) => !genericCurrentRuleState?.hiddenFieldNames.has(field.name))
+              .map((field) =>
+                renderField(
+                  field,
+                  genericAnswers[field.name],
+                  Boolean(genericCurrentRuleState?.requiredFieldNames.has(field.name)),
+                  updateGenericAnswer,
+                  currentPage.id
+                )
+              )}
           </div>
-        ))}
+        ) : null}
 
-        {requiresPlayers ? (
+        {requiresPlayers && currentPage?.pageKey === REGISTRATION_PAGE_KEYS.player ? (
           <div className="space-y-3 rounded-card border bg-surface p-4">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-semibold text-text">Players</h3>
+              <div>
+                <h3 className="font-semibold text-text">{getPageTitle(registrationPlayerPage, "Player")}</h3>
+                {registrationPlayerPage?.description ? <p className="text-sm text-text-muted">{registrationPlayerPage.description}</p> : null}
+              </div>
               <Button onClick={() => setPlayerModalOpen(true)} size="sm" type="button" variant="secondary">
                 Add player
               </Button>
             </div>
 
-            {localPlayers.length === 0 ? <Alert variant="warning">No players yet. Add a player to register.</Alert> : null}
+            {localPlayers.length === 0 ? <Alert variant="warning">No players yet. Add a player to continue.</Alert> : null}
 
             <div className="space-y-2">
               {localPlayers.map((player) => {
                 const checked = selectedPlayerIds.includes(player.id);
-
                 return (
                   <div className="rounded-control border bg-surface-muted px-3 py-2" key={player.id}>
                     <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-text">
@@ -379,41 +586,124 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
                       </span>
                       <input checked={checked} onChange={() => togglePlayer(player.id)} type={allowMultiplePlayers ? "checkbox" : "radio"} />
                     </label>
-
-                    {checked && requiresPlayers && form.targetMode === "choice" ? (
-                      <div className="mt-2">
-                        <Select
-                          onChange={(event) =>
-                            setSelectedNodeByPlayerId((current) => ({
-                              ...current,
-                              [player.id]: event.target.value
-                            }))
-                          }
-                          options={[
-                            { value: "", label: "Select division/subdivision" },
-                            ...programNodes.map((node) => ({
-                              value: node.id,
-                              label: `${node.name} (${node.nodeKind})`
-                            }))
-                          ]}
-                          value={selectedNodeByPlayerId[player.id] ?? ""}
-                        />
-                      </div>
-                    ) : null}
                   </div>
                 );
               })}
             </div>
-
-            {form.targetMode === "locked" && form.lockedProgramNodeId ? (
-              <p className="text-xs text-text-muted">This registration is locked to one target division/subdivision.</p>
-            ) : null}
           </div>
         ) : null}
 
-        <Button disabled={isSubmitting} loading={isSubmitting} type="submit">
-          {isSubmitting ? "Submitting..." : "Submit registration"}
-        </Button>
+        {requiresPlayers && currentPage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions ? (
+          <div className="space-y-3 rounded-card border bg-surface p-4">
+            <div>
+              <h3 className="font-semibold text-text">{getPageTitle(registrationDivisionPage, "Division + Questions")}</h3>
+              {registrationDivisionPage?.description ? <p className="text-sm text-text-muted">{registrationDivisionPage.description}</p> : null}
+            </div>
+
+            {selectedPlayerIds.length === 0 ? <Alert variant="info">Select at least one player on the previous step to continue.</Alert> : null}
+
+            {selectedPlayerIds.map((playerId) => {
+              const player = localPlayers.find((item) => item.id === playerId);
+              const playerAnswers = answersByPlayerId[playerId] ?? {};
+              const targetedFields = getPlayerFieldsForNode(playerId);
+              const ruleState = computeRuleState(targetedFields, form.schemaJson.rules, playerAnswers);
+              const selectedNodeId = getEffectiveNodeIdForPlayer(playerId);
+              const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : null;
+
+              return (
+                <div className="space-y-3 rounded-control border bg-surface-muted p-3" key={playerId}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-text">{player?.label ?? "Selected player"}</p>
+                    {selectedNode ? <p className="text-xs text-text-muted">Node: {selectedNode.name}</p> : null}
+                  </div>
+
+                  {form.targetMode === "choice" ? (
+                    <FormField label="Node">
+                      <Select
+                        onChange={(event) =>
+                          setSelectedNodeByPlayerId((current) => ({
+                            ...current,
+                            [playerId]: event.target.value
+                          }))
+                        }
+                        options={[
+                          { value: "", label: "Select node" },
+                          ...programNodes.map((node) => ({ value: node.id, label: `${node.name} (${node.nodeKind})` }))
+                        ]}
+                        value={selectedNodeByPlayerId[playerId] ?? ""}
+                      />
+                    </FormField>
+                  ) : null}
+
+                  {form.targetMode === "locked" ? (
+                    <p className="text-xs text-text-muted">
+                      Locked to: {selectedNode ? `${selectedNode.name} (${selectedNode.nodeKind})` : "No locked node configured."}
+                    </p>
+                  ) : null}
+
+                  {targetedFields
+                    .filter((field) => !ruleState.hiddenFieldNames.has(field.name))
+                    .map((field) => (
+                      <div className="space-y-1" key={`${playerId}-${field.id}`}>
+                        {renderField(
+                          field,
+                          playerAnswers[field.name],
+                          ruleState.requiredFieldNames.has(field.name),
+                          (fieldName, nextValue) => updatePlayerAnswer(playerId, fieldName, nextValue),
+                          playerId
+                        )}
+                        <p className="text-[11px] text-text-muted">Applies to: {getFieldTargetDescription(field, programNodes)}</p>
+                      </div>
+                    ))}
+
+                  {targetedFields.filter((field) => !ruleState.hiddenFieldNames.has(field.name)).length === 0 ? (
+                    <Alert variant="info">No questions apply to this player/node combination.</Alert>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {requiresPlayers && currentPage?.pageKey === REGISTRATION_PAGE_KEYS.payment ? (
+          <div className="space-y-3 rounded-card border bg-surface p-4">
+            <div>
+              <h3 className="font-semibold text-text">{getPageTitle(registrationPaymentPage, "Payment")}</h3>
+              {registrationPaymentPage?.description ? <p className="text-sm text-text-muted">{registrationPaymentPage.description}</p> : null}
+            </div>
+            <Alert variant="info">Payment is a placeholder for now. Review your registration details and submit.</Alert>
+            <div className="space-y-2">
+              {selectedPlayerIds.map((playerId) => {
+                const player = localPlayers.find((item) => item.id === playerId);
+                const selectedNodeId = getEffectiveNodeIdForPlayer(playerId);
+                const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : null;
+
+                return (
+                  <div className="rounded-control border bg-surface-muted px-3 py-2 text-sm text-text" key={`summary-${playerId}`}>
+                    <p className="font-medium">{player?.label ?? "Selected player"}</p>
+                    <p className="text-xs text-text-muted">Node: {selectedNode ? `${selectedNode.name} (${selectedNode.nodeKind})` : "Not selected"}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={currentPageIndex === 0} onClick={moveToPreviousPage} type="button" variant="secondary">
+            Back
+          </Button>
+
+          {!isLastPage ? (
+            <Button onClick={moveToNextPage} type="button">
+              Next
+            </Button>
+          ) : (
+            <Button disabled={isSubmitting} loading={isSubmitting} type="submit">
+              {isSubmitting ? "Submitting..." : requiresPlayers ? "Submit registration" : "Submit"}
+            </Button>
+          )}
+        </div>
       </form>
 
       <Panel

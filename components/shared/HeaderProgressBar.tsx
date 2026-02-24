@@ -2,6 +2,7 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isReservedOrgSlug } from "@/lib/org/reservedSlugs";
 
 const INITIAL_PROGRESS = 8;
 const MAX_TRICKLE_PROGRESS = 92;
@@ -60,9 +61,12 @@ export function HeaderProgressBar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams.toString();
+  const firstSegment = pathname.split("/").filter(Boolean)[0] ?? "";
+  const isOrgRoute = firstSegment.length > 0 && !isReservedOrgSlug(firstSegment);
 
   const [visible, setVisible] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [orgAccent, setOrgAccent] = useState<string | null>(null);
 
   const isNavigatingRef = useRef(false);
   const hasMountedRef = useRef(false);
@@ -172,9 +176,43 @@ export function HeaderProgressBar() {
     };
   }, [clearTimers]);
 
+  useEffect(() => {
+    if (!isOrgRoute) {
+      setOrgAccent(null);
+      return;
+    }
+
+    const panelDock = document.getElementById("panel-dock");
+
+    if (!panelDock) {
+      setOrgAccent(null);
+      return;
+    }
+
+    const readAccent = () => {
+      const accent = panelDock.style.getPropertyValue("--accent").trim();
+      setOrgAccent(accent || null);
+    };
+
+    readAccent();
+
+    const observer = new MutationObserver(readAccent);
+    observer.observe(panelDock, { attributeFilter: ["style"], attributes: true });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isOrgRoute]);
+
   return (
     <div aria-hidden className={`pointer-events-none fixed inset-x-0 top-0 z-[100] h-[3px] transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}>
-      <div className="h-full origin-left bg-[hsl(var(--accent))] transition-transform duration-150 ease-out" style={{ transform: `scaleX(${progress / 100})` }} />
+      <div
+        className="h-full origin-left transition-transform duration-150 ease-out"
+        style={{
+          backgroundColor: orgAccent ? `hsl(${orgAccent})` : "hsl(var(--app-accent))",
+          transform: `scaleX(${progress / 100})`
+        }}
+      />
     </div>
   );
 }

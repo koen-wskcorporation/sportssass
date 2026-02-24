@@ -43,7 +43,7 @@ export default async function OrgLayout({
   const canManageOrg = capabilities?.manage.canAccessArea ?? false;
 
   return (
-    <div className="min-h-[calc(100vh-64px)]" style={brandingVars}>
+    <div style={brandingVars}>
       <BrandingCssVarsBridge vars={brandingVars as Record<string, string>} />
       <OrgHeader
         canEditPages={canEditPages}

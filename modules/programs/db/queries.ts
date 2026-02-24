@@ -1,5 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { Program, ProgramCatalogItem, ProgramNode, ProgramScheduleBlock, ProgramWithDetails } from "@/modules/programs/types";
+import { isProgramNodePublished } from "@/modules/programs/utils";
 
 const programSelect =
   "id, org_id, slug, name, description, status, program_type, custom_type_label, registration_open_at, registration_close_at, start_date, end_date, cover_image_path, settings_json, created_at, updated_at";
@@ -250,7 +251,43 @@ export async function getProgramDetailsBySlug(
     return null;
   }
 
-  const [nodes, scheduleBlocks] = await Promise.all([listProgramNodes(program.id), listProgramScheduleBlocks(program.id)]);
+  const [allNodes, scheduleBlocks] = await Promise.all([listProgramNodes(program.id), listProgramScheduleBlocks(program.id)]);
+  const nodes =
+    options?.includeDraft === false
+      ? (() => {
+          const nodeById = new Map(allNodes.map((node) => [node.id, node]));
+          const visibilityCache = new Map<string, boolean>();
+
+          const isVisible = (node: ProgramNode): boolean => {
+            const cached = visibilityCache.get(node.id);
+            if (typeof cached === "boolean") {
+              return cached;
+            }
+
+            if (!isProgramNodePublished(node)) {
+              visibilityCache.set(node.id, false);
+              return false;
+            }
+
+            if (!node.parentId) {
+              visibilityCache.set(node.id, true);
+              return true;
+            }
+
+            const parent = nodeById.get(node.parentId);
+            if (!parent) {
+              visibilityCache.set(node.id, false);
+              return false;
+            }
+
+            const visible = isVisible(parent);
+            visibilityCache.set(node.id, visible);
+            return visible;
+          };
+
+          return allNodes.filter((node) => isVisible(node));
+        })()
+      : allNodes;
 
   return {
     program,
@@ -259,7 +296,7 @@ export async function getProgramDetailsBySlug(
   };
 }
 
-export async function listProgramNodes(programId: string): Promise<ProgramNode[]> {
+export async function listProgramNodes(programId: string, options?: { publishedOnly?: boolean }): Promise<ProgramNode[]> {
   const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("program_nodes")
@@ -272,7 +309,42 @@ export async function listProgramNodes(programId: string): Promise<ProgramNode[]
     throw new Error(`Failed to list program nodes: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => mapNode(row as NodeRow));
+  const nodes = (data ?? []).map((row) => mapNode(row as NodeRow));
+  if (!options?.publishedOnly) {
+    return nodes;
+  }
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const visibilityCache = new Map<string, boolean>();
+
+  const isVisible = (node: ProgramNode): boolean => {
+    const cached = visibilityCache.get(node.id);
+    if (typeof cached === "boolean") {
+      return cached;
+    }
+
+    if (!isProgramNodePublished(node)) {
+      visibilityCache.set(node.id, false);
+      return false;
+    }
+
+    if (!node.parentId) {
+      visibilityCache.set(node.id, true);
+      return true;
+    }
+
+    const parent = nodeById.get(node.parentId);
+    if (!parent) {
+      visibilityCache.set(node.id, false);
+      return false;
+    }
+
+    const visible = isVisible(parent);
+    visibilityCache.set(node.id, visible);
+    return visible;
+  };
+
+  return nodes.filter((node) => isVisible(node));
 }
 
 export async function listProgramScheduleBlocks(programId: string): Promise<ProgramScheduleBlock[]> {
@@ -440,6 +512,75 @@ export async function deleteProgramNodeRecord(programId: string, nodeId: string)
 
   if (error) {
     throw new Error(`Failed to delete program node: ${error.message}`);
+  }
+}
+
+export async function updateProgramNodeHierarchyRecord(input: {
+  programId: string;
+  nodeId: string;
+  parentId: string | null;
+  nodeKind: ProgramNode["nodeKind"];
+  sortIndex: number;
+}) {
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase
+    .from("program_nodes")
+    .update({
+      parent_id: input.parentId,
+      node_kind: input.nodeKind,
+      sort_index: input.sortIndex
+    })
+    .eq("program_id", input.programId)
+    .eq("id", input.nodeId);
+
+  if (error) {
+    throw new Error(`Failed to update program node hierarchy: ${error.message}`);
+  }
+}
+
+export async function updateProgramNodeSettingsRecord(input: {
+  programId: string;
+  nodeId: string;
+  settingsJson: Record<string, unknown>;
+}) {
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase
+    .from("program_nodes")
+    .update({
+      settings_json: input.settingsJson
+    })
+    .eq("program_id", input.programId)
+    .eq("id", input.nodeId);
+
+  if (error) {
+    throw new Error(`Failed to update program node settings: ${error.message}`);
+  }
+}
+
+export async function updateProgramNodeRecord(input: {
+  programId: string;
+  nodeId: string;
+  name: string;
+  slug: string;
+  nodeKind: ProgramNode["nodeKind"];
+  capacity: number | null;
+  waitlistEnabled: boolean;
+}) {
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase
+    .from("program_nodes")
+    .update({
+      name: input.name,
+      slug: input.slug,
+      node_kind: input.nodeKind,
+      capacity: input.capacity,
+      waitlist_enabled: input.waitlistEnabled
+    })
+    .eq("program_id", input.programId)
+    .eq("id", input.nodeId);
+
+  if (error) {
+    throw new Error(`Failed to update program node: ${error.message}`);
   }
 }
 

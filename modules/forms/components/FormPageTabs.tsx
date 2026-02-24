@@ -18,11 +18,6 @@ export function FormPageTabs({ orgSlug, formId, active }: FormPageTabsProps) {
       key: "submissions",
       label: "Submissions",
       href: `/${orgSlug}/tools/forms/${formId}/submissions`
-    },
-    {
-      key: "settings",
-      label: "Settings",
-      href: `/${orgSlug}/tools/forms/${formId}/settings`
     }
   ] as const;
 

@@ -13,23 +13,40 @@ import {
   type DragStartEvent
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlignLeft, CalendarDays, CheckSquare, GripVertical, Hash, List, Mail, Plus, Settings2, Trash2, Type } from "lucide-react";
+import {
+  AlignLeft,
+  ArrowDown,
+  ArrowUp,
+  CalendarDays,
+  CheckSquare,
+  GripVertical,
+  Hash,
+  List,
+  Mail,
+  Plus,
+  Settings2,
+  Trash2,
+  Type
+} from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from "react";
-import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { CardDescription } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { FormField as FormFieldDefinition, FormFieldOption, FormFieldType, FormSchema } from "@/modules/forms/types";
+import { cn } from "@/lib/utils";
+import { REGISTRATION_PAGE_KEYS } from "@/modules/forms/types";
+import type { FormField as FormFieldDefinition, FormFieldOption, FormFieldType, FormKind, FormPage, FormSchema } from "@/modules/forms/types";
+import type { ProgramNode } from "@/modules/programs/types";
 
 type FormFieldsVisualEditorProps = {
   formName: string;
   formDescription: string;
+  formKind: FormKind;
   schema: FormSchema;
+  programNodes: ProgramNode[];
   onChange: (nextSchema: FormSchema) => void;
   view: "editor" | "preview";
   disabled?: boolean;
@@ -146,9 +163,9 @@ function getDefaultLabel(fieldType: FormFieldType) {
   }
 }
 
-function createFieldForType(fieldType: FormFieldType, fields: FormFieldDefinition[]): FormFieldDefinition {
+function createFieldForType(fieldType: FormFieldType, allFields: FormFieldDefinition[]): FormFieldDefinition {
   const label = getDefaultLabel(fieldType);
-  const fieldName = ensureUniqueFieldName(label, fields);
+  const fieldName = ensureUniqueFieldName(label, allFields);
 
   return {
     id: makeId("field"),
@@ -170,7 +187,9 @@ function createFieldForType(fieldType: FormFieldType, fields: FormFieldDefinitio
               label: "Option 2"
             }
           ]
-        : []
+        : [],
+    targetNodeIds: [],
+    includeDescendants: false
   };
 }
 
@@ -190,134 +209,12 @@ function ensureUniqueOptionValue(baseValue: string, options: FormFieldOption[], 
   return `${normalizedBase}_${suffix}`;
 }
 
-function getPrimarySection(schema: FormSchema) {
-  const first = schema.sections[0];
-  if (first) {
-    return {
-      ...first,
-      fields: first.fields ?? []
-    };
-  }
-
-  return {
-    id: "section-general",
-    title: "General",
-    description: null,
-    fields: []
-  };
-}
-
 function transformToCss(transform: { x: number; y: number; scaleX: number; scaleY: number } | null) {
   if (!transform) {
     return undefined;
   }
 
   return `translate3d(${transform.x}px, ${transform.y}px, 0)`;
-}
-
-function PaletteItem({ config, disabled, onAdd }: { config: PaletteFieldConfig; disabled: boolean; onAdd: (fieldType: FormFieldType) => void }) {
-  const Icon = config.icon;
-
-  return (
-    <div className={cn("rounded-control border bg-surface px-3 py-3", disabled ? "opacity-55" : "")}>
-      <div className="flex items-start justify-between gap-2">
-        <span className="mt-[1px] rounded-[8px] border bg-surface-muted p-1.5">
-          <Icon className="h-3.5 w-3.5 text-text-muted" />
-        </span>
-        <span className="flex-1">
-          <p className="text-sm font-semibold text-text">{config.label}</p>
-          <p className="text-xs text-text-muted">{config.description}</p>
-        </span>
-        <Button disabled={disabled} onClick={() => onAdd(config.type)} size="sm" type="button" variant="secondary">
-          Add
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function SortableCanvasField({
-  field,
-  selected,
-  disabled,
-  onDelete,
-  onSelect,
-  onOpenSettings
-}: {
-  field: FormFieldDefinition;
-  selected: boolean;
-  disabled: boolean;
-  onDelete: (fieldId: string) => void;
-  onSelect: (fieldId: string) => void;
-  onOpenSettings: (fieldId: string) => void;
-}) {
-  const { attributes, listeners, isDragging, setNodeRef, transform, transition } = useSortable({
-    id: field.id,
-    disabled
-  });
-
-  const style: CSSProperties = {
-    transform: transformToCss(transform),
-    transition,
-    zIndex: isDragging ? 20 : undefined,
-    opacity: isDragging ? 0.7 : 1
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <div
-        className="rounded-control border bg-surface p-3 transition-colors hover:bg-surface-muted"
-      >
-        <div className="flex items-start gap-2">
-          <button
-            aria-label="Drag field"
-            className={cn(
-              "mt-[2px] rounded-[8px] border bg-surface-muted p-1 text-text-muted",
-              disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
-            )}
-            disabled={disabled}
-            type="button"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-3.5 w-3.5" />
-          </button>
-
-          <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(field.id)} type="button">
-            <p className="truncate text-sm font-semibold text-text">
-              {field.label || "Untitled field"}
-              {field.required ? <span className="ml-1 text-accent">*</span> : null}
-            </p>
-            <p className="truncate text-xs text-text-muted">
-              {field.type} · {field.name}
-            </p>
-          </button>
-
-          <Button
-            aria-label="Field settings"
-            className="h-8 w-8 px-0"
-            disabled={disabled}
-            onClick={() => onOpenSettings(field.id)}
-            type="button"
-            variant="ghost"
-          >
-            <Settings2 className="h-4 w-4" />
-          </Button>
-
-          <Button
-            aria-label="Remove field"
-            className="h-8 w-8 px-0"
-            disabled={disabled}
-            onClick={() => onDelete(field.id)}
-            type="button"
-            variant="ghost"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function renderPreviewField(field: FormFieldDefinition) {
@@ -373,7 +270,160 @@ function renderPreviewField(field: FormFieldDefinition) {
   );
 }
 
-export function FormFieldsVisualEditor({ formName, formDescription, schema, onChange, view, disabled = false }: FormFieldsVisualEditorProps) {
+function getNodeLabel(node: ProgramNode) {
+  return `${node.name} (${node.nodeKind})`;
+}
+
+function fieldMatchesNode(field: FormFieldDefinition, selectedNodeId: string | null, nodeById: Map<string, ProgramNode>) {
+  if (field.targetNodeIds.length === 0) {
+    return true;
+  }
+
+  if (!selectedNodeId) {
+    return false;
+  }
+
+  if (field.targetNodeIds.includes(selectedNodeId)) {
+    return true;
+  }
+
+  if (!field.includeDescendants) {
+    return false;
+  }
+
+  let cursor: ProgramNode | undefined = nodeById.get(selectedNodeId);
+
+  while (cursor?.parentId) {
+    if (field.targetNodeIds.includes(cursor.parentId)) {
+      return true;
+    }
+    cursor = nodeById.get(cursor.parentId);
+  }
+
+  return false;
+}
+
+function fieldTargetSummary(field: FormFieldDefinition, programNodes: ProgramNode[]) {
+  if (field.targetNodeIds.length === 0) {
+    return "Program-wide";
+  }
+
+  const names = field.targetNodeIds
+    .map((id) => programNodes.find((node) => node.id === id)?.name)
+    .filter((name): name is string => Boolean(name));
+
+  if (names.length === 0) {
+    return "Specific structure nodes";
+  }
+
+  return field.includeDescendants ? `${names.join(", ")} (+ child nodes)` : names.join(", ");
+}
+
+function PaletteItem({ config, disabled, onAdd }: { config: PaletteFieldConfig; disabled: boolean; onAdd: (fieldType: FormFieldType) => void }) {
+  const Icon = config.icon;
+
+  return (
+    <div className={cn("rounded-control border bg-surface px-3 py-3", disabled ? "opacity-55" : "")}> 
+      <div className="flex items-start justify-between gap-2">
+        <span className="mt-[1px] rounded-[8px] border bg-surface-muted p-1.5">
+          <Icon className="h-3.5 w-3.5 text-text-muted" />
+        </span>
+        <span className="flex-1">
+          <p className="text-sm font-semibold text-text">{config.label}</p>
+          <p className="text-xs text-text-muted">{config.description}</p>
+        </span>
+        <Button disabled={disabled} onClick={() => onAdd(config.type)} size="sm" type="button" variant="secondary">
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SortableCanvasField({
+  field,
+  selected,
+  disabled,
+  targetSummary,
+  onDelete,
+  onSelect,
+  onOpenSettings
+}: {
+  field: FormFieldDefinition;
+  selected: boolean;
+  disabled: boolean;
+  targetSummary: string | null;
+  onDelete: (fieldId: string) => void;
+  onSelect: (fieldId: string) => void;
+  onOpenSettings: (fieldId: string) => void;
+}) {
+  const { attributes, listeners, isDragging, setNodeRef, transform, transition } = useSortable({
+    id: field.id,
+    disabled
+  });
+
+  const style: CSSProperties = {
+    transform: transformToCss(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+    opacity: isDragging ? 0.7 : 1
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div className={cn("rounded-control border bg-surface p-3 transition-colors hover:bg-surface-muted", selected ? "border-accent/60" : "")}>
+        <div className="flex items-start gap-2">
+          <button
+            aria-label="Drag field"
+            className={cn(
+              "mt-[2px] rounded-[8px] border bg-surface-muted p-1 text-text-muted",
+              disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
+            )}
+            disabled={disabled}
+            type="button"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+
+          <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(field.id)} type="button">
+            <p className="truncate text-sm font-semibold text-text">
+              {field.label || "Untitled field"}
+              {field.required ? <span className="ml-1 text-accent">*</span> : null}
+            </p>
+            <p className="truncate text-xs text-text-muted">{field.type} · {field.name}</p>
+            {targetSummary ? <p className="truncate text-[11px] text-text-muted">{targetSummary}</p> : null}
+          </button>
+
+          <Button
+            aria-label="Field settings"
+            className="h-8 w-8 px-0"
+            disabled={disabled}
+            onClick={() => onOpenSettings(field.id)}
+            type="button"
+            variant="ghost"
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
+
+          <Button
+            aria-label="Remove field"
+            className="h-8 w-8 px-0"
+            disabled={disabled}
+            onClick={() => onDelete(field.id)}
+            type="button"
+            variant="ghost"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function FormFieldsVisualEditor({ formName, formDescription, formKind, schema, programNodes, onChange, view, disabled = false }: FormFieldsVisualEditorProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -384,18 +434,30 @@ export function FormFieldsVisualEditor({ formName, formDescription, schema, onCh
       coordinateGetter: sortableKeyboardCoordinates
     })
   );
+
+  const isRegistration = formKind === "program_registration";
+  const nodeById = useMemo(() => new Map(programNodes.map((node) => [node.id, node])), [programNodes]);
+
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
+  const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [libraryPanelOpen, setLibraryPanelOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+  const [previewNodeId, setPreviewNodeId] = useState("");
+  const [appliesToModeByFieldId, setAppliesToModeByFieldId] = useState<Record<string, "program" | "specific">>({});
 
-  const section = useMemo(() => getPrimarySection(schema), [schema]);
-  const fields = section.fields;
+  const pages = schema.pages ?? [];
 
-  const { isOver: isCanvasDropTarget, setNodeRef: setCanvasDropRef } = useDroppable({
-    id: "canvas-dropzone",
-    disabled
-  });
+  useEffect(() => {
+    if (!activePageId || !pages.some((page) => page.id === activePageId)) {
+      setActivePageId(pages[0]?.id ?? null);
+    }
+  }, [activePageId, pages]);
+
+  const activePage = activePageId ? pages.find((page) => page.id === activePageId) ?? null : pages[0] ?? null;
+  const allFields = useMemo(() => pages.flatMap((page) => page.fields), [pages]);
+  const fields = activePage?.fields ?? [];
+  const canEditFields = Boolean(activePage) && (!isRegistration || activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions);
 
   useEffect(() => {
     if (fields.length === 0) {
@@ -409,18 +471,44 @@ export function FormFieldsVisualEditor({ formName, formDescription, schema, onCh
   }, [fields, selectedFieldId]);
 
   const selectedField = selectedFieldId ? fields.find((field) => field.id === selectedFieldId) ?? null : null;
+  const selectedFieldAppliesToMode =
+    selectedField ? (appliesToModeByFieldId[selectedField.id] ?? (selectedField.targetNodeIds.length > 0 ? "specific" : "program")) : "program";
 
-  function updateFields(updater: (current: FormFieldDefinition[]) => FormFieldDefinition[]) {
-    const nextFields = updater(section.fields);
+  useEffect(() => {
+    if (previewNodeId && !programNodes.some((node) => node.id === previewNodeId)) {
+      setPreviewNodeId("");
+    }
+  }, [previewNodeId, programNodes]);
+
+  const { isOver: isCanvasDropTarget, setNodeRef: setCanvasDropRef } = useDroppable({
+    id: "canvas-dropzone",
+    disabled: disabled || !canEditFields
+  });
+
+  function updatePages(updater: (current: FormPage[]) => FormPage[]) {
     onChange({
       ...schema,
-      sections: [
-        {
-          ...section,
-          fields: nextFields
-        }
-      ]
+      pages: updater(schema.pages)
     });
+  }
+
+  function updateActivePage(updater: (page: FormPage) => FormPage) {
+    if (!activePage) {
+      return;
+    }
+
+    updatePages((current) => current.map((page) => (page.id === activePage.id ? updater(page) : page)));
+  }
+
+  function updateFields(updater: (current: FormFieldDefinition[]) => FormFieldDefinition[]) {
+    if (!activePage) {
+      return;
+    }
+
+    updateActivePage((page) => ({
+      ...page,
+      fields: updater(page.fields)
+    }));
   }
 
   function updateField(fieldId: string, updater: (field: FormFieldDefinition) => FormFieldDefinition) {
@@ -428,7 +516,7 @@ export function FormFieldsVisualEditor({ formName, formDescription, schema, onCh
   }
 
   function insertField(fieldType: FormFieldType, overId: string | null) {
-    const newField = createFieldForType(fieldType, fields);
+    const newField = createFieldForType(fieldType, allFields);
 
     updateFields((current) => {
       const next = [...current];
@@ -439,6 +527,59 @@ export function FormFieldsVisualEditor({ formName, formDescription, schema, onCh
     });
 
     setSelectedFieldId(newField.id);
+  }
+
+  function addPage() {
+    if (isRegistration) {
+      return;
+    }
+
+    const nextPage: FormPage = {
+      id: makeId("page"),
+      pageKey: "generic_custom",
+      title: `Page ${pages.length + 1}`,
+      description: null,
+      fields: [],
+      locked: false
+    };
+
+    updatePages((current) => [...current, nextPage]);
+    setActivePageId(nextPage.id);
+    setSelectedFieldId(null);
+  }
+
+  function deletePage(pageId: string) {
+    if (isRegistration || pages.length <= 1) {
+      return;
+    }
+
+    updatePages((current) => current.filter((page) => page.id !== pageId));
+
+    if (activePageId === pageId) {
+      const remaining = pages.filter((page) => page.id !== pageId);
+      setActivePageId(remaining[0]?.id ?? null);
+      setSelectedFieldId(null);
+    }
+  }
+
+  function movePage(pageId: string, direction: -1 | 1) {
+    if (isRegistration) {
+      return;
+    }
+
+    updatePages((current) => {
+      const index = current.findIndex((page) => page.id === pageId);
+      if (index < 0) {
+        return current;
+      }
+
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+
+      return arrayMove(current, index, nextIndex);
+    });
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -453,7 +594,7 @@ export function FormFieldsVisualEditor({ formName, formDescription, schema, onCh
   function handleDragEnd(event: DragEndEvent) {
     const overId = event.over ? String(event.over.id) : null;
 
-    if (!activeDrag) {
+    if (!activeDrag || !canEditFields) {
       return;
     }
 
@@ -543,86 +684,216 @@ export function FormFieldsVisualEditor({ formName, formDescription, schema, onCh
 
   const activeCanvasField = activeDrag?.kind === "canvas" ? fields.find((field) => field.id === activeDrag.fieldId) ?? null : null;
 
+  const previewFields = useMemo(() => {
+    if (!activePage) {
+      return [];
+    }
+
+    if (!isRegistration || activePage.pageKey !== REGISTRATION_PAGE_KEYS.divisionQuestions) {
+      return activePage.fields;
+    }
+
+    const selectedNodeId = previewNodeId || null;
+    return activePage.fields.filter((field) => fieldMatchesNode(field, selectedNodeId, nodeById));
+  }, [activePage, isRegistration, nodeById, previewNodeId]);
+
   return (
     <div className="space-y-4">
-      {view === "editor" ? (
-        <DndContext
-          collisionDetection={closestCenter}
-          onDragCancel={() => setActiveDrag(null)}
-          onDragEnd={handleDragEnd}
-          onDragStart={handleDragStart}
-          sensors={sensors}
-        >
-          <div
-            className={cn(
-              "rounded-control border border-dashed bg-surface-muted/40 p-4",
-              isCanvasDropTarget ? "border-accent bg-accent/10" : "border-border"
-            )}
-            ref={setCanvasDropRef}
-          >
-            {fields.length === 0 ? (
-              <div className="space-y-4 py-8">
-                <div className="flex items-center justify-center">
-                  <Alert className="max-w-md" variant="info">
-                    Open the field library panel and add a field to start building your form.
-                  </Alert>
-                </div>
-                <div className="flex justify-center">
-                  <Button disabled={disabled} onClick={() => setLibraryPanelOpen(true)} type="button" variant="secondary">
-                    <Plus className="h-4 w-4" />
-                    Open field library
-                  </Button>
-                </div>
+      <div className="space-y-2 rounded-control border bg-surface p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Pages</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {pages.map((page, index) => {
+            const isActive = page.id === activePage?.id;
+            return (
+              <div className="flex items-center gap-1" key={page.id}>
+                <button
+                  className={cn(
+                    "rounded-control border px-3 py-1.5 text-sm",
+                    isActive ? "border-accent bg-accent/10 text-text" : "border-border bg-surface-muted text-text-muted hover:text-text"
+                  )}
+                  onClick={() => {
+                    setActivePageId(page.id);
+                    setSelectedFieldId(null);
+                  }}
+                  type="button"
+                >
+                  {page.title || `Page ${index + 1}`}
+                </button>
+                {!isRegistration ? (
+                  <>
+                    <Button aria-label="Move page up" className="h-8 w-8 px-0" disabled={disabled || index === 0} onClick={() => movePage(page.id, -1)} type="button" variant="ghost">
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      aria-label="Move page down"
+                      className="h-8 w-8 px-0"
+                      disabled={disabled || index === pages.length - 1}
+                      onClick={() => movePage(page.id, 1)}
+                      type="button"
+                      variant="ghost"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    <Button aria-label="Delete page" className="h-8 w-8 px-0" disabled={disabled || pages.length <= 1} onClick={() => deletePage(page.id)} type="button" variant="ghost">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : null}
               </div>
-            ) : (
-              <SortableContext items={fields.map((field) => field.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-2.5">
-                  {fields.map((field) => (
-                    <SortableCanvasField
-                      disabled={disabled}
-                      field={field}
-                      key={field.id}
-                      onDelete={deleteField}
-                      onOpenSettings={(fieldId) => {
-                        setSelectedFieldId(fieldId);
-                        setSettingsPanelOpen(true);
-                      }}
-                      onSelect={setSelectedFieldId}
-                      selected={selectedFieldId === field.id}
-                    />
-                  ))}
-                  <div className="pt-1">
+            );
+          })}
+
+          {!isRegistration ? (
+            <Button disabled={disabled} onClick={addPage} size="sm" type="button" variant="secondary">
+              <Plus className="h-4 w-4" />
+              Add page
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {activePage ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField label="Page title">
+            <Input
+              disabled={disabled}
+              onChange={(event) => {
+                updateActivePage((page) => ({
+                  ...page,
+                  title: event.target.value
+                }));
+              }}
+              value={activePage.title}
+            />
+          </FormField>
+          <FormField className="md:col-span-2" label="Page description">
+            <Textarea
+              className="min-h-[72px]"
+              disabled={disabled}
+              onChange={(event) => {
+                updateActivePage((page) => ({
+                  ...page,
+                  description: event.target.value
+                }));
+              }}
+              value={activePage.description ?? ""}
+            />
+          </FormField>
+        </div>
+      ) : null}
+
+      {view === "editor" ? (
+        canEditFields ? (
+          <DndContext
+            collisionDetection={closestCenter}
+            onDragCancel={() => setActiveDrag(null)}
+            onDragEnd={handleDragEnd}
+            onDragStart={handleDragStart}
+            sensors={sensors}
+          >
+            <div
+              className={cn(
+                "rounded-control border border-dashed bg-surface-muted/40 p-4",
+                isCanvasDropTarget ? "border-accent bg-accent/10" : "border-border"
+              )}
+              ref={setCanvasDropRef}
+            >
+              {fields.length === 0 ? (
+                <div className="space-y-4 py-8">
+                  <div className="flex items-center justify-center">
+                    <Alert className="max-w-md" variant="info">
+                      Open the field library panel and add a field to start building this page.
+                    </Alert>
+                  </div>
+                  <div className="flex justify-center">
                     <Button disabled={disabled} onClick={() => setLibraryPanelOpen(true)} type="button" variant="secondary">
                       <Plus className="h-4 w-4" />
                       Open field library
                     </Button>
                   </div>
                 </div>
-              </SortableContext>
-            )}
-          </div>
+              ) : (
+                <SortableContext items={fields.map((field) => field.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2.5">
+                    {fields.map((field) => (
+                      <SortableCanvasField
+                        disabled={disabled}
+                        field={field}
+                        key={field.id}
+                        onDelete={deleteField}
+                        onOpenSettings={(fieldId) => {
+                          setSelectedFieldId(fieldId);
+                          setSettingsPanelOpen(true);
+                        }}
+                        onSelect={setSelectedFieldId}
+                        selected={selectedFieldId === field.id}
+                        targetSummary={isRegistration ? fieldTargetSummary(field, programNodes) : null}
+                      />
+                    ))}
+                    <div className="pt-1">
+                      <Button disabled={disabled} onClick={() => setLibraryPanelOpen(true)} type="button" variant="secondary">
+                        <Plus className="h-4 w-4" />
+                        Open field library
+                      </Button>
+                    </div>
+                  </div>
+                </SortableContext>
+              )}
+            </div>
 
-          <DragOverlay>
-            {activeCanvasField ? (
-              <div className="rounded-control border bg-surface px-3 py-2 shadow-card">
-                <p className="text-sm font-semibold text-text">{activeCanvasField.label || "Untitled field"}</p>
-                <p className="text-xs text-text-muted">{activeCanvasField.type}</p>
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+            <DragOverlay>
+              {activeCanvasField ? (
+                <div className="rounded-control border bg-surface px-3 py-2 shadow-card">
+                  <p className="text-sm font-semibold text-text">{activeCanvasField.label || "Untitled field"}</p>
+                  <p className="text-xs text-text-muted">{activeCanvasField.type}</p>
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <Alert variant="info">
+            {activePage?.pageKey === REGISTRATION_PAGE_KEYS.player
+              ? "Player page is fixed. Configure title/description here; player selection UI is built-in."
+              : "Payment page is fixed. Configure title/description here; payment placeholder UI is built-in."}
+          </Alert>
+        )
       ) : (
         <div className="space-y-4">
           <div className="rounded-control border bg-surface p-4">
-            <h3 className="text-lg font-semibold text-text">{formName || "Untitled form"}</h3>
-            {formDescription.trim().length > 0 ? <p className="mt-1 text-sm text-text-muted">{formDescription}</p> : null}
+            <h3 className="text-lg font-semibold text-text">{activePage?.title || formName || "Untitled form"}</h3>
+            {activePage?.description ? <p className="mt-1 text-sm text-text-muted">{activePage.description}</p> : null}
+            {!activePage?.description && formDescription.trim().length > 0 ? <p className="mt-1 text-sm text-text-muted">{formDescription}</p> : null}
           </div>
 
-          {fields.length === 0 ? (
-            <Alert variant="info">No fields yet. Open the field library to add fields.</Alert>
+          {isRegistration && activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions ? (
+            <FormField label="Preview selected division">
+              <Select
+                onChange={(event) => setPreviewNodeId(event.target.value)}
+                options={[
+                  { value: "", label: "No division selected" },
+                  ...programNodes.map((node) => ({
+                    value: node.id,
+                    label: getNodeLabel(node)
+                  }))
+                ]}
+                value={previewNodeId}
+              />
+            </FormField>
+          ) : null}
+
+          {previewFields.length === 0 ? (
+            <Alert variant="info">
+              {isRegistration && activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions
+                ? "No fields match this previewed division selection."
+                : "No fields yet. Open the field library to add fields."}
+            </Alert>
           ) : (
-            <div className="space-y-3 rounded-control border bg-surface p-4">{fields.map((field) => renderPreviewField(field))}</div>
+            <div className="space-y-3 rounded-control border bg-surface p-4">{previewFields.map((field) => renderPreviewField(field))}</div>
           )}
+
+          {isRegistration && activePage?.pageKey === REGISTRATION_PAGE_KEYS.payment ? (
+            <Alert variant="info">Payment processor is not connected yet. This page currently acts as review + submit.</Alert>
+          ) : null}
 
           <p className="text-xs text-text-muted">Preview is non-interactive in the editor.</p>
         </div>
@@ -636,159 +907,242 @@ export function FormFieldsVisualEditor({ formName, formDescription, schema, onCh
       >
         {selectedField ? (
           <div className="space-y-3">
-                  <FormField label="Label">
-                    <Input
-                      disabled={disabled}
-                      onChange={(event) => {
-                        const nextLabel = event.target.value;
-                        updateField(selectedField.id, (field) => ({
-                          ...field,
-                          label: nextLabel
-                        }));
-                      }}
-                      value={selectedField.label}
-                    />
-                  </FormField>
+            <FormField label="Label">
+              <Input
+                disabled={disabled}
+                onChange={(event) => {
+                  const nextLabel = event.target.value;
+                  updateField(selectedField.id, (field) => ({
+                    ...field,
+                    label: nextLabel
+                  }));
+                }}
+                value={selectedField.label}
+              />
+            </FormField>
 
-                  <FormField hint="Unique key used in submission answers." label="Field key">
-                    <Input
-                      disabled={disabled}
-                      onChange={(event) => {
-                        updateField(selectedField.id, (field) => ({
-                          ...field,
-                          name: ensureUniqueFieldName(event.target.value, fields, selectedField.id)
-                        }));
-                      }}
-                      value={selectedField.name}
-                    />
-                  </FormField>
+            <FormField hint="Unique key used in submission answers." label="Field key">
+              <Input
+                disabled={disabled}
+                onChange={(event) => {
+                  updateField(selectedField.id, (field) => ({
+                    ...field,
+                    name: ensureUniqueFieldName(event.target.value, allFields, selectedField.id)
+                  }));
+                }}
+                value={selectedField.name}
+              />
+            </FormField>
 
-                  <FormField label="Field type">
-                    <Select
-                      disabled={disabled}
-                      onChange={(event) => {
-                        const nextType = event.target.value as FormFieldType;
+            <FormField label="Field type">
+              <Select
+                disabled={disabled}
+                onChange={(event) => {
+                  const nextType = event.target.value as FormFieldType;
 
-                        updateField(selectedField.id, (field) => ({
-                          ...field,
-                          type: nextType,
-                          placeholder: nextType === "checkbox" ? null : field.placeholder,
-                          options:
-                            nextType === "select"
-                              ? field.options.length > 0
-                                ? field.options
-                                : [
-                                    {
-                                      value: "option_1",
-                                      label: "Option 1"
-                                    }
-                                  ]
-                              : []
-                        }));
-                      }}
-                      options={paletteFields.map((field) => ({
-                        value: field.type,
-                        label: field.label
-                      }))}
-                      value={selectedField.type}
-                    />
-                  </FormField>
+                  updateField(selectedField.id, (field) => ({
+                    ...field,
+                    type: nextType,
+                    placeholder: nextType === "checkbox" ? null : field.placeholder,
+                    options:
+                      nextType === "select"
+                        ? field.options.length > 0
+                          ? field.options
+                          : [
+                              {
+                                value: "option_1",
+                                label: "Option 1"
+                              }
+                            ]
+                        : []
+                  }));
+                }}
+                options={paletteFields.map((field) => ({
+                  value: field.type,
+                  label: field.label
+                }))}
+                value={selectedField.type}
+              />
+            </FormField>
 
-                  {selectedField.type !== "checkbox" ? (
-                    <FormField label="Placeholder">
-                      <Input
+            {selectedField.type !== "checkbox" ? (
+              <FormField label="Placeholder">
+                <Input
+                  disabled={disabled}
+                  onChange={(event) => {
+                    updateField(selectedField.id, (field) => ({
+                      ...field,
+                      placeholder: event.target.value
+                    }));
+                  }}
+                  value={selectedField.placeholder ?? ""}
+                />
+              </FormField>
+            ) : null}
+
+            <FormField label="Help text">
+              <Textarea
+                className="min-h-[80px]"
+                disabled={disabled}
+                onChange={(event) => {
+                  updateField(selectedField.id, (field) => ({
+                    ...field,
+                    helpText: event.target.value
+                  }));
+                }}
+                value={selectedField.helpText ?? ""}
+              />
+            </FormField>
+
+            <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text">
+              <input
+                checked={selectedField.required}
+                disabled={disabled}
+                onChange={(event) => {
+                  updateField(selectedField.id, (field) => ({
+                    ...field,
+                    required: event.target.checked
+                  }));
+                }}
+                type="checkbox"
+              />
+              Required field
+            </label>
+
+            {isRegistration && activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions ? (
+              <div className="space-y-2 rounded-control border bg-surface-muted/40 p-3">
+                <FormField label="Applies to">
+                  <Select
+                    disabled={disabled}
+                    onChange={(event) => {
+                      const mode = event.target.value;
+                      setAppliesToModeByFieldId((current) => ({
+                        ...current,
+                        [selectedField.id]: mode === "specific" ? "specific" : "program"
+                      }));
+
+                      updateField(selectedField.id, (field) => ({
+                        ...field,
+                        targetNodeIds:
+                          mode === "program"
+                            ? []
+                            : field.targetNodeIds.length > 0
+                              ? field.targetNodeIds
+                              : programNodes[0]
+                                ? [programNodes[0].id]
+                                : [],
+                        includeDescendants: mode === "program" ? false : field.includeDescendants
+                      }));
+                    }}
+                    options={[
+                      { value: "program", label: "Program-wide" },
+                      { value: "specific", label: "Specific structure nodes" }
+                    ]}
+                    value={selectedFieldAppliesToMode}
+                  />
+                </FormField>
+
+                {selectedFieldAppliesToMode === "specific" ? (
+                  <>
+                    {programNodes.length === 0 ? <Alert variant="warning">No program nodes available. Add nodes in Program settings first.</Alert> : null}
+                    {programNodes.length > 0 ? (
+                      <div className="space-y-1">
+                        {programNodes.map((node) => {
+                          const isChecked = selectedField.targetNodeIds.includes(node.id);
+
+                          return (
+                            <label className="flex items-center gap-2 text-sm text-text" key={node.id}>
+                              <input
+                                checked={isChecked}
+                                disabled={disabled}
+                                onChange={(event) => {
+                                  const checked = event.target.checked;
+                                  updateField(selectedField.id, (field) => ({
+                                    ...field,
+                                    targetNodeIds: checked
+                                      ? [...field.targetNodeIds, node.id]
+                                      : field.targetNodeIds.filter((targetId) => targetId !== node.id)
+                                  }));
+                                }}
+                                type="checkbox"
+                              />
+                              {getNodeLabel(node)}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    <label className="inline-flex items-center gap-2 text-sm text-text">
+                      <input
+                        checked={selectedField.includeDescendants}
                         disabled={disabled}
                         onChange={(event) => {
                           updateField(selectedField.id, (field) => ({
                             ...field,
-                            placeholder: event.target.value
+                            includeDescendants: event.target.checked
                           }));
                         }}
-                        value={selectedField.placeholder ?? ""}
+                        type="checkbox"
                       />
-                    </FormField>
-                  ) : null}
+                      Include child nodes
+                    </label>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
 
-                  <FormField label="Help text">
-                    <Textarea
-                      className="min-h-[80px]"
-                      disabled={disabled}
-                      onChange={(event) => {
-                        updateField(selectedField.id, (field) => ({
-                          ...field,
-                          helpText: event.target.value
-                        }));
-                      }}
-                      value={selectedField.helpText ?? ""}
-                    />
-                  </FormField>
-
-                  <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text">
-                    <input
-                      checked={selectedField.required}
-                      disabled={disabled}
-                      onChange={(event) => {
-                        updateField(selectedField.id, (field) => ({
-                          ...field,
-                          required: event.target.checked
-                        }));
-                      }}
-                      type="checkbox"
-                    />
-                    Required field
-                  </label>
-
-                  {selectedField.type === "select" ? (
-                    <div className="space-y-2 rounded-control border bg-surface-muted/40 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-text">Options</p>
-                        <Button disabled={disabled} onClick={() => addSelectOption(selectedField.id)} size="sm" type="button" variant="secondary">
-                          <Plus className="h-3.5 w-3.5" />
-                          Add option
-                        </Button>
-                      </div>
-                      <div className="space-y-2">
-                        {selectedField.options.length === 0 ? <Alert variant="warning">Dropdown fields need at least one option.</Alert> : null}
-                        {selectedField.options.map((option, optionIndex) => (
-                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2" key={`${selectedField.id}-option-${optionIndex}`}>
-                            <Input
-                              disabled={disabled}
-                              onChange={(event) => {
-                                const nextLabel = event.target.value;
-                                updateSelectOption(selectedField.id, optionIndex, (currentOption) => ({
-                                  ...currentOption,
-                                  label: nextLabel
-                                }));
-                              }}
-                              placeholder="Label"
-                              value={option.label}
-                            />
-                            <Input
-                              disabled={disabled}
-                              onChange={(event) => {
-                                updateSelectOption(selectedField.id, optionIndex, (currentOption) => ({
-                                  ...currentOption,
-                                  value: ensureUniqueOptionValue(event.target.value, selectedField.options, optionIndex)
-                                }));
-                              }}
-                              placeholder="Value"
-                              value={option.value}
-                            />
-                            <Button
-                              aria-label="Remove option"
-                              className="h-10 w-10 px-0"
-                              disabled={disabled}
-                              onClick={() => removeSelectOption(selectedField.id, optionIndex)}
-                              type="button"
-                              variant="ghost"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
+            {selectedField.type === "select" ? (
+              <div className="space-y-2 rounded-control border bg-surface-muted/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-text">Options</p>
+                  <Button disabled={disabled} onClick={() => addSelectOption(selectedField.id)} size="sm" type="button" variant="secondary">
+                    <Plus className="h-3.5 w-3.5" />
+                    Add option
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {selectedField.options.length === 0 ? <Alert variant="warning">Dropdown fields need at least one option.</Alert> : null}
+                  {selectedField.options.map((option, optionIndex) => (
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2" key={`${selectedField.id}-option-${optionIndex}`}>
+                      <Input
+                        disabled={disabled}
+                        onChange={(event) => {
+                          const nextLabel = event.target.value;
+                          updateSelectOption(selectedField.id, optionIndex, (currentOption) => ({
+                            ...currentOption,
+                            label: nextLabel
+                          }));
+                        }}
+                        placeholder="Label"
+                        value={option.label}
+                      />
+                      <Input
+                        disabled={disabled}
+                        onChange={(event) => {
+                          updateSelectOption(selectedField.id, optionIndex, (currentOption) => ({
+                            ...currentOption,
+                            value: ensureUniqueOptionValue(event.target.value, selectedField.options, optionIndex)
+                          }));
+                        }}
+                        placeholder="Value"
+                        value={option.value}
+                      />
+                      <Button
+                        aria-label="Remove option"
+                        className="h-10 w-10 px-0"
+                        disabled={disabled}
+                        onClick={() => removeSelectOption(selectedField.id, optionIndex)}
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  ) : null}
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <Alert variant="info">Select a field and open settings from its gear icon.</Alert>

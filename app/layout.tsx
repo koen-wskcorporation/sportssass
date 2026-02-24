@@ -4,6 +4,9 @@ import { AppFooter } from "@/components/shared/AppFooter";
 import { PrimaryHeader } from "@/components/shared/PrimaryHeader";
 import { ToastProvider } from "@/components/ui/toast";
 import { UploadProvider } from "@/modules/uploads";
+import { SpeedInsights } from "@vercel/speed-insights/next"
+
+<SpeedInsights/>
 
 export const metadata: Metadata = {
   title: {

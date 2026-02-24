@@ -2,7 +2,7 @@ export type ProgramType = "league" | "season" | "clinic" | "custom";
 
 export type ProgramStatus = "draft" | "published" | "archived";
 
-export type ProgramNodeKind = "division" | "subdivision";
+export type ProgramNodeKind = "division" | "team";
 
 export type ProgramScheduleBlockType = "date_range" | "meeting_pattern" | "one_off";
 

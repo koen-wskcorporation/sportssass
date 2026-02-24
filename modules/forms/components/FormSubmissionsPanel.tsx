@@ -8,12 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { setSubmissionStatusAction } from "@/modules/forms/actions";
-import type { FormSubmission, SubmissionStatus } from "@/modules/forms/types";
+import type { FormKind, FormSubmissionWithEntries, SubmissionStatus } from "@/modules/forms/types";
 
 type FormSubmissionsPanelProps = {
   orgSlug: string;
   formId: string;
-  submissions: FormSubmission[];
+  formKind: FormKind;
+  submissions: FormSubmissionWithEntries[];
   canWrite?: boolean;
 };
 
@@ -28,7 +29,7 @@ function asStatusOptions() {
   ];
 }
 
-export function FormSubmissionsPanel({ orgSlug, formId, submissions, canWrite = true }: FormSubmissionsPanelProps) {
+export function FormSubmissionsPanel({ orgSlug, formId, formKind, submissions, canWrite = true }: FormSubmissionsPanelProps) {
   const { toast } = useToast();
   const [isSaving, startSaving] = useTransition();
   const [statusById, setStatusById] = useState<Record<string, SubmissionStatus>>(
@@ -93,9 +94,27 @@ export function FormSubmissionsPanel({ orgSlug, formId, submissions, canWrite = 
                 Save status
               </Button>
             </div>
-            <pre className="overflow-x-auto rounded-control bg-surface-muted p-2 text-xs text-text-muted">
-              {JSON.stringify(submission.answersJson, null, 2)}
-            </pre>
+
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Submission answers</p>
+              <pre className="overflow-x-auto rounded-control bg-surface-muted p-2 text-xs text-text-muted">{JSON.stringify(submission.answersJson, null, 2)}</pre>
+            </div>
+
+            {formKind === "program_registration" ? (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Per-player entries</p>
+                {submission.entries.length === 0 ? <Alert variant="warning">No player entries on this registration.</Alert> : null}
+                {submission.entries.map((entry) => (
+                  <div className="rounded-control border bg-surface-muted p-2" key={entry.id}>
+                    <p className="text-xs text-text-muted">Player ID: {entry.playerId}</p>
+                    <p className="text-xs text-text-muted">Program node ID: {entry.programNodeId ?? "(none)"}</p>
+                    <pre className="mt-1 overflow-x-auto rounded-control bg-surface p-2 text-xs text-text-muted">
+                      {JSON.stringify(entry.answersJson, null, 2)}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ))}
       </CardContent>

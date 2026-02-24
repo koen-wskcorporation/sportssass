@@ -1,12 +1,16 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
 import { FormPageTabs } from "@/modules/forms/components/FormPageTabs";
+import { FormPublishToggleButton } from "@/modules/forms/components/FormPublishToggleButton";
 import { FormSubmissionsPanel } from "@/modules/forms/components/FormSubmissionsPanel";
-import { getFormById, listFormSubmissions } from "@/modules/forms/db/queries";
+import { getFormById, listFormSubmissionsWithEntries } from "@/modules/forms/db/queries";
 
 export const metadata: Metadata = {
   title: "Form Submissions"
@@ -31,19 +35,43 @@ export default async function OrgManageFormSubmissionsPage({
     notFound();
   }
 
-  const submissions = await listFormSubmissions(orgContext.orgId, form.id);
+  const submissions = await listFormSubmissionsWithEntries(orgContext.orgId, form.id);
   const canWriteForms = can(orgContext.membershipPermissions, "forms.write");
+  const statusLabel = form.status === "published" ? "Published" : "Not published";
+  const statusVariant = form.status === "published" ? "success" : "warning";
+  const statusClassName =
+    form.status === "published"
+      ? "border border-emerald-400/35 bg-emerald-500/15 text-emerald-200"
+      : "border border-amber-700/40 bg-amber-300 text-amber-950";
 
   return (
     <div className="space-y-6">
       <PageHeader
+        actions={
+          <>
+            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/tools/forms`}>
+              Back to forms
+            </Link>
+            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/tools/forms/${form.id}/settings`}>
+              Settings
+            </Link>
+            <FormPublishToggleButton canWrite={canWriteForms} form={form} orgSlug={orgContext.orgSlug} />
+          </>
+        }
         description="Triage submissions and move registrations through review statuses."
         showBorder={false}
-        title={`${form.name} Submissions`}
+        title={
+          <span className="inline-flex items-center gap-3">
+            <span>{form.name}</span>
+            <Badge className={statusClassName} variant={statusVariant}>
+              {statusLabel}
+            </Badge>
+          </span>
+        }
       />
       <FormPageTabs active="submissions" formId={form.id} orgSlug={orgContext.orgSlug} />
       {!canWriteForms ? <Alert variant="info">You have read-only access to submissions.</Alert> : null}
-      <FormSubmissionsPanel canWrite={canWriteForms} formId={form.id} orgSlug={orgContext.orgSlug} submissions={submissions} />
+      <FormSubmissionsPanel canWrite={canWriteForms} formId={form.id} formKind={form.formKind} orgSlug={orgContext.orgSlug} submissions={submissions} />
     </div>
   );
 }

@@ -25,7 +25,7 @@ export default async function OrgManageProgramsPage({ params }: { params: Promis
 
   return (
     <div className="space-y-6">
-      <PageHeader description="Create and manage program catalogs, divisions, and schedules." showBorder={false} title="Programs" />
+      <PageHeader description="Create and manage program catalogs, structure maps, and schedules." showBorder={false} title="Programs" />
       {!canWritePrograms ? <Alert variant="info">You have read-only access to programs.</Alert> : null}
       <ProgramsManagePanel canWrite={canWritePrograms} orgSlug={orgContext.orgSlug} programs={programs} />
     </div>

@@ -148,11 +148,11 @@ export default async function OrgProgramDetailPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Divisions</CardTitle>
-            <CardDescription>Program hierarchy and capacity planning.</CardDescription>
+            <CardTitle>Program Structure</CardTitle>
+            <CardDescription>Published structure nodes and capacity planning.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {details.nodes.length === 0 ? <Alert variant="info">No divisions published yet.</Alert> : null}
+            {details.nodes.length === 0 ? <Alert variant="info">No structure nodes published yet.</Alert> : null}
             {details.nodes.map((node) => (
               <div className="rounded-control border bg-surface px-3 py-2 text-sm" key={node.id}>
                 <p className="font-medium text-text">{node.name}</p>

@@ -1,9 +1,11 @@
 import { z } from "zod";
-import type { FormSchema } from "@/modules/forms/types";
+import type { FormField, FormKind, FormPage, FormPageKey, FormSchema } from "@/modules/forms/types";
+import { REGISTRATION_PAGE_KEYS, REGISTRATION_PAGE_ORDER } from "@/modules/forms/types";
 
 const fieldTypeValues = ["text", "textarea", "email", "number", "date", "select", "checkbox"] as const;
 const ruleOperatorValues = ["equals", "not_equals", "is_true", "is_false"] as const;
 const ruleEffectValues = ["show", "require"] as const;
+const pageKeyValues = ["generic_custom", "registration_player", "registration_division_questions", "registration_payment"] as const;
 
 const optionSchema = z.object({
   value: z.string().trim().min(1).max(120),
@@ -18,14 +20,18 @@ const fieldSchema = z.object({
   required: z.boolean().default(false),
   placeholder: z.string().trim().max(200).nullable().optional(),
   helpText: z.string().trim().max(300).nullable().optional(),
-  options: z.array(optionSchema).optional().default([])
+  options: z.array(optionSchema).optional().default([]),
+  targetNodeIds: z.array(z.string().uuid()).optional().default([]),
+  includeDescendants: z.boolean().optional().default(false)
 });
 
-const sectionSchema = z.object({
+const pageSchema = z.object({
   id: z.string().trim().min(1).max(64),
+  pageKey: z.enum(pageKeyValues).optional().default("generic_custom"),
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(300).nullable().optional(),
-  fields: z.array(fieldSchema).default([])
+  fields: z.array(fieldSchema).default([]),
+  locked: z.boolean().optional().default(false)
 });
 
 const ruleSchema = z.object({
@@ -37,84 +43,245 @@ const ruleSchema = z.object({
   effect: z.enum(ruleEffectValues)
 });
 
-export const formSchemaValidator = z.object({
-  version: z.number().int().positive().default(1),
+const formSchemaV2Validator = z.object({
+  version: z.number().int().positive().default(2),
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).nullable().optional(),
-  sections: z.array(sectionSchema).default([]),
+  pages: z.array(pageSchema).default([]),
   rules: z.array(ruleSchema).default([])
 });
 
-function createDefaultSection() {
+const legacySectionSchema = z.object({
+  id: z.string().trim().min(1).max(64),
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(300).nullable().optional(),
+  fields: z.array(fieldSchema.omit({ targetNodeIds: true, includeDescendants: true })).default([])
+});
+
+const legacyFormSchemaValidator = z.object({
+  version: z.number().int().positive().default(1),
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).nullable().optional(),
+  sections: z.array(legacySectionSchema).default([]),
+  rules: z.array(ruleSchema).default([])
+});
+
+function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_custom">): FormPage {
+  if (pageKey === REGISTRATION_PAGE_KEYS.player) {
+    return {
+      id: "page-registration-player",
+      pageKey,
+      title: "Player",
+      description: "Select one or more players for this registration.",
+      fields: [],
+      locked: true
+    };
+  }
+
+  if (pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions) {
+    return {
+      id: "page-registration-division-questions",
+      pageKey,
+      title: "Division + Questions",
+      description: "Choose divisions and answer registration questions.",
+      fields: [],
+      locked: true
+    };
+  }
+
   return {
-    id: "section-general",
-    title: "General",
-    description: null,
-    fields: []
+    id: "page-registration-payment",
+    pageKey,
+    title: "Payment",
+    description: "Review and submit (payment placeholder).",
+    fields: [],
+    locked: true
   };
 }
 
-export function createDefaultFormSchema(name = "Form"): FormSchema {
+function createDefaultGenericPage(): FormPage {
   return {
-    version: 1,
+    id: "page-general",
+    pageKey: "generic_custom",
+    title: "General",
+    description: null,
+    fields: [],
+    locked: false
+  };
+}
+
+export function createDefaultRegistrationPages(): FormPage[] {
+  return REGISTRATION_PAGE_ORDER.map((pageKey) => createRegistrationPageTemplate(pageKey));
+}
+
+export function createDefaultFormSchema(name = "Form", formKind: FormKind = "generic"): FormSchema {
+  return {
+    version: 2,
     title: name,
     description: null,
-    sections: [createDefaultSection()],
+    pages: formKind === "program_registration" ? createDefaultRegistrationPages() : [createDefaultGenericPage()],
     rules: []
   };
 }
 
-export function parseFormSchema(value: unknown, fallbackName = "Form"): FormSchema {
-  const parsed = formSchemaValidator.safeParse(value);
-
-  if (!parsed.success) {
-    return createDefaultFormSchema(fallbackName);
-  }
-
-  const schema = parsed.data;
-  const sectionFields = schema.sections.flatMap((section) => section.fields.map((field) => field.name));
-  const fieldNameSet = new Set(sectionFields);
-
+function normalizeField(field: {
+  id: string;
+  name: string;
+  label: string;
+  type: (typeof fieldTypeValues)[number];
+  required: boolean;
+  placeholder?: string | null;
+  helpText?: string | null;
+  options?: Array<{ value: string; label: string }>;
+  targetNodeIds?: string[];
+  includeDescendants?: boolean;
+}): FormField {
   return {
-    version: schema.version,
-    title: schema.title,
-    description: schema.description ?? null,
-    sections:
-      schema.sections.length > 0
-        ? schema.sections.map((section) => ({
-            id: section.id,
-            title: section.title,
-            description: section.description ?? null,
-            fields: section.fields.map((field) => ({
-              id: field.id,
-              name: field.name,
-              label: field.label,
-              type: field.type,
-              required: field.required,
-              placeholder: field.placeholder ?? null,
-              helpText: field.helpText ?? null,
-              options: field.options ?? []
-            }))
-          }))
-        : [createDefaultSection()],
-    rules: schema.rules
-      .filter((rule) => fieldNameSet.has(rule.sourceFieldName) && fieldNameSet.has(rule.targetFieldName))
-      .map((rule) => ({
-        id: rule.id,
-        sourceFieldName: rule.sourceFieldName,
-        operator: rule.operator,
-        value: rule.value ?? null,
-        targetFieldName: rule.targetFieldName,
-        effect: rule.effect
-      }))
+    id: field.id,
+    name: field.name,
+    label: field.label,
+    type: field.type,
+    required: field.required,
+    placeholder: field.placeholder ?? null,
+    helpText: field.helpText ?? null,
+    options: field.options ?? [],
+    targetNodeIds: Array.from(new Set((field.targetNodeIds ?? []).filter((value) => value.length > 0))),
+    includeDescendants: Boolean(field.includeDescendants)
   };
 }
 
-export function parseFormSchemaJson(rawJson: string, fallbackName = "Form"): { schema: FormSchema; error: string | null } {
+function mapGenericPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
+  const nextPages = pages.map((page, index) => ({
+    id: page.id,
+    pageKey: "generic_custom" as const,
+    title: page.title || `Page ${index + 1}`,
+    description: page.description ?? null,
+    fields: (page.fields ?? []).map((field) => normalizeField(field)),
+    locked: false
+  }));
+
+  return nextPages.length > 0 ? nextPages : [createDefaultGenericPage()];
+}
+
+function mapRegistrationPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
+  const keyed = new Map<FormPageKey, z.infer<typeof pageSchema>>();
+  for (const page of pages) {
+    keyed.set(page.pageKey ?? "generic_custom", page);
+  }
+
+  const allFields = pages.flatMap((page) => page.fields ?? []).map((field) => normalizeField(field));
+  const fixed = createDefaultRegistrationPages();
+
+  return fixed.map((template) => {
+    const existing = keyed.get(template.pageKey);
+    return {
+      ...template,
+      id: existing?.id || template.id,
+      title: existing?.title || template.title,
+      description: existing?.description ?? template.description,
+      fields: template.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions ? allFields : []
+    };
+  });
+}
+
+function filterAndMapRules(
+  rules: Array<z.infer<typeof ruleSchema>>,
+  pages: FormPage[]
+): FormSchema["rules"] {
+  const fieldNameSet = new Set(pages.flatMap((page) => page.fields.map((field) => field.name)));
+
+  return rules
+    .filter((rule) => fieldNameSet.has(rule.sourceFieldName) && fieldNameSet.has(rule.targetFieldName))
+    .map((rule) => ({
+      id: rule.id,
+      sourceFieldName: rule.sourceFieldName,
+      operator: rule.operator,
+      value: rule.value ?? null,
+      targetFieldName: rule.targetFieldName,
+      effect: rule.effect
+    }));
+}
+
+function parseV2Schema(value: unknown, fallbackName: string, formKind: FormKind): FormSchema | null {
+  const parsed = formSchemaV2Validator.safeParse(value);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const data = parsed.data;
+  const normalizedPages = formKind === "program_registration" ? mapRegistrationPages(data.pages) : mapGenericPages(data.pages);
+
+  return {
+    version: 2,
+    title: data.title || fallbackName,
+    description: data.description ?? null,
+    pages: normalizedPages,
+    rules: filterAndMapRules(data.rules, normalizedPages)
+  };
+}
+
+function parseLegacySchema(value: unknown, fallbackName: string, formKind: FormKind): FormSchema | null {
+  const parsed = legacyFormSchemaValidator.safeParse(value);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const data = parsed.data;
+
+  if (formKind === "program_registration") {
+    const middleFields = data.sections.flatMap((section) => (section.fields ?? []).map((field) => normalizeField({ ...field })));
+    const pages = createDefaultRegistrationPages().map((page) =>
+      page.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions
+        ? {
+            ...page,
+            fields: middleFields
+          }
+        : page
+    );
+
+    return {
+      version: 2,
+      title: data.title || fallbackName,
+      description: data.description ?? null,
+      pages,
+      rules: filterAndMapRules(data.rules, pages)
+    };
+  }
+
+  const pages =
+    data.sections.length > 0
+      ? data.sections.map((section, index) => ({
+          id: section.id,
+          pageKey: "generic_custom" as const,
+          title: section.title || `Page ${index + 1}`,
+          description: section.description ?? null,
+          fields: (section.fields ?? []).map((field) => normalizeField({ ...field })),
+          locked: false
+        }))
+      : [createDefaultGenericPage()];
+
+  return {
+    version: 2,
+    title: data.title || fallbackName,
+    description: data.description ?? null,
+    pages,
+    rules: filterAndMapRules(data.rules, pages)
+  };
+}
+
+export function parseFormSchema(value: unknown, fallbackName = "Form", formKind: FormKind = "generic"): FormSchema {
+  return parseV2Schema(value, fallbackName, formKind) ?? parseLegacySchema(value, fallbackName, formKind) ?? createDefaultFormSchema(fallbackName, formKind);
+}
+
+export function parseFormSchemaJson(
+  rawJson: string,
+  fallbackName = "Form",
+  formKind: FormKind = "generic"
+): { schema: FormSchema; error: string | null } {
   const trimmed = rawJson.trim();
   if (!trimmed) {
     return {
-      schema: createDefaultFormSchema(fallbackName),
+      schema: createDefaultFormSchema(fallbackName, formKind),
       error: null
     };
   }
@@ -122,12 +289,12 @@ export function parseFormSchemaJson(rawJson: string, fallbackName = "Form"): { s
   try {
     const parsed = JSON.parse(trimmed);
     return {
-      schema: parseFormSchema(parsed, fallbackName),
+      schema: parseFormSchema(parsed, fallbackName, formKind),
       error: null
     };
   } catch {
     return {
-      schema: createDefaultFormSchema(fallbackName),
+      schema: createDefaultFormSchema(fallbackName, formKind),
       error: "Invalid schema JSON."
     };
   }

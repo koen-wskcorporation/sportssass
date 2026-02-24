@@ -124,7 +124,7 @@ export function ProgramsManagePanel({ orgSlug, programs, canWrite = true }: Prog
               Create program
             </Button>
           </div>
-          <CardDescription>Manage divisions, schedules, and linked forms.</CardDescription>
+          <CardDescription>Manage program structure, schedules, and linked forms.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {sortedPrograms.length === 0 ? <Alert variant="info">No programs yet.</Alert> : null}

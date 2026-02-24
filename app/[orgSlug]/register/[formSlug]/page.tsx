@@ -52,7 +52,7 @@ export default async function OrgFormRegistrationPage({
 
   const [players, programNodes] = await Promise.all([
     listPlayersForPicker(user.id),
-    form.formKind === "program_registration" && form.programId ? listProgramNodes(form.programId) : Promise.resolve([])
+    form.formKind === "program_registration" && form.programId ? listProgramNodes(form.programId, { publishedOnly: true }) : Promise.resolve([])
   ]);
 
   return (

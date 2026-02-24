@@ -3,6 +3,7 @@ import { createDefaultFormSchema, parseFormSchema } from "@/modules/forms/schema
 import type {
   FormSubmission,
   FormSubmissionEntry,
+  FormSubmissionWithEntries,
   OrgForm,
   OrgFormVersion,
   SubmissionStatus,
@@ -90,7 +91,7 @@ function mapForm(row: OrgFormRow): OrgForm {
     programId: row.program_id,
     targetMode: row.target_mode,
     lockedProgramNodeId: row.locked_program_node_id,
-    schemaJson: parseFormSchema(row.schema_json, row.name),
+    schemaJson: parseFormSchema(row.schema_json, row.name, row.form_kind),
     uiJson: asObject(row.ui_json),
     settingsJson: asObject(row.settings_json),
     createdBy: row.created_by,
@@ -208,7 +209,7 @@ export async function createFormRecord(input: {
   settingsJson?: Record<string, unknown>;
 }): Promise<OrgForm> {
   const supabase = await createSupabaseServer();
-  const schema = createDefaultFormSchema(input.name);
+  const schema = createDefaultFormSchema(input.name, input.formKind);
   const { data, error } = await supabase
     .from("org_forms")
     .insert({
@@ -341,6 +342,44 @@ export async function listFormSubmissions(orgId: string, formId: string): Promis
   }
 
   return (data ?? []).map((row) => mapSubmission(row as SubmissionRow));
+}
+
+export async function listFormSubmissionsWithEntries(orgId: string, formId: string): Promise<FormSubmissionWithEntries[]> {
+  const submissions = await listFormSubmissions(orgId, formId);
+
+  if (submissions.length === 0) {
+    return [];
+  }
+
+  const submissionIds = submissions.map((submission) => submission.id);
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase
+    .from("org_form_submission_entries")
+    .select(submissionEntrySelect)
+    .in("submission_id", submissionIds)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to list submission entries: ${error.message}`);
+  }
+
+  const entryMap = new Map<string, FormSubmissionEntry[]>();
+
+  for (const row of data ?? []) {
+    const entry = mapSubmissionEntry(row as SubmissionEntryRow);
+    const existingEntries = entryMap.get(entry.submissionId);
+
+    if (existingEntries) {
+      existingEntries.push(entry);
+    } else {
+      entryMap.set(entry.submissionId, [entry]);
+    }
+  }
+
+  return submissions.map((submission) => ({
+    ...submission,
+    entries: entryMap.get(submission.id) ?? []
+  }));
 }
 
 export async function listSubmissionEntries(submissionId: string): Promise<FormSubmissionEntry[]> {
