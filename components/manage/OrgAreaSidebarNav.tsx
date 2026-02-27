@@ -3,6 +3,7 @@
 import { ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, type LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { Chip } from "@/components/ui/chip";
 import { NavItem } from "@/components/ui/nav-item";
 import { cn } from "@/lib/utils";
 
@@ -71,11 +72,7 @@ function isParentActive(pathname: string, item: OrgAreaSidebarParentItem) {
 }
 
 function SoonBadge() {
-  return (
-    <span className="inline-flex items-center rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-semibold text-text-muted">
-      Soon
-    </span>
-  );
+  return <Chip className="normal-case tracking-normal" color="neutral" size="small">Soon</Chip>;
 }
 
 export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }: OrgAreaSidebarNavProps) {

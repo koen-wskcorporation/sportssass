@@ -9,6 +9,7 @@ import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 import { listPublishedFormsForProgram } from "@/modules/forms/db/queries";
 import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
+import { listProgramScheduleTimelineWithFallback } from "@/modules/programs/schedule/db/queries";
 
 function titleFromSlug(slug: string) {
   return slug
@@ -45,37 +46,24 @@ function formatDateRange(startDate: string | null, endDate: string | null) {
   return "Dates to be announced";
 }
 
-function formatDays(values: number[] | null) {
-  if (!values || values.length === 0) {
-    return "No recurring days";
+function formatOccurrenceLine(input: { startsAtUtc: string; endsAtUtc: string; timezone: string }) {
+  const startsAt = new Date(input.startsAtUtc);
+  const endsAt = new Date(input.endsAtUtc);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    return "Date pending";
   }
 
-  const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  return values.map((value) => labels[value] ?? "?").join(", ");
-}
-
-function formatSchedule(block: {
-  blockType: "date_range" | "meeting_pattern" | "one_off";
-  startDate: string | null;
-  endDate: string | null;
-  byDay: number[] | null;
-  oneOffAt: string | null;
-  startTime: string | null;
-  endTime: string | null;
-}) {
-  if (block.blockType === "one_off") {
-    return block.oneOffAt ?? "Date pending";
-  }
-
-  if (block.blockType === "meeting_pattern") {
-    return `${formatDateRange(block.startDate, block.endDate)} · ${formatDays(block.byDay)}${
-      block.startTime && block.endTime ? ` · ${block.startTime}-${block.endTime}` : ""
-    }`;
-  }
-
-  return `${formatDateRange(block.startDate, block.endDate)}${
-    block.startTime && block.endTime ? ` · ${block.startTime}-${block.endTime}` : ""
-  }`;
+  return `${startsAt.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  })} · ${startsAt.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  })} - ${endsAt.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  })} (${input.timezone})`;
 }
 
 export default async function OrgProgramDetailPage({
@@ -93,7 +81,13 @@ export default async function OrgProgramDetailPage({
     notFound();
   }
 
-  const forms = await listPublishedFormsForProgram(org.orgId, details.program.id);
+  const [forms, scheduleTimeline] = await Promise.all([
+    listPublishedFormsForProgram(org.orgId, details.program.id),
+    listProgramScheduleTimelineWithFallback({
+      programId: details.program.id,
+      legacyDetails: details
+    })
+  ]);
 
   return (
     <main className="w-full px-6 py-8 md:px-8 md:py-10">
@@ -169,14 +163,14 @@ export default async function OrgProgramDetailPage({
         <Card>
           <CardHeader>
             <CardTitle>Schedule</CardTitle>
-            <CardDescription>Published timeline and recurring blocks.</CardDescription>
+            <CardDescription>Published session timeline.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {details.scheduleBlocks.length === 0 ? <Alert variant="info">No schedule blocks yet.</Alert> : null}
-            {details.scheduleBlocks.map((block) => (
-              <div className="rounded-control border bg-surface px-3 py-2 text-sm" key={block.id}>
-                <p className="font-medium text-text">{block.title ?? "Schedule block"}</p>
-                <p className="text-xs text-text-muted">{formatSchedule(block)}</p>
+            {scheduleTimeline.occurrences.length === 0 ? <Alert variant="info">No schedule sessions yet.</Alert> : null}
+            {scheduleTimeline.occurrences.map((occurrence) => (
+              <div className="rounded-control border bg-surface px-3 py-2 text-sm" key={occurrence.id}>
+                <p className="font-medium text-text">{occurrence.title ?? "Program session"}</p>
+                <p className="text-xs text-text-muted">{formatOccurrenceLine(occurrence)}</p>
               </div>
             ))}
           </CardContent>

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
@@ -40,11 +40,7 @@ export default async function OrgManageFormEditorPage({
   const canAccessPrograms = can(orgContext.membershipPermissions, "programs.read") || can(orgContext.membershipPermissions, "programs.write");
   const programNodes = canAccessPrograms && form.programId ? await listProgramNodes(form.programId) : [];
   const statusLabel = form.status === "published" ? "Published" : "Not published";
-  const statusVariant = form.status === "published" ? "success" : "warning";
-  const statusClassName =
-    form.status === "published"
-      ? "border border-emerald-400/35 bg-emerald-500/15 text-emerald-200"
-      : "border border-amber-700/40 bg-amber-300 text-amber-950";
+  const statusColor = form.status === "published" ? "green" : "yellow";
 
   return (
     <div className="space-y-6">
@@ -65,9 +61,9 @@ export default async function OrgManageFormEditorPage({
         title={
           <span className="inline-flex items-center gap-3">
             <span>{form.name}</span>
-            <Badge className={statusClassName} variant={statusVariant}>
+            <Chip className="normal-case tracking-normal" color={statusColor}>
               {statusLabel}
-            </Badge>
+            </Chip>
           </span>
         }
       />

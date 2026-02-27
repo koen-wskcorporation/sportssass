@@ -24,6 +24,15 @@ function findAnchorFromEvent(event: MouseEvent) {
   return anchor instanceof HTMLAnchorElement ? anchor : null;
 }
 
+function shouldIgnoreProgressTarget(event: MouseEvent) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(target.closest("[data-no-progress='true']"));
+}
+
 function shouldStartForAnchor(anchor: HTMLAnchorElement) {
   const href = anchor.getAttribute("href");
 
@@ -136,7 +145,11 @@ export function HeaderProgressBar() {
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      if (shouldIgnoreClick(event)) {
+      if (shouldIgnoreProgressTarget(event)) {
+        return;
+      }
+
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
       }
 
@@ -145,7 +158,13 @@ export function HeaderProgressBar() {
         return;
       }
 
-      start();
+      queueMicrotask(() => {
+        if (shouldIgnoreClick(event)) {
+          return;
+        }
+
+        start();
+      });
     };
 
     const onPopState = () => {

@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { setSubmissionStatusAction } from "@/modules/forms/actions";
@@ -77,7 +77,9 @@ export function FormSubmissionsPanel({ orgSlug, formId, formKind, submissions, c
         {submissions.map((submission) => (
           <div className="space-y-2 rounded-control border bg-surface px-3 py-3" key={submission.id}>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="neutral">{submission.status}</Badge>
+              <Chip className="normal-case tracking-normal" color="neutral">
+                {submission.status}
+              </Chip>
               <p className="text-xs text-text-muted">ID: {submission.id}</p>
               <p className="text-xs text-text-muted">Submitted: {new Date(submission.createdAt).toLocaleString()}</p>
             </div>

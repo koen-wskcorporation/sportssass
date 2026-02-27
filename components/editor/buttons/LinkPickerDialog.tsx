@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { EditorSettingsDialog } from "@/components/shared/EditorSettingsDialog";
@@ -254,10 +254,14 @@ export function LinkPickerDialog({
                   setValidationError(null);
                 }}
                 type="button"
-              >
+                >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-text">{option.label}</span>
-                  {option.isDraft ? <Badge variant="warning">Draft</Badge> : null}
+                  {option.isDraft ? (
+                    <Chip className="normal-case tracking-normal" color="yellow" size="small">
+                      Draft
+                    </Chip>
+                  ) : null}
                 </div>
                 <p className="text-xs text-text-muted">{option.path}</p>
               </button>

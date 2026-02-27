@@ -8,8 +8,6 @@ import {
   CalendarDays,
   ChevronDown,
   CreditCard,
-  Eye,
-  EyeOff,
   FileText,
   GripVertical,
   LayoutDashboard,
@@ -27,6 +25,7 @@ import { EditorSettingsDialog } from "@/components/shared/EditorSettingsDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NavItem } from "@/components/ui/nav-item";
+import { PublishStatusIcon } from "@/components/ui/publish-status-icon";
 import { useToast } from "@/components/ui/toast";
 import { getOrgAdminNavItems, type OrgAdminNavIcon } from "@/lib/org/toolsNav";
 import { cn } from "@/lib/utils";
@@ -152,29 +151,20 @@ function EditableMenuItem({
 
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-xs font-semibold leading-none text-text">
-          <span
-            aria-hidden
-            className="shrink-0 text-[11px] leading-none"
-            style={{
-              color: page.isPublished ? "hsl(145 65% 42%)" : "hsl(220 10% 55%)"
-            }}
-          >
-            ●
-          </span>
+          <PublishStatusIcon
+            align="right"
+            className="shrink-0"
+            disabled={isSaving || page.slug === "home"}
+            isLoading={isSaving}
+            isPublished={page.isPublished}
+            onToggle={() => onToggleVisibility(page)}
+            publishLabel="Show in menu"
+            statusLabel={page.isPublished ? `Published status for ${page.title}` : `Hidden status for ${page.title}`}
+            unpublishLabel="Hide from menu"
+          />
           <span className="truncate">{page.title}</span>
         </p>
       </div>
-
-      <Button
-        className="h-8 w-8 p-0"
-        disabled={isSaving || page.slug === "home"}
-        onClick={() => onToggleVisibility(page)}
-        size="sm"
-        title={page.isPublished ? "Hide from menu" : "Show in menu"}
-        variant="secondary"
-      >
-        {page.isPublished ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </Button>
 
       <Button className="h-8 w-8 p-0" disabled={isSaving} onClick={() => onOpenSettings(page)} size="sm" title="Page settings" variant="secondary">
         <SlidersHorizontal className="h-4 w-4" />

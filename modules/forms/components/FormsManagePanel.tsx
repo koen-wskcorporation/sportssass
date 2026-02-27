@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PublishStatusIcon } from "@/components/ui/publish-status-icon";
+import { useToast } from "@/components/ui/toast";
+import { publishFormVersionAction, saveFormDraftAction } from "@/modules/forms/actions";
 import { FormCreatePanel } from "@/modules/forms/components/FormCreatePanel";
 import type { OrgForm } from "@/modules/forms/types";
 import type { Program } from "@/modules/programs/types";
@@ -18,9 +21,75 @@ type FormsManagePanelProps = {
 };
 
 export function FormsManagePanel({ orgSlug, forms, programs, canWrite = true }: FormsManagePanelProps) {
+  const { toast } = useToast();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isTogglingStatus, startTogglingStatus] = useTransition();
+  const [statusFormId, setStatusFormId] = useState<string | null>(null);
+  const [formItems, setFormItems] = useState(forms);
 
-  const sortedForms = useMemo(() => [...forms].sort((a, b) => a.name.localeCompare(b.name)), [forms]);
+  useEffect(() => {
+    setFormItems(forms);
+  }, [forms]);
+
+  const sortedForms = useMemo(() => [...formItems].sort((a, b) => a.name.localeCompare(b.name)), [formItems]);
+
+  function toggleFormStatus(form: OrgForm) {
+    if (!canWrite) {
+      return;
+    }
+
+    setStatusFormId(form.id);
+    startTogglingStatus(async () => {
+      try {
+        const isPublished = form.status === "published";
+        const result = isPublished
+          ? await saveFormDraftAction({
+              orgSlug,
+              formId: form.id,
+              slug: form.slug,
+              name: form.name,
+              description: form.description ?? "",
+              formKind: form.formKind,
+              status: "draft",
+              programId: form.programId,
+              targetMode: form.targetMode,
+              lockedProgramNodeId: form.lockedProgramNodeId,
+              allowMultiplePlayers: Boolean(form.settingsJson.allowMultiplePlayers),
+              schemaJson: JSON.stringify(form.schemaJson)
+            })
+          : await publishFormVersionAction({
+              orgSlug,
+              formId: form.id
+            });
+
+        if (!result.ok) {
+          toast({
+            title: isPublished ? "Unable to unpublish form" : "Unable to publish form",
+            description: result.error,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setFormItems((current) =>
+          current.map((item) =>
+            item.id === form.id
+              ? {
+                  ...item,
+                  status: isPublished ? "draft" : "published"
+                }
+              : item
+          )
+        );
+        toast({
+          title: isPublished ? "Form unpublished" : "Form published",
+          variant: "success"
+        });
+      } finally {
+        setStatusFormId(null);
+      }
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -39,7 +108,16 @@ export function FormsManagePanel({ orgSlug, forms, programs, canWrite = true }: 
           {sortedForms.length === 0 ? <Alert variant="info">No forms yet.</Alert> : null}
           {sortedForms.map((form) => (
             <Link className="block rounded-control border bg-surface px-3 py-3 hover:bg-surface-muted" href={`/${orgSlug}/tools/forms/${form.id}/editor`} key={form.id}>
-              <p className="font-semibold text-text">{form.name}</p>
+              <div className="flex items-center gap-1.5">
+                <PublishStatusIcon
+                  disabled={!canWrite}
+                  isLoading={isTogglingStatus && statusFormId === form.id}
+                  isPublished={form.status === "published"}
+                  onToggle={() => toggleFormStatus(form)}
+                  statusLabel={form.status === "published" ? `Published status for ${form.name}` : `Unpublished status for ${form.name}`}
+                />
+                <p className="font-semibold text-text">{form.name}</p>
+              </div>
               <p className="text-xs text-text-muted">
                 {form.formKind === "program_registration" ? "Program registration" : "Generic"} · {form.status}
               </p>

@@ -144,6 +144,32 @@ function normalizeOptional(value: string | null | undefined) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function validateNodeParenting(
+  nodeKind: "division" | "team",
+  parentId: string | null,
+  nodeById: Map<string, { nodeKind: "division" | "team" }>
+): string | null {
+  if (nodeKind === "team") {
+    if (!parentId) {
+      return "Teams must be created inside a division.";
+    }
+
+    const parentNode = nodeById.get(parentId);
+    if (!parentNode || parentNode.nodeKind !== "division") {
+      return "Teams can only be placed inside divisions.";
+    }
+  }
+
+  if (nodeKind === "division" && parentId) {
+    const parentNode = nodeById.get(parentId);
+    if (parentNode?.nodeKind === "team") {
+      return "Teams cannot contain divisions.";
+    }
+  }
+
+  return null;
+}
+
 async function requireProgramsReadOrWrite(orgSlug: string) {
   const orgContext = await getOrgAuthContext(orgSlug);
   const hasAccess = can(orgContext.membershipPermissions, "programs.read") || can(orgContext.membershipPermissions, "programs.write");
@@ -291,16 +317,15 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
         return asError("Node name, slug, and type are required.");
       }
 
-      if (payload.parentId) {
-        const existingNodes = await listProgramNodes(payload.programId);
-        const parentNode = existingNodes.find((node) => node.id === payload.parentId);
-        if (!parentNode) {
-          return asError("Parent node not found.");
-        }
+      const existingNodes = await listProgramNodes(payload.programId);
+      const nodeById = new Map(existingNodes.map((node) => [node.id, { nodeKind: node.nodeKind }]));
+      if (payload.parentId && !nodeById.has(payload.parentId)) {
+        return asError("Parent node not found.");
+      }
 
-        if (parentNode.nodeKind === "team" && payload.nodeKind === "division") {
-          return asError("Teams cannot contain divisions.");
-        }
+      const parentValidationError = validateNodeParenting(payload.nodeKind, payload.parentId ?? null, nodeById);
+      if (parentValidationError) {
+        return asError(parentValidationError);
       }
 
       await createProgramNodeRecord({
@@ -354,6 +379,7 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
       }
 
       const parentByNodeId = new Map(payload.nodes.map((node) => [node.nodeId, node.parentId]));
+      const kindByNodeId = new Map(payload.nodes.map((node) => [node.nodeId, { nodeKind: node.nodeKind }]));
       for (const nodeId of uniqueInputNodeIds) {
         const seen = new Set<string>([nodeId]);
         let currentParentId = parentByNodeId.get(nodeId) ?? null;
@@ -365,6 +391,13 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
 
           seen.add(currentParentId);
           currentParentId = parentByNodeId.get(currentParentId) ?? null;
+        }
+      }
+
+      for (const node of payload.nodes) {
+        const parentValidationError = validateNodeParenting(node.nodeKind, node.parentId, kindByNodeId);
+        if (parentValidationError) {
+          return asError(parentValidationError);
         }
       }
 
@@ -429,11 +462,10 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
         return asError("Node not found.");
       }
 
-      if (targetNode.parentId) {
-        const parentNode = existingNodes.find((node) => node.id === targetNode.parentId);
-        if (parentNode?.nodeKind === "team" && payload.nodeKind === "division") {
-          return asError("Teams cannot contain divisions.");
-        }
+      const nodeById = new Map(existingNodes.map((node) => [node.id, { nodeKind: node.nodeKind }]));
+      const parentValidationError = validateNodeParenting(payload.nodeKind, targetNode.parentId, nodeById);
+      if (parentValidationError) {
+        return asError(parentValidationError);
       }
 
       await updateProgramNodeRecord({

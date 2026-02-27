@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -11,12 +11,13 @@ import { CalendarPicker } from "@/components/ui/calendar-picker";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
+import { PublishStatusIcon } from "@/components/ui/publish-status-icon";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetTile } from "@/components/ui/asset-tile";
 import { useToast } from "@/components/ui/toast";
 import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
-import { createProgramAction } from "@/modules/programs/actions";
+import { createProgramAction, updateProgramAction } from "@/modules/programs/actions";
 import type { Program } from "@/modules/programs/types";
 
 type ProgramsManagePanelProps = {
@@ -39,6 +40,9 @@ export function ProgramsManagePanel({ orgSlug, programs, canWrite = true }: Prog
   const { toast } = useToast();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSaving, startSaving] = useTransition();
+  const [isTogglingStatus, startTogglingStatus] = useTransition();
+  const [statusProgramId, setStatusProgramId] = useState<string | null>(null);
+  const [programItems, setProgramItems] = useState(programs);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [programType, setProgramType] = useState<"league" | "season" | "clinic" | "custom">("season");
@@ -49,9 +53,67 @@ export function ProgramsManagePanel({ orgSlug, programs, canWrite = true }: Prog
   const [endDate, setEndDate] = useState("");
   const [coverImagePath, setCoverImagePath] = useState("");
 
-  const sortedPrograms = useMemo(() => {
-    return [...programs].sort((a, b) => a.name.localeCompare(b.name));
+  useEffect(() => {
+    setProgramItems(programs);
   }, [programs]);
+
+  const sortedPrograms = useMemo(() => {
+    return [...programItems].sort((a, b) => a.name.localeCompare(b.name));
+  }, [programItems]);
+
+  function toggleProgramStatus(program: Program) {
+    if (!canWrite) {
+      return;
+    }
+
+    setStatusProgramId(program.id);
+    startTogglingStatus(async () => {
+      try {
+        const isPublished = program.status === "published";
+        const result = await updateProgramAction({
+          orgSlug,
+          programId: program.id,
+          slug: program.slug,
+          name: program.name,
+          description: program.description ?? "",
+          programType: program.programType,
+          customTypeLabel: program.customTypeLabel ?? "",
+          status: isPublished ? "draft" : "published",
+          startDate: program.startDate ?? undefined,
+          endDate: program.endDate ?? undefined,
+          coverImagePath: program.coverImagePath ?? "",
+          registrationOpenAt: program.registrationOpenAt ?? undefined,
+          registrationCloseAt: program.registrationCloseAt ?? undefined
+        });
+
+        if (!result.ok) {
+          toast({
+            title: isPublished ? "Unable to unpublish program" : "Unable to publish program",
+            description: result.error,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setProgramItems((current) =>
+          current.map((item) =>
+            item.id === program.id
+              ? {
+                  ...item,
+                  status: isPublished ? "draft" : "published"
+                }
+              : item
+          )
+        );
+        toast({
+          title: isPublished ? "Program unpublished" : "Program published",
+          variant: "success"
+        });
+      } finally {
+        setStatusProgramId(null);
+      }
+    });
+  }
 
   function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -130,7 +192,16 @@ export function ProgramsManagePanel({ orgSlug, programs, canWrite = true }: Prog
           {sortedPrograms.length === 0 ? <Alert variant="info">No programs yet.</Alert> : null}
           {sortedPrograms.map((program) => (
             <Link className="block rounded-control border bg-surface px-3 py-3 hover:bg-surface-muted" href={`/${orgSlug}/tools/programs/${program.id}`} key={program.id}>
-              <p className="font-semibold text-text">{program.name}</p>
+              <div className="flex items-center gap-1.5">
+                <PublishStatusIcon
+                  disabled={!canWrite}
+                  isLoading={isTogglingStatus && statusProgramId === program.id}
+                  isPublished={program.status === "published"}
+                  onToggle={() => toggleProgramStatus(program)}
+                  statusLabel={program.status === "published" ? `Published status for ${program.name}` : `Unpublished status for ${program.name}`}
+                />
+                <p className="font-semibold text-text">{program.name}</p>
+              </div>
               <p className="text-xs text-text-muted">
                 {program.programType === "custom" ? program.customTypeLabel ?? "Custom" : program.programType} · {program.status}
               </p>

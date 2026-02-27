@@ -45,8 +45,10 @@ export function Panel({
     return () => setMounted(false);
   }, []);
 
+  const ready = open && mounted && Boolean(portalTarget);
+
   React.useLayoutEffect(() => {
-    if (!open) {
+    if (!ready) {
       return;
     }
 
@@ -60,7 +62,10 @@ export function Panel({
     };
 
     const syncActiveWidth = () => {
-      document.body.style.setProperty("--panel-active-width", `${Math.min(window.innerWidth, PANEL_WIDTH)}px`);
+      const measuredWidth = panelRef.current?.getBoundingClientRect().width;
+      const fallbackWidth = Math.min(window.innerWidth, PANEL_WIDTH);
+      const resolvedWidth = measuredWidth && Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : fallbackWidth;
+      document.body.style.setProperty("--panel-active-width", `${Math.round(resolvedWidth)}px`);
     };
 
     document.body.setAttribute(PANEL_COUNT_ATTRIBUTE, String(panelCount + 1));
@@ -98,7 +103,7 @@ export function Panel({
 
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [ready]);
 
   if (!mounted || !open || !portalTarget) {
     return null;

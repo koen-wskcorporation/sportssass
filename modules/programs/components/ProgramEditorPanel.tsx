@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Building2, CircleCheck, Eye, EyeOff, GripVertical, MoreHorizontal, Pencil, Plus, Trash2, Users } from "lucide-react";
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { Building2, Eye, EyeOff, GripVertical, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CalendarPicker } from "@/components/ui/calendar-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
+import { PublishStatusIcon } from "@/components/ui/publish-status-icon";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetTile } from "@/components/ui/asset-tile";
@@ -22,15 +25,25 @@ import { cn } from "@/lib/utils";
 import { FormCreatePanel } from "@/modules/forms/components/FormCreatePanel";
 import type { OrgForm } from "@/modules/forms/types";
 import { saveProgramHierarchyAction, saveProgramScheduleAction, updateProgramAction } from "@/modules/programs/actions";
-import type { ProgramNode, ProgramWithDetails } from "@/modules/programs/types";
+import { ScheduleBuilderPage } from "@/modules/programs/schedule/components/ScheduleBuilderPage";
+import type { ProgramNode, ProgramOccurrence, ProgramScheduleException, ProgramScheduleRule, ProgramWithDetails } from "@/modules/programs/types";
 import { isProgramNodePublished } from "@/modules/programs/utils";
 
 type ProgramEditorPanelProps = {
   orgSlug: string;
   data: ProgramWithDetails;
   forms: OrgForm[];
+  canWritePrograms: boolean;
   canReadForms: boolean;
   canWriteForms: boolean;
+  activeSection: "structure" | "schedule" | "registration";
+  scheduleSeed?: {
+    rules: ProgramScheduleRule[];
+    occurrences: ProgramOccurrence[];
+    exceptions: ProgramScheduleException[];
+    timelineSource: "v2" | "legacy";
+    timelineOccurrences: ProgramOccurrence[];
+  };
 };
 
 function slugify(value: string) {
@@ -146,6 +159,24 @@ function moveNodeInHierarchy(nodes: ProgramNode[], activeId: string, targetParen
     return null;
   }
 
+  if (activeNode.nodeKind === "team") {
+    if (!targetParentId) {
+      return null;
+    }
+
+    const targetParent = nodeById.get(targetParentId);
+    if (!targetParent || targetParent.nodeKind !== "division") {
+      return null;
+    }
+  }
+
+  if (activeNode.nodeKind === "division" && targetParentId) {
+    const targetParent = nodeById.get(targetParentId);
+    if (targetParent?.nodeKind === "team") {
+      return null;
+    }
+  }
+
   const descendants = collectDescendantIds(nodes, activeId);
   if (targetParentId && descendants.has(targetParentId)) {
     return null;
@@ -213,24 +244,28 @@ function StructureTreeRow({
   activeNodeId,
   disabled,
   isPublished,
+  isPublishToggling,
   onDelete,
   onAddChild,
   onEdit,
   onTogglePublished,
-  children
+  children,
+  childrenPlacement = "outside"
 }: {
   node: ProgramNode;
   activeNodeId: string | null;
   disabled: boolean;
   isPublished: boolean;
+  isPublishToggling: boolean;
   onDelete: (nodeId: string) => void;
   onAddChild: (parentNodeId: string, nodeKind: ProgramNode["nodeKind"]) => void;
   onEdit: (node: ProgramNode) => void;
   onTogglePublished: (node: ProgramNode) => void;
   children: ReactNode;
+  childrenPlacement?: "inside" | "outside";
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement | null>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: node.id,
     disabled
@@ -246,92 +281,138 @@ function StructureTreeRow({
   };
   const showDropHints = Boolean(activeNodeId && activeNodeId !== node.id);
   const nodeTypeLabel = node.nodeKind === "team" ? "Team" : "Division";
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (rowRef.current?.contains(target)) {
+        return;
+      }
+
+      setIsMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isMenuOpen, rowRef]);
+
   return (
-    <div className="flex w-full flex-col items-center">
+    <div className="flex w-full flex-col items-center" ref={rowRef}>
       <div
         className={cn(
-          "w-full rounded-control border bg-surface px-2 py-1 shadow-sm transition-shadow",
+          "w-full rounded-control border bg-surface shadow-sm transition-shadow",
+          node.nodeKind === "division" ? "p-2" : "px-2 py-1",
           isDragging && "shadow-card opacity-80",
           isIntoOver && "border-accent bg-accent/5"
         )}
         ref={setNodeRef}
         style={style}
       >
-        <div className="flex items-start justify-between gap-1">
-          <button
-            aria-label="Open node actions"
-            className="h-6 w-6 rounded-control border border-border bg-surface-muted text-text-muted hover:bg-surface hover:text-text"
-            disabled={disabled}
-            onClick={() => setIsMenuOpen((current) => !current)}
-            type="button"
-          >
-            <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
-          </button>
-          <button
-            aria-label={`Drag ${node.name}`}
-            className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center text-text-muted hover:text-text"
-            disabled={disabled}
-            type="button"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-3 w-3" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1">
-              <CircleCheck aria-label={isPublished ? "Published" : "Not published"} className={cn("h-3.5 w-3.5 shrink-0", isPublished ? "text-emerald-500" : "text-text-muted")} />
-              <span className="rounded-full border border-border bg-surface-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-text-muted">
-                {nodeTypeLabel}
-              </span>
-            </div>
-            <p className="mt-0.5 truncate text-xs font-semibold text-text">{node.name}</p>
-            <p className="truncate text-[10px] text-text-muted">{node.slug}</p>
-          </div>
-          {isMenuOpen ? (
-            <div className="absolute right-0 top-8 z-20 w-44 rounded-control border bg-surface p-2 shadow-floating">
-              <div className="space-y-1">
-                <Button
-                  className="w-full justify-start"
-                  onClick={() => {
-                    onTogglePublished(node);
-                    setIsMenuOpen(false);
-                  }}
-                  size="sm"
-                  type="button"
-                  variant={isPublished ? "secondary" : "primary"}
-                >
-                  {isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  {isPublished ? "Unpublish" : "Publish"}
-                </Button>
-                <Button
-                  className="w-full justify-start"
-                  onClick={() => {
-                    onEdit(node);
-                    setIsMenuOpen(false);
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="secondary"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit details
-                </Button>
-                <Button
-                  className="w-full justify-start"
-                  onClick={() => {
-                    onDelete(node.id);
-                    setIsMenuOpen(false);
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </Button>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-1">
+            <button
+              aria-label={`Drag ${node.name}`}
+              className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center text-text-muted hover:text-text"
+              disabled={disabled}
+              type="button"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-3 w-3" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="mt-0.5 flex items-center gap-1">
+                <PublishStatusIcon
+                  disabled={disabled}
+                  isLoading={isPublishToggling}
+                  isPublished={isPublished}
+                  onToggle={() => onTogglePublished(node)}
+                  statusLabel={isPublished ? `Published status for ${node.name}` : `Unpublished status for ${node.name}`}
+                />
+                <p className="truncate text-xs font-semibold text-text">{node.name}</p>
+                <Chip size="small">{nodeTypeLabel}</Chip>
               </div>
             </div>
-          ) : null}
+          </div>
+          <div className="relative shrink-0">
+            <div className="flex items-center gap-1">
+              {node.nodeKind === "division" ? (
+                <button
+                  aria-label={`Add team to ${node.name}`}
+                  className="h-6 w-6 rounded-control border border-border bg-surface-muted text-text-muted hover:bg-surface hover:text-text"
+                  disabled={disabled}
+                  onClick={() => onAddChild(node.id, "team")}
+                  type="button"
+                >
+                  <Plus className="mx-auto h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              <button
+                aria-label="Open node actions"
+                className="h-6 w-6 rounded-control border border-border bg-surface-muted text-text-muted hover:bg-surface hover:text-text"
+                disabled={disabled}
+                onClick={() => setIsMenuOpen((current) => !current)}
+                type="button"
+              >
+                <MoreHorizontal className="mx-auto h-3.5 w-3.5" />
+              </button>
+            </div>
+            {isMenuOpen ? (
+              <div className="absolute right-0 top-8 z-20 w-44 rounded-control border bg-surface p-2 shadow-floating">
+                <div className="space-y-1">
+                  <Button
+                    className="w-full justify-start"
+                    onClick={() => {
+                      onTogglePublished(node);
+                      setIsMenuOpen(false);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant={isPublished ? "secondary" : "primary"}
+                  >
+                    {isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {isPublished ? "Unpublish" : "Publish"}
+                  </Button>
+                  <Button
+                    className="w-full justify-start"
+                    onClick={() => {
+                      onEdit(node);
+                      setIsMenuOpen(false);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit details
+                  </Button>
+                  <Button
+                    className="w-full justify-start"
+                    onClick={() => {
+                      onDelete(node.id);
+                      setIsMenuOpen(false);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className={cn("pt-2", showDropHints ? "block" : "hidden")}>
           <div
@@ -344,60 +425,32 @@ function StructureTreeRow({
             Drop here to nest under {node.name}
           </div>
         </div>
-      </div>
-      <div className="relative mt-1">
-        <Button
-          aria-label="Add child node"
-          className="h-7 w-7 px-0"
-          disabled={disabled}
-          onClick={() => setIsAddMenuOpen((current) => !current)}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
-        {isAddMenuOpen ? (
-          <div className="absolute left-1/2 top-8 z-20 w-44 -translate-x-1/2 rounded-control border bg-surface p-2 shadow-floating">
-            <div className="space-y-1">
-              <Button
-                className="w-full justify-start"
-                disabled={node.nodeKind === "team"}
-                onClick={() => {
-                  onAddChild(node.id, "division");
-                  setIsAddMenuOpen(false);
-                }}
-                size="sm"
-                type="button"
-                variant="secondary"
-              >
-                <Building2 className="h-3.5 w-3.5" />
-                Add division
-              </Button>
-              <Button
-                className="w-full justify-start"
-                onClick={() => {
-                  onAddChild(node.id, "team");
-                  setIsAddMenuOpen(false);
-                }}
-                size="sm"
-                type="button"
-                variant="secondary"
-              >
-                <Users className="h-3.5 w-3.5" />
-                Add team
-              </Button>
-            </div>
+        {childrenPlacement === "inside" ? (
+          <div className="mt-2">
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">Teams</p>
+            <div className="rounded-control border-2 border-dotted border-border/80 p-2">{children}</div>
           </div>
         ) : null}
       </div>
-      {children}
+      {childrenPlacement === "outside" ? children : null}
     </div>
   );
 }
 
-export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canReadForms, canWriteForms }: ProgramEditorPanelProps) {
+export function ProgramEditorPanel({
+  orgSlug,
+  data,
+  forms: initialForms,
+  canWritePrograms,
+  canReadForms,
+  canWriteForms,
+  activeSection,
+  scheduleSeed
+}: ProgramEditorPanelProps) {
   const { toast } = useToast();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSavingProgram, startSavingProgram] = useTransition();
   const [isMutatingNodes, startMutatingNodes] = useTransition();
   const [isMutatingSchedule, startMutatingSchedule] = useTransition();
@@ -407,6 +460,7 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
   const [isRootMenuOpen, setIsRootMenuOpen] = useState(false);
   const [isNodeEditOpen, setIsNodeEditOpen] = useState(false);
   const [activeDragNodeId, setActiveDragNodeId] = useState<string | null>(null);
+  const [publishToggleNodeId, setPublishToggleNodeId] = useState<string | null>(null);
   const [nodes, setNodes] = useState(data.nodes);
   const [scheduleBlocks, setScheduleBlocks] = useState(data.scheduleBlocks);
   const [savedSlug, setSavedSlug] = useState(data.program.slug);
@@ -456,6 +510,15 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const nodeGroups = useMemo(() => buildNodeGroups(nodes), [nodes]);
   const linkedForms = useMemo(() => initialForms.filter((form) => form.programId === data.program.id), [initialForms, data.program.id]);
+  const editingNode = editingNodeId ? nodeById.get(editingNodeId) : null;
+  const editingParentNode = editingNode?.parentId ? nodeById.get(editingNode.parentId) : null;
+  const canSetEditingNodeToTeam = Boolean(editingNode && editingParentNode?.nodeKind === "division");
+
+  useEffect(() => {
+    if (searchParams.get("panel") === "settings") {
+      setIsProgramSettingsOpen(true);
+    }
+  }, [searchParams]);
 
   const parentOptions = useMemo(
     () => [
@@ -467,6 +530,17 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
     ],
     [nodes]
   );
+  const divisionParentOptions = useMemo(
+    () =>
+      nodes
+        .filter((node) => node.nodeKind === "division")
+        .map((node) => ({
+          value: node.id,
+          label: `${node.name} (division)`
+        })),
+    [nodes]
+  );
+  const createParentOptions = nodeKind === "team" ? divisionParentOptions : parentOptions;
 
   async function handleProgramSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -503,6 +577,9 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
       });
       setSavedSlug(slug);
       setIsProgramSettingsOpen(false);
+      if (searchParams.get("panel") === "settings") {
+        router.replace(pathname);
+      }
     });
   }
 
@@ -513,6 +590,15 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
     if (!resolvedSlug) {
       toast({
         title: "Missing node slug",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (nodeKind === "team" && !parentId) {
+      toast({
+        title: "Division required",
+        description: "Teams must be created inside a division.",
         variant: "destructive"
       });
       return;
@@ -632,31 +718,36 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
 
   function handleNodePublishToggle(node: ProgramNode) {
     const isPublished = isProgramNodePublished(node);
+    setPublishToggleNodeId(node.id);
 
     startMutatingNodes(async () => {
-      const result = await saveProgramHierarchyAction({
-        orgSlug,
-        programId: data.program.id,
-        action: "set-published",
-        nodeId: node.id,
-        isPublished: !isPublished
-      });
-
-      if (!result.ok) {
-        toast({
-          title: isPublished ? "Unable to unpublish node" : "Unable to publish node",
-          description: result.error,
-          variant: "destructive"
+      try {
+        const result = await saveProgramHierarchyAction({
+          orgSlug,
+          programId: data.program.id,
+          action: "set-published",
+          nodeId: node.id,
+          isPublished: !isPublished
         });
-        return;
-      }
 
-      toast({
-        title: isPublished ? "Node unpublished" : "Node published",
-        variant: "success"
-      });
-      setNodes(result.data.details.nodes);
-      setScheduleBlocks(result.data.details.scheduleBlocks);
+        if (!result.ok) {
+          toast({
+            title: isPublished ? "Unable to unpublish node" : "Unable to publish node",
+            description: result.error,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        toast({
+          title: isPublished ? "Node unpublished" : "Node published",
+          variant: "success"
+        });
+        setNodes(result.data.details.nodes);
+        setScheduleBlocks(result.data.details.scheduleBlocks);
+      } finally {
+        setPublishToggleNodeId(null);
+      }
     });
   }
 
@@ -715,7 +806,7 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
     if (!nextNodes) {
       toast({
         title: "Invalid move",
-        description: "A structure node cannot be moved into itself or one of its descendants.",
+        description: "Teams must stay inside divisions and nodes cannot move into their own descendants.",
         variant: "destructive"
       });
       return;
@@ -764,7 +855,8 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
     });
   }
 
-  function renderStructureBranch(parentId: string | null): ReactNode {
+  function renderStructureBranch(parentId: string | null, options?: { contained?: boolean }): ReactNode {
+    const contained = options?.contained ?? false;
     const siblings = nodeGroups.get(parentKey(parentId)) ?? [];
     const showDropZone = Boolean(activeDragNodeId);
     const showConnectorLine = siblings.length > 1;
@@ -776,6 +868,41 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
       return null;
     }
 
+    if (contained) {
+      return (
+        <div className="flex w-full flex-col gap-2">
+          {siblings.length > 0 ? (
+            <div className="flex w-full flex-nowrap gap-2">
+              <SortableContext items={siblings.map((node) => node.id)} strategy={rectSortingStrategy}>
+                {siblings.map((node) => {
+                  const childContained = node.nodeKind === "division";
+                  return (
+                    <div className="flex min-w-[56px] flex-1 items-stretch" key={node.id}>
+                      <StructureTreeRow
+                        activeNodeId={activeDragNodeId}
+                        childrenPlacement={childContained ? "inside" : "outside"}
+                        disabled={isMutatingNodes}
+                        isPublished={isProgramNodePublished(node)}
+                        isPublishToggling={publishToggleNodeId === node.id}
+                        node={node}
+                        onAddChild={openNodeCreatePanel}
+                        onDelete={handleNodeDelete}
+                        onEdit={openNodeEditPanel}
+                        onTogglePublished={handleNodePublishToggle}
+                      >
+                        {renderStructureBranch(node.id, { contained: childContained })}
+                      </StructureTreeRow>
+                    </div>
+                  );
+                })}
+              </SortableContext>
+            </div>
+          ) : null}
+          <HierarchyDropZone active={showDropZone} id={containerDropId(parentId)} />
+        </div>
+      );
+    }
+
     return (
       <div className="mt-3 flex w-full flex-col items-center">
         {siblings.length > 0 ? <div className="h-4 w-px bg-border" /> : null}
@@ -783,23 +910,28 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
           <div className="relative flex w-full flex-nowrap justify-center gap-3 pt-4">
             {showConnectorLine ? <div className="absolute left-8 right-8 top-0 h-px bg-border" /> : null}
             <SortableContext items={siblings.map((node) => node.id)} strategy={rectSortingStrategy}>
-              {siblings.map((node) => (
-                <div className="relative flex shrink-0 flex-col items-stretch" key={node.id} style={{ width: siblingWidth, minWidth: "56px" }}>
-                  <div className="absolute -top-4 left-1/2 h-4 w-px -translate-x-1/2 bg-border" />
-                  <StructureTreeRow
-                    activeNodeId={activeDragNodeId}
-                    disabled={isMutatingNodes}
-                    isPublished={isProgramNodePublished(node)}
-                    node={node}
-                    onAddChild={openNodeCreatePanel}
-                    onDelete={handleNodeDelete}
-                    onEdit={openNodeEditPanel}
-                    onTogglePublished={handleNodePublishToggle}
-                  >
-                    {renderStructureBranch(node.id)}
-                  </StructureTreeRow>
-                </div>
-              ))}
+              {siblings.map((node) => {
+                const childContained = node.nodeKind === "division";
+                return (
+                  <div className="relative flex shrink-0 flex-col items-stretch" key={node.id} style={{ width: siblingWidth, minWidth: "56px" }}>
+                    <div className="absolute -top-4 left-1/2 h-4 w-px -translate-x-1/2 bg-border" />
+                    <StructureTreeRow
+                      activeNodeId={activeDragNodeId}
+                      childrenPlacement={childContained ? "inside" : "outside"}
+                      disabled={isMutatingNodes}
+                      isPublished={isProgramNodePublished(node)}
+                      isPublishToggling={publishToggleNodeId === node.id}
+                      node={node}
+                      onAddChild={openNodeCreatePanel}
+                      onDelete={handleNodeDelete}
+                      onEdit={openNodeEditPanel}
+                      onTogglePublished={handleNodePublishToggle}
+                    >
+                      {renderStructureBranch(node.id, { contained: childContained })}
+                    </StructureTreeRow>
+                  </div>
+                );
+              })}
             </SortableContext>
           </div>
         ) : null}
@@ -890,26 +1022,19 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
     setIsCreateFormOpen(true);
   }
 
+  useEffect(() => {
+    if (nodeKind !== "team") {
+      return;
+    }
+
+    const selectedParent = nodes.find((node) => node.id === parentId);
+    if (!selectedParent || selectedParent.nodeKind !== "division") {
+      setParentId("");
+    }
+  }, [nodeKind, parentId, nodes]);
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Program settings</CardTitle>
-          <CardDescription>Configure core program details and publish state in a side panel.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-text-muted">
-            <p className="font-medium text-text">{name}</p>
-            <p>
-              {programType === "custom" ? customTypeLabel || "Custom" : programType} · {status}
-            </p>
-          </div>
-          <Button onClick={() => setIsProgramSettingsOpen(true)} type="button">
-            Edit settings
-          </Button>
-        </CardContent>
-      </Card>
-
       <Panel
         footer={
           <>
@@ -923,10 +1048,11 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
         }
         onClose={() => setIsProgramSettingsOpen(false)}
         open={isProgramSettingsOpen}
+        panelClassName="ml-auto max-w-[300px]"
         subtitle="Configure the core program details and publish state."
         title="Program settings"
       >
-        <form className="grid gap-4 md:grid-cols-2" id="program-settings-form" onSubmit={handleProgramSave}>
+        <form className="grid gap-4" id="program-settings-form" onSubmit={handleProgramSave}>
           <FormField label="Program name">
             <Input onChange={(event) => setName(event.target.value)} required value={name} />
           </FormField>
@@ -966,11 +1092,11 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
             />
           </FormField>
           {programType === "custom" ? (
-            <FormField className="md:col-span-2" label="Custom type label">
+            <FormField label="Custom type label">
               <Input onChange={(event) => setCustomTypeLabel(event.target.value)} required value={customTypeLabel} />
             </FormField>
           ) : null}
-          <FormField className="md:col-span-2" label="Description">
+          <FormField label="Description">
             <Textarea className="min-h-[80px]" onChange={(event) => setDescription(event.target.value)} value={description} />
           </FormField>
           <FormField label="Cover photo">
@@ -1005,128 +1131,121 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
         </form>
       </Panel>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>Linked forms</CardTitle>
-              <CardDescription>Forms connected to this program.</CardDescription>
-            </div>
-            <Button disabled={!canWriteForms || linkedForms.length > 0} onClick={openCreateFormPanel} type="button" variant="secondary">
-              Create + link form
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!canReadForms ? <Alert variant="info">You do not have permission to view forms.</Alert> : null}
-          {canReadForms && !canWriteForms ? <Alert variant="info">You have read-only access to forms.</Alert> : null}
-
-          {canReadForms ? (
-            <>
-              {linkedForms.length === 0 ? <Alert variant="info">No forms are linked to this program yet.</Alert> : null}
-              {linkedForms.map((form) => (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-control border bg-surface px-3 py-3" key={form.id}>
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-text">{form.name}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link className="text-sm font-semibold text-link hover:underline" href={`/${orgSlug}/tools/forms/${form.id}/editor`}>
-                      Manage form
-                    </Link>
-                  </div>
+      {activeSection === "registration" ? (
+        <>
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Linked forms</CardTitle>
+                  <CardDescription>Forms connected to this program.</CardDescription>
                 </div>
-              ))}
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
+                <Button disabled={!canWriteForms || linkedForms.length > 0} onClick={openCreateFormPanel} type="button" variant="secondary">
+                  Create + link form
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!canReadForms ? <Alert variant="info">You do not have permission to view forms.</Alert> : null}
+              {canReadForms && !canWriteForms ? <Alert variant="info">You have read-only access to forms.</Alert> : null}
 
-      <FormCreatePanel
-        canWrite={canWriteForms}
-        fixedProgram={{
-          id: data.program.id,
-          name: data.program.name
-        }}
-        onClose={() => setIsCreateFormOpen(false)}
-        open={isCreateFormOpen}
-        orgSlug={orgSlug}
-        programs={[]}
-      />
-
-      <Card>
-        <CardHeader className="pb-6">
-          <CardTitle>Program structure</CardTitle>
-          <CardDescription>Map out divisions and teams. Drag to reorder and nest any node under another.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex w-full flex-col items-center gap-3">
-            <div className="w-[280px] max-w-[min(82vw,280px)] rounded-control border bg-surface px-4 py-3 text-center shadow-sm">
-              <p className="text-xs uppercase tracking-wide text-text-muted">Program</p>
-              <p className="font-semibold text-text">{name}</p>
-            </div>
-            <div className="relative">
-              <Button
-                aria-label="Open root actions"
-                className="h-8 w-8 px-0"
-                disabled={isMutatingNodes}
-                onClick={() => setIsRootMenuOpen((current) => !current)}
-                size="sm"
-                type="button"
-                variant="secondary"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-              {isRootMenuOpen ? (
-                <div className="absolute left-1/2 top-10 z-20 w-44 -translate-x-1/2 rounded-control border bg-surface p-2 shadow-floating">
-                  <div className="space-y-1">
-                    <Button
-                      className="w-full justify-start"
-                      onClick={() => {
-                        openNodeCreatePanel(null, "division");
-                        setIsRootMenuOpen(false);
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="secondary"
-                    >
-                      <Building2 className="h-3.5 w-3.5" />
-                      Add division
-                    </Button>
-                    <Button
-                      className="w-full justify-start"
-                      onClick={() => {
-                        openNodeCreatePanel(null, "team");
-                        setIsRootMenuOpen(false);
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="secondary"
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                      Add team
-                    </Button>
-                  </div>
-                </div>
+              {canReadForms ? (
+                <>
+                  {linkedForms.length === 0 ? <Alert variant="info">No forms are linked to this program yet.</Alert> : null}
+                  {linkedForms.map((form) => (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-control border bg-surface px-3 py-3" key={form.id}>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-text">{form.name}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link className="text-sm font-semibold text-link hover:underline" href={`/${orgSlug}/tools/forms/${form.id}/editor`}>
+                          Manage form
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </>
               ) : null}
-            </div>
-            {nodes.length === 0 ? <Alert variant="info">No structure nodes yet. Add a division or team to start the map.</Alert> : null}
-          </div>
+            </CardContent>
+          </Card>
 
-          {nodes.length > 0 || activeDragNodeId ? (
-            <DndContext
-              collisionDetection={closestCenter}
-              onDragCancel={() => setActiveDragNodeId(null)}
-              onDragEnd={handleNodeDragEnd}
-              onDragStart={handleNodeDragStart}
-              sensors={sensors}
-            >
-              {renderStructureBranch(null)}
-            </DndContext>
-          ) : null}
-        </CardContent>
-      </Card>
+          <FormCreatePanel
+            canWrite={canWriteForms}
+            fixedProgram={{
+              id: data.program.id,
+              name: data.program.name
+            }}
+            onClose={() => setIsCreateFormOpen(false)}
+            open={isCreateFormOpen}
+            orgSlug={orgSlug}
+            programs={[]}
+          />
+        </>
+      ) : null}
 
-      <Panel
+      {activeSection === "structure" ? (
+        <>
+          <Card>
+            <CardHeader className="pb-6">
+              <CardTitle>Program structure</CardTitle>
+              <CardDescription>Map out divisions and teams. Teams must always be nested under a division.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex w-full flex-col items-center gap-3">
+                <div className="w-[280px] max-w-[min(82vw,280px)] rounded-control border bg-surface px-4 py-3 text-center shadow-sm">
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Program</p>
+                  <p className="font-semibold text-text">{name}</p>
+                </div>
+                <div className="relative">
+                  <Button
+                    aria-label="Open root actions"
+                    className="h-8 w-8 px-0"
+                    disabled={isMutatingNodes}
+                    onClick={() => setIsRootMenuOpen((current) => !current)}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                  {isRootMenuOpen ? (
+                    <div className="absolute left-1/2 top-10 z-20 w-44 -translate-x-1/2 rounded-control border bg-surface p-2 shadow-floating">
+                      <div className="space-y-1">
+                        <Button
+                          className="w-full justify-start"
+                          onClick={() => {
+                            openNodeCreatePanel(null, "division");
+                            setIsRootMenuOpen(false);
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="secondary"
+                        >
+                          <Building2 className="h-3.5 w-3.5" />
+                          Add division
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                {nodes.length === 0 ? <Alert variant="info">No structure nodes yet. Add a division to start the map.</Alert> : null}
+              </div>
+
+              {nodes.length > 0 || activeDragNodeId ? (
+                <DndContext
+                  collisionDetection={closestCenter}
+                  onDragCancel={() => setActiveDragNodeId(null)}
+                  onDragEnd={handleNodeDragEnd}
+                  onDragStart={handleNodeDragStart}
+                  sensors={sensors}
+                >
+                  {renderStructureBranch(null)}
+                </DndContext>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Panel
         footer={
           <>
             <Button onClick={() => setIsNodeEditOpen(false)} type="button" variant="ghost">
@@ -1139,10 +1258,11 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
         }
         onClose={() => setIsNodeEditOpen(false)}
         open={isNodeEditOpen}
+        panelClassName="ml-auto max-w-[300px]"
         subtitle="Edit node details for your structure map."
         title="Edit node"
       >
-        <form className="grid gap-3 md:grid-cols-2" id="edit-structure-node-form" onSubmit={handleNodeEditSave}>
+        <form className="grid gap-3" id="edit-structure-node-form" onSubmit={handleNodeEditSave}>
           <FormField label="Name">
             <Input onChange={(event) => setEditingNodeName(event.target.value)} required value={editingNodeName} />
           </FormField>
@@ -1154,7 +1274,7 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
               onChange={(event) => setEditingNodeKind(event.target.value as "division" | "team")}
               options={[
                 { value: "division", label: "Division" },
-                { value: "team", label: "Team" }
+                ...(canSetEditingNodeToTeam || editingNodeKind === "team" ? [{ value: "team", label: "Team" }] : [])
               ]}
               value={editingNodeKind}
             />
@@ -1171,9 +1291,9 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
             Published
           </label>
         </form>
-      </Panel>
+          </Panel>
 
-      <Panel
+          <Panel
         footer={
           <>
             <Button onClick={() => setIsDivisionCreateOpen(false)} type="button" variant="ghost">
@@ -1186,10 +1306,11 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
         }
         onClose={() => setIsDivisionCreateOpen(false)}
         open={isDivisionCreateOpen}
+        panelClassName="ml-auto max-w-[300px]"
         subtitle="Add divisions or teams anywhere in your structure map."
         title="Add structure node"
       >
-        <form className="grid gap-3 md:grid-cols-2" id="create-structure-node-form" onSubmit={handleNodeCreate}>
+        <form className="grid gap-3" id="create-structure-node-form" onSubmit={handleNodeCreate}>
           <FormField label="Name">
             <Input onChange={(event) => setNodeName(event.target.value)} required value={nodeName} />
           </FormField>
@@ -1207,7 +1328,7 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
             />
           </FormField>
           <FormField label="Parent">
-            <Select onChange={(event) => setParentId(event.target.value)} options={parentOptions} value={parentId} />
+            <Select onChange={(event) => setParentId(event.target.value)} options={createParentOptions} value={parentId} />
           </FormField>
           <FormField hint="Optional" label="Capacity">
             <Input onChange={(event) => setCapacity(event.target.value)} type="number" value={capacity} />
@@ -1217,99 +1338,23 @@ export function ProgramEditorPanel({ orgSlug, data, forms: initialForms, canRead
             Waitlist enabled
           </label>
         </form>
-      </Panel>
+          </Panel>
+        </>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Schedule blocks</CardTitle>
-          <CardDescription>Model long-running seasons or one-off clinics.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={handleScheduleCreate}>
-            <FormField label="Block type">
-              <Select
-                onChange={(event) => setScheduleType(event.target.value as "date_range" | "meeting_pattern" | "one_off")}
-                options={[
-                  { value: "date_range", label: "Date range" },
-                  { value: "meeting_pattern", label: "Meeting pattern" },
-                  { value: "one_off", label: "One-off" }
-                ]}
-                value={scheduleType}
-              />
-            </FormField>
-            <FormField hint="Optional" label="Title">
-              <Input onChange={(event) => setScheduleTitle(event.target.value)} value={scheduleTitle} />
-            </FormField>
-            <FormField label="Target node">
-              <Select onChange={(event) => setScheduleNodeId(event.target.value)} options={parentOptions} value={scheduleNodeId} />
-            </FormField>
-            {scheduleType !== "one_off" ? (
-              <>
-                <FormField label="Start date">
-                  <CalendarPicker onChange={setScheduleStartDate} value={scheduleStartDate} />
-                </FormField>
-                <FormField label="End date">
-                  <CalendarPicker onChange={setScheduleEndDate} value={scheduleEndDate} />
-                </FormField>
-              </>
-            ) : (
-              <>
-                <FormField label="One-off date">
-                  <CalendarPicker
-                    onChange={(nextDate) => setScheduleOneOffAt(combineDateTimeLocal(nextDate, scheduleOneOffParts.time))}
-                    value={scheduleOneOffParts.date}
-                  />
-                </FormField>
-                <FormField label="One-off time">
-                  <Input
-                    onChange={(event) => setScheduleOneOffAt(combineDateTimeLocal(scheduleOneOffParts.date, event.target.value))}
-                    type="time"
-                    value={scheduleOneOffParts.time}
-                  />
-                </FormField>
-              </>
-            )}
-            <FormField hint="For meeting pattern only. Example: 2,4 (Tue/Thu)." label="By day">
-              <Input onChange={(event) => setScheduleByDay(event.target.value)} value={scheduleByDay} />
-            </FormField>
-            <FormField hint="Optional" label="Start time">
-              <Input onChange={(event) => setScheduleStartTime(event.target.value)} type="time" value={scheduleStartTime} />
-            </FormField>
-            <FormField hint="Optional" label="End time">
-              <Input onChange={(event) => setScheduleEndTime(event.target.value)} type="time" value={scheduleEndTime} />
-            </FormField>
-            <div className="md:col-span-2">
-              <Button disabled={isMutatingSchedule} loading={isMutatingSchedule} type="submit" variant="secondary">
-                {isMutatingSchedule ? "Saving..." : "Add schedule block"}
-              </Button>
-            </div>
-          </form>
-
-          {scheduleBlocks.length === 0 ? <Alert variant="info">No schedule blocks yet.</Alert> : null}
-          {scheduleBlocks.map((schedule) => (
-            <div className="flex items-start justify-between rounded-control border bg-surface px-3 py-3" key={schedule.id}>
-              <div>
-                <p className="font-semibold text-text">{schedule.title ?? "Untitled block"}</p>
-                <p className="text-xs text-text-muted">type: {schedule.blockType}</p>
-                <p className="text-xs text-text-muted">
-                  {schedule.blockType === "one_off"
-                    ? schedule.oneOffAt ?? ""
-                    : `${schedule.startDate ?? ""} → ${schedule.endDate ?? ""}`}
-                </p>
-              </div>
-              <Button
-                disabled={isMutatingSchedule}
-                onClick={() => handleScheduleDelete(schedule.id)}
-                size="sm"
-                type="button"
-                variant="destructive"
-              >
-                Delete
-              </Button>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      {activeSection === "schedule" ? (
+        <ScheduleBuilderPage
+          canWrite={canWritePrograms}
+          initialExceptions={scheduleSeed?.exceptions ?? []}
+          initialLegacyOccurrences={scheduleSeed?.timelineSource === "legacy" ? scheduleSeed.timelineOccurrences : undefined}
+          initialOccurrences={scheduleSeed?.occurrences ?? []}
+          initialRules={scheduleSeed?.rules ?? []}
+          initialSource={scheduleSeed?.timelineSource ?? "v2"}
+          nodes={nodes}
+          orgSlug={orgSlug}
+          programId={data.program.id}
+        />
+      ) : null}
     </div>
   );
 }
