@@ -29,7 +29,6 @@ export default async function OrgLayout({
   children: React.ReactNode;
   params: Promise<{ orgSlug: string }>;
 }) {
-  const hideChromeInProduction = process.env.NODE_ENV === "production";
   const { orgSlug } = await params;
   const orgRequest = await getOrgRequestContext(orgSlug);
   const canEditPages = orgRequest.capabilities?.pages.canWrite ?? false;
@@ -46,18 +45,16 @@ export default async function OrgLayout({
   return (
     <div className="org-layout-root" style={brandingVars}>
       <BrandingCssVarsBridge vars={brandingVars as Record<string, string>} />
-      {!hideChromeInProduction ? (
-        <OrgHeader
-          canEditPages={canEditPages}
-          canManageOrg={canManageOrg}
-          governingBodyLogoUrl={orgRequest.org.governingBody?.logoUrl ?? null}
-          governingBodyName={orgRequest.org.governingBody?.name ?? null}
-          pages={pages}
-          orgLogoUrl={orgLogoUrl}
-          orgName={orgRequest.org.orgName}
-          orgSlug={orgRequest.org.orgSlug}
-        />
-      ) : null}
+      <OrgHeader
+        canEditPages={canEditPages}
+        canManageOrg={canManageOrg}
+        governingBodyLogoUrl={orgRequest.org.governingBody?.logoUrl ?? null}
+        governingBodyName={orgRequest.org.governingBody?.name ?? null}
+        pages={pages}
+        orgLogoUrl={orgLogoUrl}
+        orgName={orgRequest.org.orgName}
+        orgSlug={orgRequest.org.orgSlug}
+      />
       {children}
     </div>
   );
