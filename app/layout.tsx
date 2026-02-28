@@ -4,9 +4,7 @@ import { AppFooter } from "@/components/shared/AppFooter";
 import { PrimaryHeader } from "@/components/shared/PrimaryHeader";
 import { ToastProvider } from "@/components/ui/toast";
 import { UploadProvider } from "@/modules/uploads";
-import { SpeedInsights } from "@vercel/speed-insights/next"
-
-<SpeedInsights/>
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: {
@@ -36,6 +34,7 @@ export default function RootLayout({
             </div>
           </UploadProvider>
         </ToastProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
