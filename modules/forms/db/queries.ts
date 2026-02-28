@@ -436,3 +436,19 @@ export async function listPublishedFormsForProgram(orgId: string, programId: str
 
   return (data ?? []).map((row) => mapForm(row as OrgFormRow));
 }
+
+export async function listPublishedFormsForOrg(orgId: string): Promise<OrgForm[]> {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase
+    .from("org_forms")
+    .select(formSelect)
+    .eq("org_id", orgId)
+    .eq("status", "published")
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to list published forms: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => mapForm(row as OrgFormRow));
+}

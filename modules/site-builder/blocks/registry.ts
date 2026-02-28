@@ -17,6 +17,8 @@ import {
   ProgramCatalogBlockRender,
   sanitizeProgramCatalogConfig
 } from "@/modules/site-builder/blocks/program-catalog";
+import { createDefaultEventsConfig, EventsBlockEditor, EventsBlockRender, sanitizeEventsConfig } from "@/modules/site-builder/blocks/events";
+import { createDefaultFormEmbedConfig, FormEmbedBlockEditor, FormEmbedBlockRender, sanitizeFormEmbedConfig } from "@/modules/site-builder/blocks/form-embed";
 import type { BlockContext, BlockDefinition, DraftBlockInput, OrgPageBlock, OrgSiteBlockType } from "@/modules/site-builder/types";
 
 type AnyBlockDefinition = {
@@ -71,6 +73,22 @@ const blockRegistry: AnyBlockDefinition = {
     sanitizeConfig: sanitizeProgramCatalogConfig,
     Render: ProgramCatalogBlockRender,
     Editor: ProgramCatalogBlockEditor
+  },
+  events: {
+    type: "events",
+    displayName: "Events",
+    defaultConfig: createDefaultEventsConfig,
+    sanitizeConfig: sanitizeEventsConfig,
+    Render: EventsBlockRender,
+    Editor: EventsBlockEditor
+  },
+  form_embed: {
+    type: "form_embed",
+    displayName: "Form",
+    defaultConfig: createDefaultFormEmbedConfig,
+    sanitizeConfig: sanitizeFormEmbedConfig,
+    Render: FormEmbedBlockRender,
+    Editor: FormEmbedBlockEditor
   }
 };
 

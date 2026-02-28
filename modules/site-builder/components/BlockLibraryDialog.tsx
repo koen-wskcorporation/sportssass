@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  CalendarClock,
   CalendarDays,
+  ClipboardCheck,
   LayoutDashboard,
   LayoutList,
   Megaphone,
@@ -51,6 +53,14 @@ const tileMetaByType: Record<
   program_catalog: {
     icon: LayoutList,
     description: "Program list with date/type details and optional CTAs."
+  },
+  events: {
+    icon: CalendarClock,
+    description: "Event feed with either a vertical list or interactive calendar view."
+  },
+  form_embed: {
+    icon: ClipboardCheck,
+    description: "Show a published form directly on the page for signed-in users."
   }
 };
 

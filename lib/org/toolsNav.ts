@@ -23,10 +23,10 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
   return [
     {
       key: "tools-overview",
-      label: "Tools Overview",
+      label: "Overview",
       href: `/${orgSlug}/tools`,
       description: "Open the organization admin overview.",
-      icon: "wrench",
+      icon: "layout",
       showInHome: false
     },
     {
@@ -70,6 +70,14 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
       label: "Programs",
       href: `/${orgSlug}/tools/programs`,
       description: "Create and edit programs, divisions, and schedules.",
+      icon: "wrench",
+      showInHome: true
+    },
+    {
+      key: "events",
+      label: "Events",
+      href: `/${orgSlug}/tools/events`,
+      description: "Create and publish events for lists and calendar blocks.",
       icon: "calendar",
       showInHome: true
     },

@@ -42,6 +42,32 @@ function asString(value: unknown) {
   return "";
 }
 
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatPhoneNumberInput(value: string) {
+  const digits = digitsOnly(value).slice(0, 10);
+
+  if (digits.length === 0) {
+    return "";
+  }
+
+  if (digits.length <= 3) {
+    return `(${digits}`;
+  }
+
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)})-${digits.slice(3)}`;
+  }
+
+  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function isPhoneNumberValid(value: unknown) {
+  return digitsOnly(asString(value)).length === 10;
+}
+
 function evaluateRule(sourceValue: unknown, operator: string, expectedValue: unknown) {
   if (operator === "is_true") {
     return sourceValue === true || sourceValue === "true" || sourceValue === "on";
@@ -68,6 +94,14 @@ function isValueMissing(field: FormFieldDefinition, value: unknown) {
   }
 
   return value === undefined || value === null || value === "";
+}
+
+function getFieldValidationError(field: FormFieldDefinition, value: unknown) {
+  if (field.type === "phone" && !isValueMissing(field, value) && !isPhoneNumberValid(value)) {
+    return `${field.label} must be a valid phone number.`;
+  }
+
+  return null;
 }
 
 function computeRuleState(fields: FormFieldDefinition[], rules: OrgForm["schemaJson"]["rules"], answers: Record<string, unknown>): RuleState {
@@ -159,6 +193,8 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
   const allowMultiplePlayers = Boolean(form.settingsJson.allowMultiplePlayers);
   const requiresPlayers = form.formKind === "program_registration";
   const schemaPages = form.schemaJson.pages;
+  const successPage = schemaPages.find((page) => page.pageKey === "generic_success" || page.pageKey === REGISTRATION_PAGE_KEYS.success);
+  const flowPages = schemaPages.filter((page) => page.pageKey !== "generic_success" && page.pageKey !== REGISTRATION_PAGE_KEYS.success);
   const nodeById = useMemo(() => new Map(programNodes.map((node) => [node.id, node])), [programNodes]);
 
   const [isSubmitting, startSubmitting] = useTransition();
@@ -179,12 +215,12 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
   const [newPlayerGender, setNewPlayerGender] = useState("");
   const [newPlayerGenderMode, setNewPlayerGenderMode] = useState("");
 
-  const currentPage = schemaPages[currentPageIndex];
-  const isLastPage = currentPageIndex === schemaPages.length - 1;
+  const currentPage = flowPages[currentPageIndex];
+  const isLastPage = currentPageIndex === flowPages.length - 1;
 
-  const registrationPlayerPage = schemaPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.player);
-  const registrationDivisionPage = schemaPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions);
-  const registrationPaymentPage = schemaPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.payment);
+  const registrationPlayerPage = flowPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.player);
+  const registrationDivisionPage = flowPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions);
+  const registrationPaymentPage = flowPages.find((page) => page.pageKey === REGISTRATION_PAGE_KEYS.payment);
 
   function getEffectiveNodeIdForPlayer(playerId: string): string | null {
     if (form.targetMode === "locked") {
@@ -243,6 +279,22 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
       if (isValueMissing(field, value)) {
         return `${field.label} is required.`;
       }
+
+      const validationError = getFieldValidationError(field, value);
+      if (validationError) {
+        return validationError;
+      }
+    }
+
+    for (const field of page.fields) {
+      if (ruleState.hiddenFieldNames.has(field.name) || ruleState.requiredFieldNames.has(field.name)) {
+        continue;
+      }
+
+      const validationError = getFieldValidationError(field, genericAnswers[field.name]);
+      if (validationError) {
+        return validationError;
+      }
     }
 
     return null;
@@ -289,6 +341,22 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
         if (isValueMissing(field, value)) {
           return `${playerLabel}: ${field.label} is required.`;
         }
+
+        const validationError = getFieldValidationError(field, value);
+        if (validationError) {
+          return `${playerLabel}: ${validationError}`;
+        }
+      }
+
+      for (const field of fields) {
+        if (ruleState.hiddenFieldNames.has(field.name) || ruleState.requiredFieldNames.has(field.name)) {
+          continue;
+        }
+
+        const validationError = getFieldValidationError(field, playerAnswers[field.name]);
+        if (validationError) {
+          return `${playerLabel}: ${validationError}`;
+        }
       }
     }
 
@@ -317,7 +385,7 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
 
   function validateBeforeSubmit() {
     if (!requiresPlayers) {
-      for (const page of schemaPages) {
+      for (const page of flowPages) {
         const error = validateGenericPage(page);
         if (error) {
           return error;
@@ -352,7 +420,7 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
       return;
     }
 
-    setCurrentPageIndex((index) => Math.min(index + 1, schemaPages.length - 1));
+    setCurrentPageIndex((index) => Math.min(index + 1, flowPages.length - 1));
   }
 
   function moveToPreviousPage() {
@@ -509,12 +577,17 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
       );
     }
 
-    const inputType = field.type === "number" ? "number" : field.type === "email" ? "email" : "text";
+    const inputType = field.type === "number" ? "number" : field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text";
 
     return (
       <FormField key={`${keyPrefix}-${field.id}`} label={fieldLabel}>
         <Input
-          onChange={(event) => onChange(field.name, inputType === "number" ? Number(event.target.value) : event.target.value)}
+          onChange={(event) =>
+            onChange(
+              field.name,
+              inputType === "number" ? Number(event.target.value) : field.type === "phone" ? formatPhoneNumberInput(event.target.value) : event.target.value
+            )
+          }
           placeholder={field.placeholder ?? undefined}
           type={inputType}
           value={asString(value)}
@@ -525,17 +598,28 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
 
   const genericCurrentRuleState = currentPage && !requiresPlayers ? computeRuleState(currentPage.fields, form.schemaJson.rules, genericAnswers) : null;
 
+  if (successState) {
+    const successTitle = successPage?.title || "Success";
+    const successDescription = successPage?.description || "Thanks for submitting. We'll be in touch soon.";
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-card border bg-surface p-5">
+          <h3 className="text-xl font-semibold text-text">{successTitle}</h3>
+          <p className="mt-1 text-sm text-text-muted">{successDescription}</p>
+          <p className="mt-3 text-xs text-text-muted">
+            Submission ID: {successState.submissionId} ({successState.status})
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {successState ? (
-        <Alert variant="success">
-          Submitted successfully. Submission ID: {successState.submissionId} ({successState.status})
-        </Alert>
-      ) : null}
-
-      {schemaPages.length > 1 ? (
+      {flowPages.length > 1 ? (
         <div className="rounded-control border bg-surface px-3 py-2 text-sm text-text-muted">
-          Step {currentPageIndex + 1} of {schemaPages.length}: {currentPage?.title ?? "Form"}
+          Step {currentPageIndex + 1} of {flowPages.length}: {currentPage?.title ?? "Form"}
         </div>
       ) : null}
 

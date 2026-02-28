@@ -3,17 +3,18 @@
 import { Button } from "@/components/ui/button";
 import { EditorSettingsDialog } from "@/components/shared/EditorSettingsDialog";
 import { getBlockDefinition } from "@/modules/site-builder/blocks/registry";
-import type { BlockContext, OrgPageBlock } from "@/modules/site-builder/types";
+import type { BlockContext, OrgPageBlock, OrgSiteRuntimeData } from "@/modules/site-builder/types";
 
 type BlockSettingsPanelProps = {
   open: boolean;
   block: OrgPageBlock | null;
   context: BlockContext;
+  runtimeData: OrgSiteRuntimeData;
   onClose: () => void;
   onChange: (block: OrgPageBlock) => void;
 };
 
-export function BlockSettingsPanel({ open, block, context, onClose, onChange }: BlockSettingsPanelProps) {
+export function BlockSettingsPanel({ open, block, context, runtimeData, onClose, onChange }: BlockSettingsPanelProps) {
   if (!block) {
     return null;
   }
@@ -36,6 +37,7 @@ export function BlockSettingsPanel({ open, block, context, onClose, onChange }: 
       <Editor
         block={block as never}
         context={context}
+        runtimeData={runtimeData}
         onChange={(next) => {
           onChange(next as OrgPageBlock);
         }}

@@ -150,7 +150,7 @@ function EditableMenuItem({
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 truncate text-xs font-semibold leading-none text-text">
+        <div className="flex items-center gap-1.5 truncate text-xs font-semibold leading-none text-text">
           <PublishStatusIcon
             align="right"
             className="shrink-0"
@@ -163,7 +163,7 @@ function EditableMenuItem({
             unpublishLabel="Hide from menu"
           />
           <span className="truncate">{page.title}</span>
-        </p>
+        </div>
       </div>
 
       <Button className="h-8 w-8 p-0" disabled={isSaving} onClick={() => onOpenSettings(page)} size="sm" title="Page settings" variant="secondary">
@@ -417,7 +417,7 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
   const hasHeaderActions = canEditPages || canManageOrg;
 
   return (
-    <div className="app-container sticky top-0 z-40 py-4">
+    <div className="app-container sticky top-0 z-40 pb-4 pt-0">
       <div className={cn("rounded-card border bg-surface shadow-floating transition-shadow", isScrolled ? "shadow-lg" : "") }>
         <div className="flex min-h-[64px] items-center gap-3 px-3 py-3 md:px-[18px]">
           <div className="shrink-0 self-stretch">

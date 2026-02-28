@@ -12,13 +12,15 @@ export type Permission =
   | "programs.read"
   | "programs.write"
   | "forms.read"
-  | "forms.write";
+  | "forms.write"
+  | "events.read"
+  | "events.write";
 
 export type PermissionDefinition = {
   permission: Permission;
   label: string;
   description: string;
-  group: "Organization" | "Site Builder" | "Programs" | "Forms";
+  group: "Organization" | "Site Builder" | "Programs" | "Forms" | "Events";
 };
 
 export type CustomRolePermissionSource = {
@@ -36,7 +38,9 @@ export const allPermissions: Permission[] = [
   "programs.read",
   "programs.write",
   "forms.read",
-  "forms.write"
+  "forms.write",
+  "events.read",
+  "events.write"
 ];
 
 const permissionSet = new Set(allPermissions);
@@ -101,6 +105,18 @@ export const permissionDefinitions: PermissionDefinition[] = [
     label: "Forms write",
     description: "Create, publish, and operate registration forms.",
     group: "Forms"
+  },
+  {
+    permission: "events.read",
+    label: "Events read",
+    description: "Review draft and published events.",
+    group: "Events"
+  },
+  {
+    permission: "events.write",
+    label: "Events write",
+    description: "Create, edit, publish, and archive events.",
+    group: "Events"
   }
 ];
 

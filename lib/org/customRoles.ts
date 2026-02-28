@@ -31,7 +31,9 @@ const legacyManagerPermissions: Permission[] = [
   "programs.read",
   "programs.write",
   "forms.read",
-  "forms.write"
+  "forms.write",
+  "events.read",
+  "events.write"
 ];
 
 function parsePermissions(value: unknown): Permission[] {

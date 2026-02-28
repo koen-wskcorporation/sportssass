@@ -1,28 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, Eye, Pencil } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { ExternalLink, Eye, Pencil, Settings2 } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { saveFormDraftAction } from "@/modules/forms/actions";
 import { FormFieldsVisualEditor } from "@/modules/forms/components/FormFieldsVisualEditor";
+import { FormSettingsPanel } from "@/modules/forms/components/FormSettingsPanel";
 import type { FormSchema, OrgForm } from "@/modules/forms/types";
-import type { ProgramNode } from "@/modules/programs/types";
+import type { Program, ProgramNode } from "@/modules/programs/types";
 
 type FormEditorPanelProps = {
   orgSlug: string;
   form: OrgForm;
+  programs: Program[];
   programNodes: ProgramNode[];
   canWrite?: boolean;
 };
 
-export function FormEditorPanel({ orgSlug, form, programNodes, canWrite = true }: FormEditorPanelProps) {
+export function FormEditorPanel({ orgSlug, form, programs, programNodes, canWrite = true }: FormEditorPanelProps) {
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [isSaving, startSaving] = useTransition();
   const [builderView, setBuilderView] = useState<"editor" | "preview">("editor");
   const [formSchema, setFormSchema] = useState<FormSchema>(form.schemaJson);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("panel") === "settings") {
+      setSettingsOpen(true);
+    }
+  }, [searchParams]);
 
   function handleSaveDraft() {
     if (!canWrite) {
@@ -85,6 +96,10 @@ export function FormEditorPanel({ orgSlug, form, programNodes, canWrite = true }
                 {builderView === "editor" ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                 {builderView === "editor" ? "Live preview" : "Editor"}
               </Button>
+              <Button onClick={() => setSettingsOpen(true)} type="button" variant="secondary">
+                <Settings2 className="h-4 w-4" />
+                Settings
+              </Button>
               <Button disabled={isSaving || !canWrite} loading={isSaving} onClick={handleSaveDraft} type="button">
                 {isSaving ? "Saving..." : "Save draft"}
               </Button>
@@ -104,6 +119,15 @@ export function FormEditorPanel({ orgSlug, form, programNodes, canWrite = true }
           />
         </CardContent>
       </Card>
+      <FormSettingsPanel
+        canWrite={canWrite}
+        form={form}
+        onClose={() => setSettingsOpen(false)}
+        open={settingsOpen}
+        orgSlug={orgSlug}
+        programNodes={programNodes}
+        programs={programs}
+      />
     </div>
   );
 }

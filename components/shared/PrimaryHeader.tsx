@@ -5,7 +5,7 @@ import { PrimaryAccountControls } from "@/components/shared/PrimaryAccountContro
 
 export function PrimaryHeader() {
   return (
-    <header className="border-b bg-surface">
+    <header className="relative z-[200] w-full border-b bg-surface" id="app-primary-header">
       <Suspense fallback={null}>
         <HeaderProgressBar />
       </Suspense>

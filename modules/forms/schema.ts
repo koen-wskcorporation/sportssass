@@ -2,10 +2,10 @@ import { z } from "zod";
 import type { FormField, FormKind, FormPage, FormPageKey, FormSchema } from "@/modules/forms/types";
 import { REGISTRATION_PAGE_KEYS, REGISTRATION_PAGE_ORDER } from "@/modules/forms/types";
 
-const fieldTypeValues = ["text", "textarea", "email", "number", "date", "select", "checkbox"] as const;
+const fieldTypeValues = ["text", "textarea", "email", "phone", "number", "date", "select", "checkbox"] as const;
 const ruleOperatorValues = ["equals", "not_equals", "is_true", "is_false"] as const;
 const ruleEffectValues = ["show", "require"] as const;
-const pageKeyValues = ["generic_custom", "registration_player", "registration_division_questions", "registration_payment"] as const;
+const pageKeyValues = ["generic_custom", "generic_success", "registration_player", "registration_division_questions", "registration_payment", "registration_success"] as const;
 
 const optionSchema = z.object({
   value: z.string().trim().min(1).max(120),
@@ -66,7 +66,7 @@ const legacyFormSchemaValidator = z.object({
   rules: z.array(ruleSchema).default([])
 });
 
-function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_custom">): FormPage {
+function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_custom" | "generic_success">): FormPage {
   if (pageKey === REGISTRATION_PAGE_KEYS.player) {
     return {
       id: "page-registration-player",
@@ -84,6 +84,17 @@ function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_c
       pageKey,
       title: "Division + Questions",
       description: "Choose divisions and answer registration questions.",
+      fields: [],
+      locked: true
+    };
+  }
+
+  if (pageKey === REGISTRATION_PAGE_KEYS.success) {
+    return {
+      id: "page-registration-success",
+      pageKey,
+      title: "Success",
+      description: "Thanks for submitting. We'll follow up with next steps.",
       fields: [],
       locked: true
     };
@@ -110,6 +121,17 @@ function createDefaultGenericPage(): FormPage {
   };
 }
 
+function createDefaultGenericSuccessPage(): FormPage {
+  return {
+    id: "page-success",
+    pageKey: "generic_success",
+    title: "Success",
+    description: "Thanks for submitting. We'll be in touch soon.",
+    fields: [],
+    locked: true
+  };
+}
+
 export function createDefaultRegistrationPages(): FormPage[] {
   return REGISTRATION_PAGE_ORDER.map((pageKey) => createRegistrationPageTemplate(pageKey));
 }
@@ -119,7 +141,7 @@ export function createDefaultFormSchema(name = "Form", formKind: FormKind = "gen
     version: 2,
     title: name,
     description: null,
-    pages: formKind === "program_registration" ? createDefaultRegistrationPages() : [createDefaultGenericPage()],
+    pages: formKind === "program_registration" ? createDefaultRegistrationPages() : [createDefaultGenericPage(), createDefaultGenericSuccessPage()],
     rules: []
   };
 }
@@ -151,16 +173,28 @@ function normalizeField(field: {
 }
 
 function mapGenericPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
-  const nextPages = pages.map((page, index) => ({
+  const mappedPages: FormPage[] = pages.map((page, index) => ({
     id: page.id,
-    pageKey: "generic_custom" as const,
+    pageKey: page.pageKey === "generic_success" ? "generic_success" : "generic_custom",
     title: page.title || `Page ${index + 1}`,
     description: page.description ?? null,
     fields: (page.fields ?? []).map((field) => normalizeField(field)),
-    locked: false
+    locked: page.pageKey === "generic_success"
   }));
+  const customPages = mappedPages.filter((page) => page.pageKey === "generic_custom");
+  const successPage = mappedPages.find((page) => page.pageKey === "generic_success");
 
-  return nextPages.length > 0 ? nextPages : [createDefaultGenericPage()];
+  return [
+    ...(customPages.length > 0 ? customPages : [createDefaultGenericPage()]),
+    successPage
+      ? {
+          ...successPage,
+          pageKey: "generic_success",
+          fields: [],
+          locked: true
+        }
+      : createDefaultGenericSuccessPage()
+  ];
 }
 
 function mapRegistrationPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
@@ -260,12 +294,17 @@ function parseLegacySchema(value: unknown, fallbackName: string, formKind: FormK
         }))
       : [createDefaultGenericPage()];
 
+  const pagesWithSuccess = [
+    ...pages,
+    createDefaultGenericSuccessPage()
+  ];
+
   return {
     version: 2,
     title: data.title || fallbackName,
     description: data.description ?? null,
-    pages,
-    rules: filterAndMapRules(data.rules, pages)
+    pages: pagesWithSuccess,
+    rules: filterAndMapRules(data.rules, pagesWithSuccess)
   };
 }
 

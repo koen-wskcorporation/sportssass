@@ -403,6 +403,7 @@ export function OrgSitePage({
       <BlockSettingsPanel
         block={selectedBlock}
         context={context}
+        runtimeData={runtimeData}
         onChange={(nextBlock) => {
           setDraftBlocks((current) => updateDraftBlock(current, nextBlock));
         }}

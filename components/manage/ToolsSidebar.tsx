@@ -25,16 +25,17 @@ const iconMap: Record<OrgAdminNavIcon, LucideIcon> = {
 
 function navConfig(orgSlug: string): OrgAreaSidebarConfig {
   const items = getOrgAdminNavItems(orgSlug);
+  const toolsOverviewHref = `/${orgSlug}/tools`;
 
   const topLevel = items.filter((item) => !item.parentKey);
-  const toolsHome = topLevel.find((item) => item.href.endsWith("/tools/manage"));
+  const manageItem = topLevel.find((item) => item.href.endsWith("/tools/manage"));
 
-  if (!toolsHome) {
-    throw new Error("Org admin navigation is missing an overview item.");
+  if (!manageItem) {
+    throw new Error("Org admin navigation is missing a manage item.");
   }
 
-  const otherTopLevel = topLevel.filter((item) => item.key !== toolsHome.key);
-  const orderedTopLevel = [toolsHome, ...otherTopLevel];
+  const otherTopLevel = topLevel.filter((item) => item.key !== manageItem.key);
+  const orderedTopLevel = [...otherTopLevel, manageItem];
 
   const sidebarItems: OrgAreaSidebarConfig["items"] = orderedTopLevel.map((item) => {
     const children = items.filter((candidate) => candidate.parentKey === item.key);
@@ -46,7 +47,7 @@ function navConfig(orgSlug: string): OrgAreaSidebarConfig {
         label: item.label,
         icon,
         href: item.href,
-        match: item.href.endsWith("/tools/manage") ? ("exact" as const) : ("prefix" as const)
+        match: item.href === toolsOverviewHref ? ("exact" as const) : ("prefix" as const)
       };
     }
 

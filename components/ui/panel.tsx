@@ -4,8 +4,9 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
-const PANEL_WIDTH = 430;
+const PANEL_WIDTH = 325;
 const PANEL_COUNT_ATTRIBUTE = "data-panel-count";
+const PRIMARY_HEADER_ID = "app-primary-header";
 
 type PanelProps = {
   open: boolean;
@@ -52,55 +53,73 @@ export function Panel({
       return;
     }
 
-    const panelCount = Number(document.body.getAttribute(PANEL_COUNT_ATTRIBUTE) ?? "0");
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();
       }
     };
+    const panelCount = Number(document.body.getAttribute(PANEL_COUNT_ATTRIBUTE) ?? "0");
 
-    const syncActiveWidth = () => {
-      const measuredWidth = panelRef.current?.getBoundingClientRect().width;
-      const fallbackWidth = Math.min(window.innerWidth, PANEL_WIDTH);
-      const resolvedWidth = measuredWidth && Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : fallbackWidth;
-      document.body.style.setProperty("--panel-active-width", `${Math.round(resolvedWidth)}px`);
+    const syncPanelTop = () => {
+      const header = document.getElementById(PRIMARY_HEADER_ID);
+      const headerBottom = header?.getBoundingClientRect().bottom ?? 0;
+      const panelTop = Math.max(0, Math.round(headerBottom));
+      panelRef.current?.style.setProperty("--panel-top", `${panelTop}px`);
+    };
+    const syncPanelWidth = () => {
+      const panelWidth = Math.min(window.innerWidth, PANEL_WIDTH);
+      document.body.style.setProperty("--panel-active-width", `${Math.round(panelWidth)}px`);
     };
 
     document.body.setAttribute(PANEL_COUNT_ATTRIBUTE, String(panelCount + 1));
     document.body.classList.add("panel-open");
-    syncActiveWidth();
-    window.addEventListener("resize", syncActiveWidth);
-    const resizeObserver =
+    syncPanelTop();
+    syncPanelWidth();
+    const headerResizeObserver =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
-            syncActiveWidth();
+            syncPanelTop();
           })
         : null;
+    const panelResizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            syncPanelTop();
+          })
+        : null;
+    const header = document.getElementById(PRIMARY_HEADER_ID);
 
-    if (panelRef.current && resizeObserver) {
-      resizeObserver.observe(panelRef.current);
+    if (header && headerResizeObserver) {
+      headerResizeObserver.observe(header);
     }
 
-    const rafId = window.requestAnimationFrame(syncActiveWidth);
+    if (panelRef.current && panelResizeObserver) {
+      panelResizeObserver.observe(panelRef.current);
+    }
+
+    const rafId = window.requestAnimationFrame(syncPanelTop);
+    window.addEventListener("resize", syncPanelTop);
+    window.addEventListener("resize", syncPanelWidth);
+    window.addEventListener("scroll", syncPanelTop, { passive: true });
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
       window.cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", syncActiveWidth);
-      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncPanelTop);
+      window.removeEventListener("resize", syncPanelWidth);
+      window.removeEventListener("scroll", syncPanelTop);
+      headerResizeObserver?.disconnect();
+      panelResizeObserver?.disconnect();
       const nextCount = Math.max(0, Number(document.body.getAttribute(PANEL_COUNT_ATTRIBUTE) ?? "1") - 1);
-
       if (nextCount === 0) {
         document.body.classList.remove("panel-open");
-        document.body.style.removeProperty("--panel-active-width");
         document.body.removeAttribute(PANEL_COUNT_ATTRIBUTE);
+        document.body.style.removeProperty("--panel-active-width");
       } else {
         document.body.setAttribute(PANEL_COUNT_ATTRIBUTE, String(nextCount));
-        syncActiveWidth();
+        syncPanelWidth();
       }
-
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [ready]);
@@ -109,13 +128,11 @@ export function Panel({
     return null;
   }
 
-  const isDocked = portalTarget.id === "panel-dock";
-
   return createPortal(
     <aside
       aria-label={typeof title === "string" ? title : undefined}
       className={cn(
-        isDocked ? "sticky top-0 z-[100] h-dvh w-full" : "fixed inset-y-0 right-0 z-[100] h-dvh max-w-full",
+        "app-panel fixed bottom-0 right-0 z-[100]",
         "flex min-w-0 shrink-0 flex-col border-l bg-surface shadow-floating",
         panelClassName
       )}
@@ -123,7 +140,9 @@ export function Panel({
       role="complementary"
       style={{
         ...panelStyle,
-        width: isDocked ? "100%" : "min(100vw, 430px)"
+        top: "var(--panel-top, 0px)",
+        maxWidth: `min(100vw, ${PANEL_WIDTH}px)`,
+        width: `min(100vw, ${PANEL_WIDTH}px)`
       }}
     >
       <div className="relative shrink-0 border-b px-5 py-4 pr-16">

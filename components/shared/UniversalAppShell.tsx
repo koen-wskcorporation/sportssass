@@ -6,7 +6,7 @@ type UniversalAppShellProps = {
 
 export function UniversalAppShell({ children, sidebar, mobileSidebar }: UniversalAppShellProps) {
   return (
-    <main className="app-shell w-full px-6 py-3 md:px-8 md:py-4">
+    <main className="app-shell w-full px-6 pb-3 pt-0 md:px-8 md:pb-4 md:pt-0">
       <div className="grid items-start gap-5 lg:grid-cols-[auto_minmax(0,1fr)] lg:gap-6">
         <aside className="sticky top-36 z-30 hidden lg:block">{sidebar}</aside>
 

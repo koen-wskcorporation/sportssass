@@ -48,7 +48,7 @@ export default async function OrgManageFormSubmissionsPage({
             <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/tools/forms`}>
               Back to forms
             </Link>
-            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/tools/forms/${form.id}/settings`}>
+            <Link className={buttonVariants({ variant: "secondary" })} href={`/${orgContext.orgSlug}/tools/forms/${form.id}/editor?panel=settings`}>
               Settings
             </Link>
             <FormPublishToggleButton canWrite={canWriteForms} form={form} orgSlug={orgContext.orgSlug} />

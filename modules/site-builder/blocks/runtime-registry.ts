@@ -5,6 +5,8 @@ import { createDefaultHeroConfig, HeroBlockRender, sanitizeHeroConfig } from "@/
 import { createDefaultSubheroConfig, sanitizeSubheroConfig, SubheroBlockRender } from "@/modules/site-builder/blocks/subhero";
 import { createDefaultSchedulePreviewConfig, sanitizeSchedulePreviewConfig, SchedulePreviewBlockRender } from "@/modules/site-builder/blocks/schedule-preview";
 import { createDefaultProgramCatalogConfig, ProgramCatalogBlockRender, sanitizeProgramCatalogConfig } from "@/modules/site-builder/blocks/program-catalog";
+import { createDefaultEventsConfig, EventsBlockRender, sanitizeEventsConfig } from "@/modules/site-builder/blocks/events";
+import { createDefaultFormEmbedConfig, FormEmbedBlockRender, sanitizeFormEmbedConfig } from "@/modules/site-builder/blocks/form-embed";
 import type { BlockContext, BlockDefinition, OrgPageBlock, OrgSiteBlockType } from "@/modules/site-builder/types";
 
 type RuntimeBlockDefinition<TType extends OrgSiteBlockType> = Omit<BlockDefinition<TType>, "Editor">;
@@ -55,6 +57,20 @@ const runtimeBlockRegistry: AnyRuntimeBlockDefinition = {
     defaultConfig: createDefaultProgramCatalogConfig,
     sanitizeConfig: sanitizeProgramCatalogConfig,
     Render: ProgramCatalogBlockRender
+  },
+  events: {
+    type: "events",
+    displayName: "Events",
+    defaultConfig: createDefaultEventsConfig,
+    sanitizeConfig: sanitizeEventsConfig,
+    Render: EventsBlockRender
+  },
+  form_embed: {
+    type: "form_embed",
+    displayName: "Form",
+    defaultConfig: createDefaultFormEmbedConfig,
+    sanitizeConfig: sanitizeFormEmbedConfig,
+    Render: FormEmbedBlockRender
   }
 };
 

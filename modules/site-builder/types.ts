@@ -1,8 +1,12 @@
 import type { ComponentType } from "react";
 import type { LinkValue, SiteButton } from "@/lib/links";
+import type { EventCatalogItem } from "@/modules/events/types";
+import type { OrgForm } from "@/modules/forms/types";
+import type { PlayerPickerItem } from "@/modules/players/types";
 import type { ProgramCatalogItem } from "@/modules/programs/types";
+import type { ProgramNode } from "@/modules/programs/types";
 
-export type OrgSiteBlockType = "hero" | "subhero" | "cta_grid" | "cta_card" | "schedule_preview" | "program_catalog";
+export type OrgSiteBlockType = "hero" | "subhero" | "cta_grid" | "cta_card" | "schedule_preview" | "program_catalog" | "events" | "form_embed";
 
 export type HeroBlockConfig = {
   headline: string;
@@ -58,6 +62,23 @@ export type ProgramCatalogBlockConfig = {
   buttons: SiteButton[];
 };
 
+export type EventsBlockConfig = {
+  title: string;
+  body: string;
+  style: "list" | "calendar";
+  maxItems: number;
+  showPastEvents: boolean;
+  calendarDefaultView: "month" | "week" | "day";
+  emptyMessage: string;
+  buttons: SiteButton[];
+};
+
+export type FormEmbedBlockConfig = {
+  title: string;
+  body: string;
+  formId: string | null;
+};
+
 export type OrgSiteBlockConfigMap = {
   hero: HeroBlockConfig;
   subhero: SubheroBlockConfig;
@@ -65,6 +86,8 @@ export type OrgSiteBlockConfigMap = {
   cta_card: CtaCardBlockConfig;
   schedule_preview: SchedulePreviewBlockConfig;
   program_catalog: ProgramCatalogBlockConfig;
+  events: EventsBlockConfig;
+  form_embed: FormEmbedBlockConfig;
 };
 
 export type OrgPageBlock<TType extends OrgSiteBlockType = OrgSiteBlockType> = {
@@ -107,6 +130,16 @@ export type BlockContext = {
 
 export type OrgSiteRuntimeData = {
   programCatalogItems?: ProgramCatalogItem[];
+  eventsCatalogItems?: EventCatalogItem[];
+  formEmbed?: {
+    publishedForms: OrgForm[];
+    viewer: {
+      id: string;
+      email: string | null;
+    } | null;
+    players: PlayerPickerItem[];
+    programNodesByProgramId: Record<string, ProgramNode[]>;
+  };
 };
 
 export type BlockRenderProps<TType extends OrgSiteBlockType> = {
@@ -119,6 +152,7 @@ export type BlockRenderProps<TType extends OrgSiteBlockType> = {
 export type BlockEditorProps<TType extends OrgSiteBlockType> = {
   block: OrgPageBlock<TType>;
   context: BlockContext;
+  runtimeData: OrgSiteRuntimeData;
   onChange: (block: OrgPageBlock<TType>) => void;
 };
 

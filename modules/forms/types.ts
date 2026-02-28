@@ -6,20 +6,22 @@ export type TargetMode = "locked" | "choice";
 
 export type SubmissionStatus = "submitted" | "in_review" | "approved" | "rejected" | "waitlisted" | "cancelled";
 
-export type FormFieldType = "text" | "textarea" | "email" | "number" | "date" | "select" | "checkbox";
+export type FormFieldType = "text" | "textarea" | "email" | "phone" | "number" | "date" | "select" | "checkbox";
 
-export type FormPageKey = "generic_custom" | "registration_player" | "registration_division_questions" | "registration_payment";
+export type FormPageKey = "generic_custom" | "generic_success" | "registration_player" | "registration_division_questions" | "registration_payment" | "registration_success";
 
 export const REGISTRATION_PAGE_KEYS = {
   player: "registration_player",
   divisionQuestions: "registration_division_questions",
-  payment: "registration_payment"
+  payment: "registration_payment",
+  success: "registration_success"
 } as const;
 
 export const REGISTRATION_PAGE_ORDER = [
   REGISTRATION_PAGE_KEYS.player,
   REGISTRATION_PAGE_KEYS.divisionQuestions,
-  REGISTRATION_PAGE_KEYS.payment
+  REGISTRATION_PAGE_KEYS.payment,
+  REGISTRATION_PAGE_KEYS.success
 ] as const;
 
 export type FormFieldOption = {

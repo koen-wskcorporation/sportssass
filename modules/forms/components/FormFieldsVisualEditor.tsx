@@ -15,19 +15,21 @@ import {
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   AlignLeft,
-  ArrowDown,
-  ArrowUp,
   CalendarDays,
   CheckSquare,
+  Copy,
   GripVertical,
   Hash,
   List,
   Mail,
+  Pencil,
+  Phone,
   Plus,
   Settings2,
   Trash2,
   Type
 } from "lucide-react";
+import { SortableCanvas, type SortableRenderMeta } from "@/components/editor/SortableCanvas";
 import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { InlineEditableText } from "@/modules/forms/components/InlineEditableText";
 import { REGISTRATION_PAGE_KEYS } from "@/modules/forms/types";
 import type { FormField as FormFieldDefinition, FormFieldOption, FormFieldType, FormKind, FormPage, FormSchema } from "@/modules/forms/types";
 import type { ProgramNode } from "@/modules/programs/types";
@@ -83,6 +86,12 @@ const paletteFields: PaletteFieldConfig[] = [
     label: "Email",
     description: "Valid email address",
     icon: Mail
+  },
+  {
+    type: "phone",
+    label: "Phone number",
+    description: "US phone format",
+    icon: Phone
   },
   {
     type: "number",
@@ -150,6 +159,8 @@ function getDefaultLabel(fieldType: FormFieldType) {
       return "Paragraph";
     case "email":
       return "Email";
+    case "phone":
+      return "Phone number";
     case "number":
       return "Number";
     case "date":
@@ -173,7 +184,7 @@ function createFieldForType(fieldType: FormFieldType, allFields: FormFieldDefini
     label,
     type: fieldType,
     required: false,
-    placeholder: fieldType === "checkbox" ? null : "",
+    placeholder: fieldType === "checkbox" ? null : fieldType === "phone" ? "(000)-000-0000" : "",
     helpText: null,
     options:
       fieldType === "select"
@@ -260,7 +271,7 @@ function renderPreviewField(field: FormFieldDefinition) {
     );
   }
 
-  const inputType = field.type === "email" ? "email" : field.type === "number" ? "number" : field.type === "date" ? "date" : "text";
+  const inputType = field.type === "email" ? "email" : field.type === "phone" ? "tel" : field.type === "number" ? "number" : field.type === "date" ? "date" : "text";
 
   return (
     <FormField key={field.id} label={label}>
@@ -340,13 +351,70 @@ function PaletteItem({ config, disabled, onAdd }: { config: PaletteFieldConfig; 
   );
 }
 
+function SortablePageNavItem({
+  page,
+  isActive,
+  disabled,
+  canMove,
+  canDelete,
+  onSelect,
+  onDelete,
+  meta
+}: {
+  page: FormPage;
+  isActive: boolean;
+  disabled: boolean;
+  canMove: boolean;
+  canDelete: boolean;
+  onSelect: (pageId: string) => void;
+  onDelete: (pageId: string) => void;
+  meta: SortableRenderMeta;
+}) {
+  return (
+    <div
+      className={cn(
+        "inline-flex w-fit max-w-full items-center gap-2 rounded-control border bg-surface px-2 py-1.5",
+        isActive ? "border-accent/60 bg-accent/10" : "border-border",
+        meta.isDragging ? "shadow-card" : "shadow-none"
+      )}
+    >
+      <button
+        aria-label={`Drag ${page.title || "page"}`}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-text-muted hover:text-text disabled:cursor-not-allowed disabled:text-text-muted/60"
+        disabled={disabled || !canMove}
+        suppressHydrationWarning
+        type="button"
+        {...(canMove ? meta.handleProps.attributes : {})}
+        {...(canMove ? meta.handleProps.listeners : {})}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      <button className="min-w-0 max-w-[220px] text-left text-xs font-semibold text-text" onClick={() => onSelect(page.id)} type="button">
+        <span className="truncate">{page.title || "Untitled page"}</span>
+      </button>
+
+      <Button className="h-8 w-8 p-0" disabled={disabled} onClick={() => onSelect(page.id)} size="sm" title="Edit page" variant="secondary">
+        <Pencil className="h-4 w-4" />
+      </Button>
+
+      <Button className="h-8 w-8 p-0" disabled={disabled || !canDelete} onClick={() => onDelete(page.id)} size="sm" title="Delete page" variant="secondary">
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 function SortableCanvasField({
   field,
   selected,
   disabled,
   targetSummary,
   onDelete,
+  onDuplicate,
   onSelect,
+  onRename,
+  onToggleRequired,
   onOpenSettings
 }: {
   field: FormFieldDefinition;
@@ -354,7 +422,10 @@ function SortableCanvasField({
   disabled: boolean;
   targetSummary: string | null;
   onDelete: (fieldId: string) => void;
+  onDuplicate: (fieldId: string) => void;
   onSelect: (fieldId: string) => void;
+  onRename: (fieldId: string, nextLabel: string) => void;
+  onToggleRequired: (fieldId: string, nextRequired: boolean) => void;
   onOpenSettings: (fieldId: string) => void;
 }) {
   const { attributes, listeners, isDragging, setNodeRef, transform, transition } = useSortable({
@@ -380,6 +451,7 @@ function SortableCanvasField({
               disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
             )}
             disabled={disabled}
+            suppressHydrationWarning
             type="button"
             {...attributes}
             {...listeners}
@@ -387,14 +459,43 @@ function SortableCanvasField({
             <GripVertical className="h-3.5 w-3.5" />
           </button>
 
-          <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(field.id)} type="button">
-            <p className="truncate text-sm font-semibold text-text">
-              {field.label || "Untitled field"}
-              {field.required ? <span className="ml-1 text-accent">*</span> : null}
-            </p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1">
+              <InlineEditableText
+                className="truncate"
+                disabled={disabled}
+                onActivate={() => onSelect(field.id)}
+                onCommit={(nextLabel) => onRename(field.id, nextLabel)}
+                placeholder="Untitled field"
+                value={field.label}
+              />
+              {field.required ? <span className="text-accent">*</span> : null}
+            </div>
             <p className="truncate text-xs text-text-muted">{field.type} · {field.name}</p>
             {targetSummary ? <p className="truncate text-[11px] text-text-muted">{targetSummary}</p> : null}
-          </button>
+          </div>
+
+          <label className="inline-flex h-8 items-center gap-1 rounded-control border bg-surface-muted px-2 text-xs text-text">
+            <input
+              checked={field.required}
+              disabled={disabled}
+              onChange={(event) => onToggleRequired(field.id, event.target.checked)}
+              onClick={(event) => event.stopPropagation()}
+              type="checkbox"
+            />
+            Required
+          </label>
+
+          <Button
+            aria-label="Duplicate field"
+            className="h-8 w-8 px-0"
+            disabled={disabled}
+            onClick={() => onDuplicate(field.id)}
+            type="button"
+            variant="ghost"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
 
           <Button
             aria-label="Field settings"
@@ -445,6 +546,7 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [previewNodeId, setPreviewNodeId] = useState("");
   const [appliesToModeByFieldId, setAppliesToModeByFieldId] = useState<Record<string, "program" | "specific">>({});
+  const [fieldKeyModeByFieldId, setFieldKeyModeByFieldId] = useState<Record<string, "auto" | "manual">>({});
 
   const pages = schema.pages ?? [];
 
@@ -457,7 +559,17 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
   const activePage = activePageId ? pages.find((page) => page.id === activePageId) ?? null : pages[0] ?? null;
   const allFields = useMemo(() => pages.flatMap((page) => page.fields), [pages]);
   const fields = activePage?.fields ?? [];
-  const canEditFields = Boolean(activePage) && (!isRegistration || activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions);
+  const canEditFields = Boolean(activePage) && (isRegistration ? activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions : !activePage?.locked);
+
+  function getFieldKeyMode(field: FormFieldDefinition, allCurrentFields: FormFieldDefinition[]) {
+    const explicitMode = fieldKeyModeByFieldId[field.id];
+    if (explicitMode) {
+      return explicitMode;
+    }
+
+    const inferredAutoName = ensureUniqueFieldName(field.label, allCurrentFields, field.id);
+    return field.name === inferredAutoName ? "auto" : "manual";
+  }
 
   useEffect(() => {
     if (fields.length === 0) {
@@ -469,6 +581,18 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
       setSelectedFieldId(fields[0].id);
     }
   }, [fields, selectedFieldId]);
+
+  useEffect(() => {
+    const fieldIdSet = new Set(allFields.map((field) => field.id));
+
+    setFieldKeyModeByFieldId((current) => {
+      const nextEntries = Object.entries(current).filter(([fieldId]) => fieldIdSet.has(fieldId));
+      if (nextEntries.length === Object.keys(current).length) {
+        return current;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+  }, [allFields]);
 
   const selectedField = selectedFieldId ? fields.find((field) => field.id === selectedFieldId) ?? null : null;
   const selectedFieldAppliesToMode =
@@ -515,6 +639,23 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
     updateFields((current) => current.map((field) => (field.id === fieldId ? updater(field) : field)));
   }
 
+  function renameField(fieldId: string, nextLabel: string) {
+    updateFields((current) =>
+      current.map((field) => {
+        if (field.id !== fieldId) {
+          return field;
+        }
+
+        const fieldKeyMode = getFieldKeyMode(field, current);
+        return {
+          ...field,
+          label: nextLabel,
+          name: fieldKeyMode === "auto" ? ensureUniqueFieldName(nextLabel, current, field.id) : field.name
+        };
+      })
+    );
+  }
+
   function insertField(fieldType: FormFieldType, overId: string | null) {
     const newField = createFieldForType(fieldType, allFields);
 
@@ -543,13 +684,27 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
       locked: false
     };
 
-    updatePages((current) => [...current, nextPage]);
+    updatePages((current) => {
+      const successPageIndex = current.findIndex((page) => page.pageKey === "generic_success");
+      if (successPageIndex < 0) {
+        return [...current, nextPage];
+      }
+
+      const next = [...current];
+      next.splice(successPageIndex, 0, nextPage);
+      return next;
+    });
     setActivePageId(nextPage.id);
     setSelectedFieldId(null);
   }
 
   function deletePage(pageId: string) {
     if (isRegistration || pages.length <= 1) {
+      return;
+    }
+
+    const page = pages.find((item) => item.id === pageId);
+    if (page?.locked) {
       return;
     }
 
@@ -562,23 +717,23 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
     }
   }
 
-  function movePage(pageId: string, direction: -1 | 1) {
+  function reorderPages(nextPages: FormPage[]) {
     if (isRegistration) {
       return;
     }
 
     updatePages((current) => {
-      const index = current.findIndex((page) => page.id === pageId);
-      if (index < 0) {
-        return current;
-      }
+      const lockedIds = new Set(current.filter((page) => page.locked).map((page) => page.id));
+      const movableQueue = nextPages.filter((page) => !lockedIds.has(page.id));
 
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= current.length) {
-        return current;
-      }
+      return current.map((page) => {
+        if (page.locked) {
+          return page;
+        }
 
-      return arrayMove(current, index, nextIndex);
+        const nextMovable = movableQueue.shift();
+        return nextMovable ?? page;
+      });
     });
   }
 
@@ -631,6 +786,39 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
         setSettingsPanelOpen(false);
       }
     }
+  }
+
+  function duplicateField(fieldId: string) {
+    const sourceIndex = fields.findIndex((field) => field.id === fieldId);
+    if (sourceIndex < 0) {
+      return;
+    }
+
+    const sourceField = fields[sourceIndex];
+    const duplicatedLabel = `${sourceField.label || "Field"} copy`;
+    const duplicatedField: FormFieldDefinition = {
+      ...sourceField,
+      id: makeId("field"),
+      label: duplicatedLabel,
+      name: ensureUniqueFieldName(duplicatedLabel, allFields),
+      options: sourceField.options.map((option) => ({ ...option })),
+      targetNodeIds: [...sourceField.targetNodeIds]
+    };
+
+    updateFields((current) => {
+      const insertAfter = current.findIndex((field) => field.id === fieldId);
+      if (insertAfter < 0) {
+        return current;
+      }
+      const next = [...current];
+      next.splice(insertAfter + 1, 0, duplicatedField);
+      return next;
+    });
+    setFieldKeyModeByFieldId((current) => ({
+      ...current,
+      [duplicatedField.id]: "auto"
+    }));
+    setSelectedFieldId(duplicatedField.id);
   }
 
   function addSelectOption(fieldId: string) {
@@ -701,52 +889,32 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
     <div className="space-y-4">
       <div className="space-y-2 rounded-control border bg-surface p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Pages</p>
-        <div className="flex flex-wrap items-center gap-2">
-          {pages.map((page, index) => {
-            const isActive = page.id === activePage?.id;
-            return (
-              <div className="flex items-center gap-1" key={page.id}>
-                <button
-                  className={cn(
-                    "rounded-control border px-3 py-1.5 text-sm",
-                    isActive ? "border-accent bg-accent/10 text-text" : "border-border bg-surface-muted text-text-muted hover:text-text"
-                  )}
-                  onClick={() => {
-                    setActivePageId(page.id);
-                    setSelectedFieldId(null);
-                  }}
-                  type="button"
-                >
-                  {page.title || `Page ${index + 1}`}
-                </button>
-                {!isRegistration ? (
-                  <>
-                    <Button aria-label="Move page up" className="h-8 w-8 px-0" disabled={disabled || index === 0} onClick={() => movePage(page.id, -1)} type="button" variant="ghost">
-                      <ArrowUp className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      aria-label="Move page down"
-                      className="h-8 w-8 px-0"
-                      disabled={disabled || index === pages.length - 1}
-                      onClick={() => movePage(page.id, 1)}
-                      type="button"
-                      variant="ghost"
-                    >
-                      <ArrowDown className="h-4 w-4" />
-                    </Button>
-                    <Button aria-label="Delete page" className="h-8 w-8 px-0" disabled={disabled || pages.length <= 1} onClick={() => deletePage(page.id)} type="button" variant="ghost">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            );
-          })}
-
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+          <SortableCanvas
+            className="flex min-w-0 items-center gap-2"
+            getId={(page) => page.id}
+            items={pages}
+            onReorder={reorderPages}
+            renderItem={(page, meta) => (
+              <SortablePageNavItem
+                canDelete={!isRegistration && !page.locked && pages.length > 1}
+                canMove={!isRegistration && !page.locked}
+                disabled={disabled}
+                isActive={page.id === activePage?.id}
+                meta={meta}
+                onDelete={deletePage}
+                onSelect={(pageId) => {
+                  setActivePageId(pageId);
+                  setSelectedFieldId(null);
+                }}
+                page={page}
+              />
+            )}
+            sortingStrategy="horizontal"
+          />
           {!isRegistration ? (
-            <Button disabled={disabled} onClick={addPage} size="sm" type="button" variant="secondary">
+            <Button className="h-[38px] shrink-0 px-2" disabled={disabled} onClick={addPage} size="sm" type="button" variant="secondary">
               <Plus className="h-4 w-4" />
-              Add page
             </Button>
           ) : null}
         </div>
@@ -821,11 +989,21 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
                         field={field}
                         key={field.id}
                         onDelete={deleteField}
+                        onDuplicate={duplicateField}
                         onOpenSettings={(fieldId) => {
                           setSelectedFieldId(fieldId);
                           setSettingsPanelOpen(true);
                         }}
+                        onRename={(fieldId, nextLabel) => {
+                          renameField(fieldId, nextLabel);
+                        }}
                         onSelect={setSelectedFieldId}
+                        onToggleRequired={(fieldId, nextRequired) => {
+                          updateField(fieldId, (currentField) => ({
+                            ...currentField,
+                            required: nextRequired
+                          }));
+                        }}
                         selected={selectedFieldId === field.id}
                         targetSummary={isRegistration ? fieldTargetSummary(field, programNodes) : null}
                       />
@@ -852,8 +1030,12 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
           </DndContext>
         ) : (
           <Alert variant="info">
-            {activePage?.pageKey === REGISTRATION_PAGE_KEYS.player
+            {!isRegistration && activePage?.pageKey === "generic_success"
+              ? "Success page is fixed in your form flow. Customize title/description here; field editing is disabled."
+              : activePage?.pageKey === REGISTRATION_PAGE_KEYS.player
               ? "Player page is fixed. Configure title/description here; player selection UI is built-in."
+              : activePage?.pageKey === REGISTRATION_PAGE_KEYS.success
+                ? "Success page is fixed in your form flow. Customize title/description here; field editing is disabled."
               : "Payment page is fixed. Configure title/description here; payment placeholder UI is built-in."}
           </Alert>
         )
@@ -912,10 +1094,7 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
                 disabled={disabled}
                 onChange={(event) => {
                   const nextLabel = event.target.value;
-                  updateField(selectedField.id, (field) => ({
-                    ...field,
-                    label: nextLabel
-                  }));
+                  renameField(selectedField.id, nextLabel);
                 }}
                 value={selectedField.label}
               />
@@ -925,6 +1104,10 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
               <Input
                 disabled={disabled}
                 onChange={(event) => {
+                  setFieldKeyModeByFieldId((current) => ({
+                    ...current,
+                    [selectedField.id]: "manual"
+                  }));
                   updateField(selectedField.id, (field) => ({
                     ...field,
                     name: ensureUniqueFieldName(event.target.value, allFields, selectedField.id)
@@ -1163,7 +1346,6 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
               key={field.type}
               onAdd={(fieldType) => {
                 insertField(fieldType, null);
-                setLibraryPanelOpen(false);
               }}
             />
           ))}

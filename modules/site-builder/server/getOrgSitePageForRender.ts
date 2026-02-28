@@ -1,6 +1,11 @@
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
 import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
+import { listPublishedEventsForCatalog } from "@/modules/events/db/queries";
+import { listPublishedFormsForOrg } from "@/modules/forms/db/queries";
+import { listPlayersForPicker } from "@/modules/players/db/queries";
 import { listPublishedProgramsForCatalog } from "@/modules/programs/db/queries";
+import { listProgramNodes } from "@/modules/programs/db/queries";
 import { getPublishedOrgPageBySlug } from "@/modules/site-builder/db/queries";
 
 export async function getOrgSitePageForRender({
@@ -33,8 +38,44 @@ export async function getOrgSitePageForRender({
         .catch(() => [])
     : [];
 
+  const requiresEvents = pageData?.blocks.some((block) => block.type === "events") ?? false;
+  const now = Date.now();
+  const eventsCatalogItems = requiresEvents
+    ? await listPublishedEventsForCatalog(orgRequest.org.orgId, {
+        fromUtc: new Date(now - 1825 * 24 * 60 * 60 * 1000).toISOString(),
+        toUtc: new Date(now + 1825 * 24 * 60 * 60 * 1000).toISOString(),
+        limit: 2000
+      }).catch(() => [])
+    : [];
+
+  const requiresFormEmbed = pageData?.blocks.some((block) => block.type === "form_embed") ?? false;
+  const publishedForms = requiresFormEmbed ? await listPublishedFormsForOrg(orgRequest.org.orgId).catch(() => []) : [];
+  const sessionUser = requiresFormEmbed ? await getSessionUser() : null;
+  const players = requiresFormEmbed && sessionUser ? await listPlayersForPicker(sessionUser.id).catch(() => []) : [];
+  const programIds = requiresFormEmbed
+    ? Array.from(new Set(publishedForms.map((form) => form.programId).filter((value): value is string => Boolean(value))))
+    : [];
+  const programNodeEntries = requiresFormEmbed
+    ? await Promise.all(
+        programIds.map(async (programId) => {
+          const nodes = await listProgramNodes(programId, { publishedOnly: true }).catch(() => []);
+          return [programId, nodes] as const;
+        })
+      )
+    : [];
+  const programNodesByProgramId = Object.fromEntries(programNodeEntries);
+
   const runtimeData = {
-    programCatalogItems
+    programCatalogItems,
+    eventsCatalogItems,
+    formEmbed: requiresFormEmbed
+      ? {
+          publishedForms,
+          viewer: sessionUser,
+          players,
+          programNodesByProgramId
+        }
+      : undefined
   };
 
   if (!pageData) {

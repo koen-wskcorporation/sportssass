@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 type FormPageTabsProps = {
   orgSlug: string;
   formId: string;
-  active: "builder" | "submissions" | "settings";
+  active: "builder" | "submissions";
 };
 
 export function FormPageTabs({ orgSlug, formId, active }: FormPageTabsProps) {

@@ -29,7 +29,7 @@ export default function RootLayout({
             <div className="app-frame">
               <div className="app-root flex min-h-screen min-w-0 flex-col">
                 <PrimaryHeader />
-                <div className="flex-1 min-w-0">{children}</div>
+                <div className="flex-1 min-w-0 pt-3 md:pt-4">{children}</div>
                 <AppFooter />
               </div>
               <div className="panel-dock" id="panel-dock" />

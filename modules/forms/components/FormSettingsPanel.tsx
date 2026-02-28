@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
@@ -19,6 +17,8 @@ type FormSettingsPanelProps = {
   form: OrgForm;
   programs: Program[];
   programNodes: ProgramNode[];
+  open?: boolean;
+  onClose?: () => void;
   canWrite?: boolean;
 };
 
@@ -31,8 +31,7 @@ function slugify(value: string) {
     .replace(/^-|-$/g, "");
 }
 
-export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWrite = true }: FormSettingsPanelProps) {
-  const router = useRouter();
+export function FormSettingsPanel({ orgSlug, form, programs, programNodes, open = true, onClose, canWrite = true }: FormSettingsPanelProps) {
   const { toast } = useToast();
   const [isSaving, startSaving] = useTransition();
 
@@ -45,7 +44,6 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
   const [targetMode, setTargetMode] = useState<"locked" | "choice">(form.targetMode);
   const [lockedProgramNodeId, setLockedProgramNodeId] = useState(form.lockedProgramNodeId ?? "");
   const [allowMultiplePlayers, setAllowMultiplePlayers] = useState(Boolean(form.settingsJson.allowMultiplePlayers));
-  const editorPath = `/${orgSlug}/tools/forms/${form.id}/editor`;
   const registrationProgramName = useMemo(() => programs.find((program) => program.id === programId)?.name ?? null, [programs, programId]);
 
   useEffect(() => {
@@ -53,10 +51,6 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
       setName(`${registrationProgramName} Registration`);
     }
   }, [formKind, registrationProgramName]);
-
-  function handleClosePanel() {
-    router.push(editorPath);
-  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -122,7 +116,7 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
     <Panel
       footer={
         <>
-          <Button onClick={handleClosePanel} type="button" variant="ghost">
+          <Button onClick={() => onClose?.()} type="button" variant="ghost">
             Cancel
           </Button>
           <Button disabled={isSaving || !canWrite} form="form-settings-form" loading={isSaving} type="submit">
@@ -130,8 +124,8 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
           </Button>
         </>
       }
-      onClose={handleClosePanel}
-      open
+      onClose={() => onClose?.()}
+      open={open}
       subtitle="Configure metadata, registration linkage, and publishing behavior."
       title="Form settings"
     >
@@ -235,12 +229,6 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
         <FormField className="md:col-span-2" label="Description">
           <Textarea className="min-h-[90px]" disabled={!canWrite} onChange={(event) => setDescription(event.target.value)} value={description} />
         </FormField>
-
-        <div className="flex flex-wrap items-center gap-2 md:col-span-2">
-          <Link className="text-sm font-semibold text-link hover:underline" href={`/${orgSlug}/register/${slug || form.slug}`}>
-            Open public registration
-          </Link>
-        </div>
       </form>
     </Panel>
   );
