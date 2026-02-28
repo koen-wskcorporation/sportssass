@@ -94,7 +94,7 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, open 
         targetMode,
         lockedProgramNodeId: targetMode === "locked" ? lockedProgramNodeId || null : null,
         allowMultiplePlayers,
-        requireSignIn: formKind === "program_registration" ? true : requireSignIn,
+        requireSignIn,
         schemaJson: JSON.stringify(form.schemaJson)
       });
 
@@ -230,8 +230,8 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, open 
 
         <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text md:col-span-2">
           <input
-            checked={formKind === "program_registration" ? true : requireSignIn}
-            disabled={!canWrite || formKind === "program_registration"}
+            checked={requireSignIn}
+            disabled={!canWrite}
             onChange={(event) => setRequireSignIn(event.target.checked)}
             type="checkbox"
           />

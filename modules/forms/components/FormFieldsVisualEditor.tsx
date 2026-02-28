@@ -30,6 +30,7 @@ import {
   Type
 } from "lucide-react";
 import { SortableCanvas, type SortableRenderMeta } from "@/components/editor/SortableCanvas";
+import { ButtonListEditor } from "@/components/editor/buttons/ButtonListEditor";
 import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import type { FormField as FormFieldDefinition, FormFieldOption, FormFieldType, 
 import type { ProgramNode } from "@/modules/programs/types";
 
 type FormFieldsVisualEditorProps = {
+  orgSlug: string;
   formName: string;
   formDescription: string;
   formKind: FormKind;
@@ -524,7 +526,7 @@ function SortableCanvasField({
   );
 }
 
-export function FormFieldsVisualEditor({ formName, formDescription, formKind, schema, programNodes, onChange, view, disabled = false }: FormFieldsVisualEditorProps) {
+export function FormFieldsVisualEditor({ orgSlug, formName, formDescription, formKind, schema, programNodes, onChange, view, disabled = false }: FormFieldsVisualEditorProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -681,6 +683,8 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
       title: `Page ${pages.length + 1}`,
       description: null,
       fields: [],
+      successButtons: [],
+      showSubmitAnotherResponseButton: false,
       locked: false
     };
 
@@ -947,6 +951,39 @@ export function FormFieldsVisualEditor({ formName, formDescription, formKind, sc
               value={activePage.description ?? ""}
             />
           </FormField>
+          {activePage.pageKey === "generic_success" || activePage.pageKey === REGISTRATION_PAGE_KEYS.success ? (
+            <div className="space-y-3 rounded-control border bg-surface-muted/40 p-3 md:col-span-2">
+              <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text">
+                <input
+                  checked={activePage.showSubmitAnotherResponseButton}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    updateActivePage((page) => ({
+                      ...page,
+                      showSubmitAnotherResponseButton: event.target.checked
+                    }));
+                  }}
+                  type="checkbox"
+                />
+                Show "Submit another response" button
+              </label>
+
+              <ButtonListEditor
+                addButtonLabel="Add success button"
+                emptyStateText="No custom success buttons yet."
+                maxButtons={4}
+                onChange={(nextButtons) => {
+                  updateActivePage((page) => ({
+                    ...page,
+                    successButtons: nextButtons
+                  }));
+                }}
+                orgSlug={orgSlug}
+                title="Success buttons"
+                value={activePage.successButtons}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
 

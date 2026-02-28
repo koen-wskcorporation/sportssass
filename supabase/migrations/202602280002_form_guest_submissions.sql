@@ -76,9 +76,6 @@ begin
   end if;
 
   require_sign_in := coalesce((form_settings ->> 'requireSignIn')::boolean, true);
-  if resolved_form_kind = 'program_registration' then
-    require_sign_in := true;
-  end if;
 
   if require_sign_in and auth.uid() is null then
     raise exception 'AUTH_REQUIRED';

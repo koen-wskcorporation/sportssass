@@ -46,6 +46,7 @@ export function FormEmbedBlockRender({ block, context, runtimeData, isEditing }:
   const formRuntime = runtimeData.formEmbed;
   const publishedForms = formRuntime?.publishedForms ?? [];
   const selectedForm = publishedForms.find((form) => form.id === block.config.formId) ?? null;
+  const requireSignIn = selectedForm ? selectedForm.settingsJson.requireSignIn !== false : true;
 
   return (
     <section id="form-embed">
@@ -60,7 +61,7 @@ export function FormEmbedBlockRender({ block, context, runtimeData, isEditing }:
             <Alert variant="info">Choose a published form in block settings to display it here.</Alert>
           ) : isEditing ? (
             <Alert variant="info">Preview mode. Save and view the page to complete this form.</Alert>
-          ) : !formRuntime?.viewer ? (
+          ) : !formRuntime?.viewer && requireSignIn ? (
             <div className="space-y-3">
               <Alert variant="info">Sign in to complete this form.</Alert>
               <Link
@@ -75,8 +76,8 @@ export function FormEmbedBlockRender({ block, context, runtimeData, isEditing }:
               form={selectedForm}
               formSlug={selectedForm.slug}
               orgSlug={context.orgSlug}
-              players={formRuntime.players}
-              programNodes={selectedForm.programId ? (formRuntime.programNodesByProgramId[selectedForm.programId] ?? []) : []}
+              players={formRuntime?.players ?? []}
+              programNodes={selectedForm.programId ? (formRuntime?.programNodesByProgramId[selectedForm.programId] ?? []) : []}
             />
           )}
         </CardContent>

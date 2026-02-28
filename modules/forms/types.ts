@@ -1,3 +1,5 @@
+import type { ButtonConfig } from "@/lib/links";
+
 export type FormStatus = "draft" | "published" | "archived";
 
 export type FormKind = "generic" | "program_registration";
@@ -48,6 +50,8 @@ export type FormPage = {
   title: string;
   description: string | null;
   fields: FormField[];
+  successButtons: ButtonConfig[];
+  showSubmitAnotherResponseButton: boolean;
   locked: boolean;
 };
 

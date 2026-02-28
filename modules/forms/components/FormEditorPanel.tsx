@@ -114,6 +114,7 @@ export function FormEditorPanel({ orgSlug, form, programs, programNodes, canWrit
             formKind={form.formKind}
             formName={form.name}
             onChange={setFormSchema}
+            orgSlug={orgSlug}
             programNodes={programNodes}
             schema={formSchema}
             view={builderView}

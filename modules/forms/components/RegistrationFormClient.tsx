@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { CalendarPicker } from "@/components/ui/calendar-picker";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import { submitFormResponseAction } from "@/modules/forms/actions";
 import { REGISTRATION_PAGE_KEYS } from "@/modules/forms/types";
 import { createPlayerAction } from "@/modules/players/actions";
+import { resolveButtonHref } from "@/lib/links";
 import type { FormField as FormFieldDefinition, FormPage, OrgForm } from "@/modules/forms/types";
 import type { PlayerPickerItem } from "@/modules/players/types";
 import type { ProgramNode } from "@/modules/programs/types";
@@ -519,6 +521,15 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
     });
   }
 
+  function handleSubmitAnotherResponse() {
+    setSuccessState(null);
+    setCurrentPageIndex(0);
+    setGenericAnswers({});
+    setAnswersByPlayerId({});
+    setSelectedPlayerIds([]);
+    setSelectedNodeByPlayerId({});
+  }
+
   function renderField(
     field: FormFieldDefinition,
     value: unknown,
@@ -601,6 +612,8 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
   if (successState) {
     const successTitle = successPage?.title || "Success";
     const successDescription = successPage?.description || "Thanks for submitting. We'll be in touch soon.";
+    const successButtons = successPage?.successButtons ?? [];
+    const showSubmitAnotherResponseButton = successPage?.showSubmitAnotherResponseButton ?? true;
 
     return (
       <div className="space-y-4">
@@ -610,6 +623,26 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
           <p className="mt-3 text-xs text-text-muted">
             Submission ID: {successState.submissionId} ({successState.status})
           </p>
+          {showSubmitAnotherResponseButton || successButtons.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {showSubmitAnotherResponseButton ? (
+                <Button onClick={handleSubmitAnotherResponse} type="button" variant="secondary">
+                  Submit another response
+                </Button>
+              ) : null}
+              {successButtons.map((button) => (
+                <Link
+                  className={buttonVariants({ variant: button.variant })}
+                  href={resolveButtonHref(orgSlug, button.href)}
+                  key={button.id}
+                  rel={button.newTab ? "noreferrer" : undefined}
+                  target={button.newTab ? "_blank" : undefined}
+                >
+                  {button.label}
+                </Link>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     );

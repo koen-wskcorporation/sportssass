@@ -15,7 +15,7 @@ export function AppFooter() {
               aria-hidden="true"
               className="block max-w-full object-contain"
               src="/brand/logo.svg"
-              style={{ filter: "brightness(0) invert(1)", height: "auto", width: "clamp(110px, 14vw, 170px)" }}
+              style={{ filter: "brightness(0) invert(1)", height: "auto", maxHeight: "28px", maxWidth: "170px", width: "auto" }}
             />
           </Link>
 

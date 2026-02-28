@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buttonConfigSchema, normalizeButtons } from "@/lib/links";
 import type { FormField, FormKind, FormPage, FormPageKey, FormSchema } from "@/modules/forms/types";
 import { REGISTRATION_PAGE_KEYS, REGISTRATION_PAGE_ORDER } from "@/modules/forms/types";
 
@@ -31,6 +32,8 @@ const pageSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(300).nullable().optional(),
   fields: z.array(fieldSchema).default([]),
+  successButtons: z.array(buttonConfigSchema).optional().default([]),
+  showSubmitAnotherResponseButton: z.boolean().optional().default(false),
   locked: z.boolean().optional().default(false)
 });
 
@@ -74,6 +77,8 @@ function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_c
       title: "Player",
       description: "Select one or more players for this registration.",
       fields: [],
+      successButtons: [],
+      showSubmitAnotherResponseButton: false,
       locked: true
     };
   }
@@ -85,6 +90,8 @@ function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_c
       title: "Division + Questions",
       description: "Choose divisions and answer registration questions.",
       fields: [],
+      successButtons: [],
+      showSubmitAnotherResponseButton: false,
       locked: true
     };
   }
@@ -96,6 +103,8 @@ function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_c
       title: "Success",
       description: "Thanks for submitting. We'll follow up with next steps.",
       fields: [],
+      successButtons: [],
+      showSubmitAnotherResponseButton: true,
       locked: true
     };
   }
@@ -106,6 +115,8 @@ function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_c
     title: "Payment",
     description: "Review and submit (payment placeholder).",
     fields: [],
+    successButtons: [],
+    showSubmitAnotherResponseButton: false,
     locked: true
   };
 }
@@ -117,6 +128,8 @@ function createDefaultGenericPage(): FormPage {
     title: "General",
     description: null,
     fields: [],
+    successButtons: [],
+    showSubmitAnotherResponseButton: false,
     locked: false
   };
 }
@@ -128,6 +141,8 @@ function createDefaultGenericSuccessPage(): FormPage {
     title: "Success",
     description: "Thanks for submitting. We'll be in touch soon.",
     fields: [],
+    successButtons: [],
+    showSubmitAnotherResponseButton: true,
     locked: true
   };
 }
@@ -179,6 +194,8 @@ function mapGenericPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
     title: page.title || `Page ${index + 1}`,
     description: page.description ?? null,
     fields: (page.fields ?? []).map((field) => normalizeField(field)),
+    successButtons: normalizeButtons(page.successButtons, { max: 4 }),
+    showSubmitAnotherResponseButton: Boolean(page.showSubmitAnotherResponseButton),
     locked: page.pageKey === "generic_success"
   }));
   const customPages = mappedPages.filter((page) => page.pageKey === "generic_custom");
@@ -191,6 +208,8 @@ function mapGenericPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
           ...successPage,
           pageKey: "generic_success",
           fields: [],
+          successButtons: normalizeButtons(successPage.successButtons, { max: 4 }),
+          showSubmitAnotherResponseButton: Boolean(successPage.showSubmitAnotherResponseButton),
           locked: true
         }
       : createDefaultGenericSuccessPage()
@@ -213,7 +232,12 @@ function mapRegistrationPages(pages: Array<z.infer<typeof pageSchema>>): FormPag
       id: existing?.id || template.id,
       title: existing?.title || template.title,
       description: existing?.description ?? template.description,
-      fields: template.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions ? allFields : []
+      fields: template.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions ? allFields : [],
+      successButtons: template.pageKey === REGISTRATION_PAGE_KEYS.success ? normalizeButtons(existing?.successButtons, { max: 4 }) : [],
+      showSubmitAnotherResponseButton:
+        template.pageKey === REGISTRATION_PAGE_KEYS.success
+          ? existing?.showSubmitAnotherResponseButton ?? template.showSubmitAnotherResponseButton
+          : false
     };
   });
 }
@@ -290,6 +314,8 @@ function parseLegacySchema(value: unknown, fallbackName: string, formKind: FormK
           title: section.title || `Page ${index + 1}`,
           description: section.description ?? null,
           fields: (section.fields ?? []).map((field) => normalizeField({ ...field })),
+          successButtons: [],
+          showSubmitAnotherResponseButton: false,
           locked: false
         }))
       : [createDefaultGenericPage()];

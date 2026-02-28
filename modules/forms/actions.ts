@@ -184,7 +184,7 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
     const payload = parsed.data;
     const org = await requireOrgPermission(payload.orgSlug, "forms.write");
     let resolvedName = payload.name;
-    const resolvedRequireSignIn = payload.formKind === "program_registration" ? true : payload.requireSignIn ?? true;
+    const resolvedRequireSignIn = payload.requireSignIn ?? true;
 
     if (payload.formKind === "program_registration") {
       if (!payload.programId) {
@@ -255,7 +255,7 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
 
   const payload = parsed.data;
   let resolvedName = payload.name;
-  const resolvedRequireSignIn = payload.formKind === "program_registration" ? true : payload.requireSignIn ?? true;
+  const resolvedRequireSignIn = payload.requireSignIn ?? true;
 
   try {
     const org = await requireOrgPermission(payload.orgSlug, "forms.write");
@@ -438,7 +438,7 @@ export async function submitFormResponseAction(input: z.input<typeof submitFormS
     }
 
     const user = await getSessionUser();
-    const requireSignIn = form.formKind === "program_registration" || form.settingsJson.requireSignIn !== false;
+    const requireSignIn = form.settingsJson.requireSignIn !== false;
 
     if (requireSignIn && !user) {
       return asError("Please sign in to submit this form.");

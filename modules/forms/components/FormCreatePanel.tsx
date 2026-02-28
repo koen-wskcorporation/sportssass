@@ -125,7 +125,7 @@ export function FormCreatePanel({ open, onClose, orgSlug, programs, canWrite = t
         targetMode,
         lockedProgramNodeId: null,
         allowMultiplePlayers,
-        requireSignIn: resolvedFormKind === "program_registration" ? true : requireSignIn
+        requireSignIn
       });
 
       if (!result.ok) {
@@ -239,8 +239,8 @@ export function FormCreatePanel({ open, onClose, orgSlug, programs, canWrite = t
         ) : null}
         <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text md:col-span-2">
           <input
-            checked={resolvedFormKind === "program_registration" ? true : requireSignIn}
-            disabled={!canWrite || resolvedFormKind === "program_registration"}
+            checked={requireSignIn}
+            disabled={!canWrite}
             onChange={(event) => setRequireSignIn(event.target.checked)}
             type="checkbox"
           />

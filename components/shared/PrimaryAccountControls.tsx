@@ -22,6 +22,7 @@ type HeaderAccountState =
 
 export function PrimaryAccountControls() {
   const [state, setState] = useState<HeaderAccountState | null>(null);
+  const hideSignInInProduction = process.env.NODE_ENV === "production";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -69,6 +70,10 @@ export function PrimaryAccountControls() {
         signOutAction={signOutAction}
       />
     );
+  }
+
+  if (hideSignInInProduction) {
+    return null;
   }
 
   return <AuthDialogTrigger />;
