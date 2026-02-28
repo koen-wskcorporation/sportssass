@@ -19,6 +19,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const hideChromeInProduction = process.env.NODE_ENV === "production";
+
   return (
     <html lang="en">
       <body className="bg-canvas text-text antialiased">
@@ -26,9 +28,9 @@ export default function RootLayout({
           <UploadProvider>
             <div className="app-frame">
               <div className="app-root flex min-h-screen min-w-0 flex-col">
-                <PrimaryHeader />
-                <div className="flex-1 min-w-0 pt-3 md:pt-4">{children}</div>
-                <AppFooter />
+                {!hideChromeInProduction ? <PrimaryHeader /> : null}
+                <div className={hideChromeInProduction ? "flex-1 min-w-0" : "flex-1 min-w-0 pt-3 md:pt-4"}>{children}</div>
+                {!hideChromeInProduction ? <AppFooter /> : null}
               </div>
               <div className="panel-dock" id="panel-dock" />
             </div>
