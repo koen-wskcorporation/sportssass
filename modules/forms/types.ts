@@ -107,7 +107,7 @@ export type FormSubmission = {
   orgId: string;
   formId: string;
   versionId: string;
-  submittedByUserId: string;
+  submittedByUserId: string | null;
   status: SubmissionStatus;
   answersJson: Record<string, unknown>;
   metadataJson: Record<string, unknown>;

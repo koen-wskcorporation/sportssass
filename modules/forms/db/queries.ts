@@ -54,7 +54,7 @@ type SubmissionRow = {
   org_id: string;
   form_id: string;
   version_id: string;
-  submitted_by_user_id: string;
+  submitted_by_user_id: string | null;
   status: SubmissionStatus;
   answers_json: unknown;
   metadata_json: unknown;

@@ -38,6 +38,7 @@ export function FormPublishToggleButton({ orgSlug, form, canWrite }: FormPublish
             targetMode: form.targetMode,
             lockedProgramNodeId: form.lockedProgramNodeId,
             allowMultiplePlayers: Boolean(form.settingsJson.allowMultiplePlayers),
+            requireSignIn: form.settingsJson.requireSignIn !== false,
             schemaJson: JSON.stringify(form.schemaJson)
           })
         : await publishFormVersionAction({

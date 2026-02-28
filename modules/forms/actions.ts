@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
-import { requireAuth } from "@/lib/auth/requireAuth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 import { can } from "@/lib/permissions/can";
@@ -44,7 +44,8 @@ const createFormSchema = z.object({
   programId: z.string().uuid().nullable().optional(),
   targetMode: z.enum(["locked", "choice"]),
   lockedProgramNodeId: z.string().uuid().nullable().optional(),
-  allowMultiplePlayers: z.boolean().optional()
+  allowMultiplePlayers: z.boolean().optional(),
+  requireSignIn: z.boolean().optional()
 });
 
 const saveFormDraftSchema = createFormSchema.extend({
@@ -183,6 +184,7 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
     const payload = parsed.data;
     const org = await requireOrgPermission(payload.orgSlug, "forms.write");
     let resolvedName = payload.name;
+    const resolvedRequireSignIn = payload.formKind === "program_registration" ? true : payload.requireSignIn ?? true;
 
     if (payload.formKind === "program_registration") {
       if (!payload.programId) {
@@ -213,7 +215,8 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
       targetMode: payload.targetMode,
       lockedProgramNodeId: payload.lockedProgramNodeId ?? null,
       settingsJson: {
-        allowMultiplePlayers: payload.allowMultiplePlayers ?? false
+        allowMultiplePlayers: payload.allowMultiplePlayers ?? false,
+        requireSignIn: resolvedRequireSignIn
       }
     });
 
@@ -252,6 +255,7 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
 
   const payload = parsed.data;
   let resolvedName = payload.name;
+  const resolvedRequireSignIn = payload.formKind === "program_registration" ? true : payload.requireSignIn ?? true;
 
   try {
     const org = await requireOrgPermission(payload.orgSlug, "forms.write");
@@ -292,7 +296,8 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
       lockedProgramNodeId: payload.lockedProgramNodeId ?? null,
       schemaJson: parsedSchema.schema,
       settingsJson: {
-        allowMultiplePlayers: payload.allowMultiplePlayers ?? false
+        allowMultiplePlayers: payload.allowMultiplePlayers ?? false,
+        requireSignIn: resolvedRequireSignIn
       }
     });
 
@@ -423,7 +428,22 @@ export async function submitFormResponseAction(input: z.input<typeof submitFormS
 
   try {
     const payload = parsed.data;
-    await requireAuth();
+    const org = await getOrgPublicContext(payload.orgSlug);
+    const form = await getFormBySlug(org.orgId, payload.formSlug, {
+      includeDraft: false
+    });
+
+    if (!form) {
+      return asError("Form not found.");
+    }
+
+    const user = await getSessionUser();
+    const requireSignIn = form.formKind === "program_registration" || form.settingsJson.requireSignIn !== false;
+
+    if (requireSignIn && !user) {
+      return asError("Please sign in to submit this form.");
+    }
+
     const supabase = await createSupabaseServer();
 
     const { data, error } = await supabase.rpc("submit_form_response", {
@@ -435,6 +455,10 @@ export async function submitFormResponseAction(input: z.input<typeof submitFormS
     });
 
     if (error) {
+      if (error.message.includes("AUTH_REQUIRED")) {
+        return asError("Please sign in to submit this form.");
+      }
+
       throw new Error(error.message);
     }
 

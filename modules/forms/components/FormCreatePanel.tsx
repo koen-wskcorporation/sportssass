@@ -48,6 +48,7 @@ export function FormCreatePanel({ open, onClose, orgSlug, programs, canWrite = t
   const [programId, setProgramId] = useState("");
   const [targetMode, setTargetMode] = useState<"locked" | "choice">("choice");
   const [allowMultiplePlayers, setAllowMultiplePlayers] = useState(false);
+  const [requireSignIn, setRequireSignIn] = useState(true);
 
   const resolvedName = isProgramLocked ? lockedName : name;
   const resolvedFormKind = isProgramLocked ? "program_registration" : formKind;
@@ -75,6 +76,7 @@ export function FormCreatePanel({ open, onClose, orgSlug, programs, canWrite = t
     setDescription("");
     setProgramId("");
     setAllowMultiplePlayers(false);
+    setRequireSignIn(true);
     setTargetMode("choice");
     setFormKind("program_registration");
     setStatus("draft");
@@ -122,7 +124,8 @@ export function FormCreatePanel({ open, onClose, orgSlug, programs, canWrite = t
         programId: resolvedFormKind === "program_registration" ? resolvedProgramId || null : null,
         targetMode,
         lockedProgramNodeId: null,
-        allowMultiplePlayers
+        allowMultiplePlayers,
+        requireSignIn: resolvedFormKind === "program_registration" ? true : requireSignIn
       });
 
       if (!result.ok) {
@@ -234,6 +237,15 @@ export function FormCreatePanel({ open, onClose, orgSlug, programs, canWrite = t
             </label>
           </>
         ) : null}
+        <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text md:col-span-2">
+          <input
+            checked={resolvedFormKind === "program_registration" ? true : requireSignIn}
+            disabled={!canWrite || resolvedFormKind === "program_registration"}
+            onChange={(event) => setRequireSignIn(event.target.checked)}
+            type="checkbox"
+          />
+          Require sign-in to submit
+        </label>
         <FormField className="md:col-span-2" label="Description">
           <Textarea className="min-h-[90px]" disabled={!canWrite} onChange={(event) => setDescription(event.target.value)} value={description} />
         </FormField>

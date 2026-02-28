@@ -44,6 +44,7 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, open 
   const [targetMode, setTargetMode] = useState<"locked" | "choice">(form.targetMode);
   const [lockedProgramNodeId, setLockedProgramNodeId] = useState(form.lockedProgramNodeId ?? "");
   const [allowMultiplePlayers, setAllowMultiplePlayers] = useState(Boolean(form.settingsJson.allowMultiplePlayers));
+  const [requireSignIn, setRequireSignIn] = useState(form.settingsJson.requireSignIn !== false);
   const registrationProgramName = useMemo(() => programs.find((program) => program.id === programId)?.name ?? null, [programs, programId]);
 
   useEffect(() => {
@@ -93,6 +94,7 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, open 
         targetMode,
         lockedProgramNodeId: targetMode === "locked" ? lockedProgramNodeId || null : null,
         allowMultiplePlayers,
+        requireSignIn: formKind === "program_registration" ? true : requireSignIn,
         schemaJson: JSON.stringify(form.schemaJson)
       });
 
@@ -225,6 +227,16 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, open 
             </label>
           </>
         ) : null}
+
+        <label className="inline-flex items-center gap-2 rounded-control border bg-surface px-3 py-2 text-sm text-text md:col-span-2">
+          <input
+            checked={formKind === "program_registration" ? true : requireSignIn}
+            disabled={!canWrite || formKind === "program_registration"}
+            onChange={(event) => setRequireSignIn(event.target.checked)}
+            type="checkbox"
+          />
+          Require sign-in to submit
+        </label>
 
         <FormField className="md:col-span-2" label="Description">
           <Textarea className="min-h-[90px]" disabled={!canWrite} onChange={(event) => setDescription(event.target.value)} value={description} />

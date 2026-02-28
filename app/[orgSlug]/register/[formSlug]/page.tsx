@@ -45,13 +45,14 @@ export default async function OrgFormRegistrationPage({
   }
 
   const user = await getSessionUser();
+  const requireSignIn = form.formKind === "program_registration" || form.settingsJson.requireSignIn !== false;
 
-  if (!user) {
+  if (requireSignIn && !user) {
     redirect(`/auth/login?next=${encodeURIComponent(`/${org.orgSlug}/register/${form.slug}`)}`);
   }
 
   const [players, programNodes] = await Promise.all([
-    listPlayersForPicker(user.id),
+    user ? listPlayersForPicker(user.id) : Promise.resolve([]),
     form.formKind === "program_registration" && form.programId ? listProgramNodes(form.programId, { publishedOnly: true }) : Promise.resolve([])
   ]);
 
@@ -67,7 +68,7 @@ export default async function OrgFormRegistrationPage({
         <Card>
           <CardHeader>
             <CardTitle>Registration form</CardTitle>
-            <CardDescription>Signed in as {user.email ?? "your account"}.</CardDescription>
+            <CardDescription>{user ? `Signed in as ${user.email ?? "your account"}.` : "You can submit without signing in."}</CardDescription>
           </CardHeader>
           <CardContent>
             <RegistrationFormClient form={form} formSlug={form.slug} orgSlug={org.orgSlug} players={players} programNodes={programNodes} />

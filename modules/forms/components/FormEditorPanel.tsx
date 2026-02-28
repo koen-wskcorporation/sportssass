@@ -59,6 +59,7 @@ export function FormEditorPanel({ orgSlug, form, programs, programNodes, canWrit
         targetMode: form.targetMode,
         lockedProgramNodeId: form.lockedProgramNodeId,
         allowMultiplePlayers: Boolean(form.settingsJson.allowMultiplePlayers),
+        requireSignIn: form.settingsJson.requireSignIn !== false,
         schemaJson: JSON.stringify(schemaPayload)
       });
 
