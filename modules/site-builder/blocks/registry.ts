@@ -19,6 +19,18 @@ import {
 } from "@/modules/site-builder/blocks/program-catalog";
 import { createDefaultEventsConfig, EventsBlockEditor, EventsBlockRender, sanitizeEventsConfig } from "@/modules/site-builder/blocks/events";
 import { createDefaultFormEmbedConfig, FormEmbedBlockEditor, FormEmbedBlockRender, sanitizeFormEmbedConfig } from "@/modules/site-builder/blocks/form-embed";
+import {
+  createDefaultFacilityAvailabilityCalendarConfig,
+  FacilityAvailabilityCalendarBlockEditor,
+  FacilityAvailabilityCalendarBlockRender,
+  sanitizeFacilityAvailabilityCalendarConfig
+} from "@/modules/site-builder/blocks/facility-availability-calendar";
+import {
+  createDefaultFacilitySpaceListConfig,
+  FacilitySpaceListBlockEditor,
+  FacilitySpaceListBlockRender,
+  sanitizeFacilitySpaceListConfig
+} from "@/modules/site-builder/blocks/facility-space-list";
 import type { BlockContext, BlockDefinition, DraftBlockInput, OrgPageBlock, OrgSiteBlockType } from "@/modules/site-builder/types";
 
 type AnyBlockDefinition = {
@@ -89,6 +101,22 @@ const blockRegistry: AnyBlockDefinition = {
     sanitizeConfig: sanitizeFormEmbedConfig,
     Render: FormEmbedBlockRender,
     Editor: FormEmbedBlockEditor
+  },
+  facility_availability_calendar: {
+    type: "facility_availability_calendar",
+    displayName: "Facility Availability Calendar",
+    defaultConfig: createDefaultFacilityAvailabilityCalendarConfig,
+    sanitizeConfig: sanitizeFacilityAvailabilityCalendarConfig,
+    Render: FacilityAvailabilityCalendarBlockRender,
+    Editor: FacilityAvailabilityCalendarBlockEditor
+  },
+  facility_space_list: {
+    type: "facility_space_list",
+    displayName: "Facility Space List",
+    defaultConfig: createDefaultFacilitySpaceListConfig,
+    sanitizeConfig: sanitizeFacilitySpaceListConfig,
+    Render: FacilitySpaceListBlockRender,
+    Editor: FacilitySpaceListBlockEditor
   }
 };
 

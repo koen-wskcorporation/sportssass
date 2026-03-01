@@ -14,13 +14,15 @@ export type Permission =
   | "forms.read"
   | "forms.write"
   | "events.read"
-  | "events.write";
+  | "events.write"
+  | "facilities.read"
+  | "facilities.write";
 
 export type PermissionDefinition = {
   permission: Permission;
   label: string;
   description: string;
-  group: "Organization" | "Site Builder" | "Programs" | "Forms" | "Events";
+  group: "Organization" | "Site Builder" | "Programs" | "Forms" | "Events" | "Facilities";
 };
 
 export type CustomRolePermissionSource = {
@@ -40,7 +42,9 @@ export const allPermissions: Permission[] = [
   "forms.read",
   "forms.write",
   "events.read",
-  "events.write"
+  "events.write",
+  "facilities.read",
+  "facilities.write"
 ];
 
 const permissionSet = new Set(allPermissions);
@@ -117,6 +121,18 @@ export const permissionDefinitions: PermissionDefinition[] = [
     label: "Events write",
     description: "Create, edit, publish, and archive events.",
     group: "Events"
+  },
+  {
+    permission: "facilities.read",
+    label: "Facilities read",
+    description: "Read spaces, bookings, and blackouts in the facilities manager.",
+    group: "Facilities"
+  },
+  {
+    permission: "facilities.write",
+    label: "Facilities write",
+    description: "Create and manage spaces, bookings, approvals, rules, and blackouts.",
+    group: "Facilities"
   }
 ];
 

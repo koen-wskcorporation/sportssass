@@ -6,7 +6,17 @@ import type { PlayerPickerItem } from "@/modules/players/types";
 import type { ProgramCatalogItem } from "@/modules/programs/types";
 import type { ProgramNode } from "@/modules/programs/types";
 
-export type OrgSiteBlockType = "hero" | "subhero" | "cta_grid" | "cta_card" | "schedule_preview" | "program_catalog" | "events" | "form_embed";
+export type OrgSiteBlockType =
+  | "hero"
+  | "subhero"
+  | "cta_grid"
+  | "cta_card"
+  | "schedule_preview"
+  | "program_catalog"
+  | "events"
+  | "form_embed"
+  | "facility_availability_calendar"
+  | "facility_space_list";
 
 export type HeroBlockConfig = {
   headline: string;
@@ -79,6 +89,23 @@ export type FormEmbedBlockConfig = {
   formId: string | null;
 };
 
+export type FacilityAvailabilityCalendarBlockConfig = {
+  title: string;
+  body: string;
+  defaultView: "month" | "week" | "day";
+  showPendingReservations: boolean;
+  emptyMessage: string;
+};
+
+export type FacilitySpaceListBlockConfig = {
+  title: string;
+  body: string;
+  maxItems: number;
+  showOnlyBookable: boolean;
+  showHierarchy: boolean;
+  emptyMessage: string;
+};
+
 export type OrgSiteBlockConfigMap = {
   hero: HeroBlockConfig;
   subhero: SubheroBlockConfig;
@@ -88,6 +115,8 @@ export type OrgSiteBlockConfigMap = {
   program_catalog: ProgramCatalogBlockConfig;
   events: EventsBlockConfig;
   form_embed: FormEmbedBlockConfig;
+  facility_availability_calendar: FacilityAvailabilityCalendarBlockConfig;
+  facility_space_list: FacilitySpaceListBlockConfig;
 };
 
 export type OrgPageBlock<TType extends OrgSiteBlockType = OrgSiteBlockType> = {
@@ -131,6 +160,31 @@ export type BlockContext = {
 export type OrgSiteRuntimeData = {
   programCatalogItems?: ProgramCatalogItem[];
   eventsCatalogItems?: EventCatalogItem[];
+  facilityAvailability?: {
+    generatedAtUtc: string;
+    spaces: Array<{
+      id: string;
+      parentSpaceId: string | null;
+      name: string;
+      slug: string;
+      spaceKind: "building" | "room" | "field" | "court" | "custom";
+      status: "open" | "closed" | "archived";
+      isBookable: boolean;
+      timezone: string;
+      currentStatus: "open" | "closed" | "booked";
+      nextAvailableAtUtc: string | null;
+    }>;
+    reservations: Array<{
+      id: string;
+      spaceId: string;
+      reservationKind: "booking" | "blackout";
+      status: "pending" | "approved";
+      publicLabel: string | null;
+      startsAtUtc: string;
+      endsAtUtc: string;
+      timezone: string;
+    }>;
+  };
   formEmbed?: {
     publishedForms: OrgForm[];
     viewer: {

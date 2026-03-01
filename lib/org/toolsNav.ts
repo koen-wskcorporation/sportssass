@@ -8,7 +8,8 @@ export type OrgAdminNavIcon =
   | "credit-card"
   | "layout"
   | "calendar"
-  | "file-text";
+  | "file-text"
+  | "map";
 
 export type OrgAdminNavItem = {
   key: string;
@@ -89,6 +90,14 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
       href: `/${orgSlug}/tools/events`,
       description: "Create and publish events for lists and calendar blocks.",
       icon: "calendar",
+      showInHome: true
+    },
+    {
+      key: "facilities",
+      label: "Facilities",
+      href: `/${orgSlug}/tools/facilities`,
+      description: "Manage spaces, bookings, blackouts, and facility availability.",
+      icon: "map",
       showInHome: true
     },
     {

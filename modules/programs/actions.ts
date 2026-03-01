@@ -78,6 +78,11 @@ const updateProgramSchema = createProgramSchema.extend({
   programId: z.string().uuid()
 });
 
+const duplicateProgramSchema = z.object({
+  orgSlug: textSchema.min(1),
+  programId: z.string().uuid()
+});
+
 const saveHierarchySchema = z.object({
   orgSlug: textSchema.min(1),
   programId: z.string().uuid(),
@@ -142,6 +147,35 @@ function asError(error: string): ProgramsActionResult<never> {
 function normalizeOptional(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function buildCopyName(baseName: string, existingNames: Set<string>) {
+  const trimmed = baseName.trim();
+  const initial = `${trimmed} Copy`;
+  if (!existingNames.has(initial.toLowerCase())) {
+    return initial;
+  }
+
+  let index = 2;
+  while (existingNames.has(`${trimmed} Copy ${index}`.toLowerCase())) {
+    index += 1;
+  }
+
+  return `${trimmed} Copy ${index}`;
+}
+
+function buildCopySlug(baseSlug: string, existingSlugs: Set<string>) {
+  const initial = `${baseSlug}-copy`;
+  if (!existingSlugs.has(initial)) {
+    return initial;
+  }
+
+  let index = 2;
+  while (existingSlugs.has(`${baseSlug}-copy-${index}`)) {
+    index += 1;
+  }
+
+  return `${baseSlug}-copy-${index}`;
 }
 
 function validateNodeParenting(
@@ -294,6 +328,112 @@ export async function updateProgramAction(input: z.input<typeof updateProgramSch
   } catch (error) {
     rethrowIfNavigationError(error);
     return asError("Unable to update this program right now.");
+  }
+}
+
+export async function duplicateProgramAction(input: z.input<typeof duplicateProgramSchema>): Promise<ProgramsActionResult<{ programId: string }>> {
+  const parsed = duplicateProgramSchema.safeParse(input);
+  if (!parsed.success) {
+    return asError("Invalid duplicate request.");
+  }
+
+  try {
+    const payload = parsed.data;
+    const org = await requireOrgPermission(payload.orgSlug, "programs.write");
+    const source = await getProgramDetailsById(org.orgId, payload.programId);
+
+    if (!source) {
+      return asError("Program not found.");
+    }
+
+    const existingPrograms = await listProgramsForManage(org.orgId);
+    const existingSlugs = new Set(existingPrograms.map((program) => program.slug.toLowerCase()));
+    const existingNames = new Set(existingPrograms.map((program) => program.name.toLowerCase()));
+
+    const nextProgram = await createProgramRecord({
+      orgId: org.orgId,
+      slug: buildCopySlug(source.program.slug, existingSlugs),
+      name: buildCopyName(source.program.name, existingNames),
+      description: source.program.description,
+      programType: source.program.programType,
+      customTypeLabel: source.program.customTypeLabel,
+      status: source.program.status,
+      startDate: source.program.startDate,
+      endDate: source.program.endDate,
+      coverImagePath: source.program.coverImagePath,
+      registrationOpenAt: source.program.registrationOpenAt,
+      registrationCloseAt: source.program.registrationCloseAt,
+      settingsJson: source.program.settingsJson
+    });
+
+    const sourceNodes = [...source.nodes];
+    const nodeIdMap = new Map<string, string>();
+    const pendingNodes = [...sourceNodes];
+
+    while (pendingNodes.length > 0) {
+      let insertedInPass = 0;
+
+      for (let index = 0; index < pendingNodes.length; ) {
+        const node = pendingNodes[index];
+        if (node.parentId && !nodeIdMap.has(node.parentId)) {
+          index += 1;
+          continue;
+        }
+
+        const created = await createProgramNodeRecord({
+          programId: nextProgram.id,
+          parentId: node.parentId ? nodeIdMap.get(node.parentId) ?? null : null,
+          name: node.name,
+          slug: node.slug,
+          nodeKind: node.nodeKind,
+          capacity: node.capacity,
+          waitlistEnabled: node.waitlistEnabled,
+          sortIndex: node.sortIndex,
+          settingsJson: node.settingsJson
+        });
+
+        nodeIdMap.set(node.id, created.id);
+        pendingNodes.splice(index, 1);
+        insertedInPass += 1;
+      }
+
+      if (insertedInPass === 0) {
+        return asError("Unable to duplicate program hierarchy.");
+      }
+    }
+
+    for (const block of source.scheduleBlocks) {
+      await createProgramScheduleBlockRecord({
+        programId: nextProgram.id,
+        programNodeId: block.programNodeId ? nodeIdMap.get(block.programNodeId) ?? null : null,
+        blockType: block.blockType,
+        title: block.title,
+        timezone: block.timezone,
+        startDate: block.startDate,
+        endDate: block.endDate,
+        startTime: block.startTime,
+        endTime: block.endTime,
+        byDay: block.byDay,
+        oneOffAt: block.oneOffAt,
+        sortIndex: block.sortIndex,
+        settingsJson: block.settingsJson
+      });
+    }
+
+    revalidatePath(`/${org.orgSlug}/tools/programs`);
+    revalidatePath(`/${org.orgSlug}/tools/programs/${nextProgram.id}`);
+    revalidatePath(`/${org.orgSlug}/programs`);
+    revalidatePath(`/${org.orgSlug}/programs/${nextProgram.slug}`);
+
+    return {
+      ok: true,
+      data: {
+        programId: nextProgram.id
+      }
+    };
+  } catch (error) {
+    rethrowIfNavigationError(error);
+    return asError("Unable to duplicate this program right now.");
   }
 }
 

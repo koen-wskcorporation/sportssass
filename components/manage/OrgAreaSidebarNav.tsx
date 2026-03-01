@@ -40,6 +40,11 @@ export type OrgAreaSidebarConfig = {
   ariaLabel: string;
   items: OrgAreaSidebarNode[];
   collapseStorageKey?: string;
+  autoCollapse?: {
+    enabled?: boolean;
+    includeChildItemHrefs?: boolean;
+    minAdditionalSegments?: number;
+  };
 };
 
 type OrgAreaSidebarNavProps = {
@@ -71,6 +76,69 @@ function isParentActive(pathname: string, item: OrgAreaSidebarParentItem) {
   return parentHrefActive || subtreeActive || childActive;
 }
 
+function normalizePath(path: string) {
+  if (path.length > 1 && path.endsWith("/")) {
+    return path.slice(0, -1);
+  }
+
+  return path;
+}
+
+function pathSegmentCount(path: string) {
+  const normalized = normalizePath(path);
+  if (normalized === "/") {
+    return 0;
+  }
+
+  return normalized.split("/").filter(Boolean).length;
+}
+
+function collectAutoCollapseRoots(items: OrgAreaSidebarNode[], includeChildItemHrefs: boolean) {
+  const roots = new Set<string>();
+
+  for (const node of items) {
+    if (node.href) {
+      roots.add(normalizePath(node.href));
+    }
+
+    if (!includeChildItemHrefs || !isParentNode(node)) {
+      continue;
+    }
+
+    for (const child of node.children) {
+      if (child.href) {
+        roots.add(normalizePath(child.href));
+      }
+    }
+  }
+
+  return [...roots];
+}
+
+function shouldAutoCollapse(pathname: string, config: OrgAreaSidebarConfig) {
+  const autoCollapseConfig = config.autoCollapse;
+  if (!autoCollapseConfig?.enabled) {
+    return false;
+  }
+
+  const includeChildItemHrefs = autoCollapseConfig.includeChildItemHrefs ?? true;
+  const minAdditionalSegments = autoCollapseConfig.minAdditionalSegments ?? 1;
+  const normalizedPath = normalizePath(pathname);
+  const roots = collectAutoCollapseRoots(config.items, includeChildItemHrefs);
+  const matchingRoots = roots.filter((root) => matchesPath(normalizedPath, root, "prefix"));
+
+  if (matchingRoots.length === 0) {
+    return false;
+  }
+
+  const bestMatchingRoot = matchingRoots.reduce((currentBest, candidate) => {
+    return candidate.length > currentBest.length ? candidate : currentBest;
+  });
+
+  const additionalSegments = pathSegmentCount(normalizedPath) - pathSegmentCount(bestMatchingRoot);
+  return additionalSegments >= minAdditionalSegments;
+}
+
 function SoonBadge() {
   return <Chip className="normal-case tracking-normal" color="neutral" size="small">Soon</Chip>;
 }
@@ -99,12 +167,13 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
     }
 
     try {
+      const shouldCollapseForPath = shouldAutoCollapse(pathname, config);
       const storedValue = window.localStorage.getItem(collapseStorageKey);
-      setCollapsed(storedValue === "true");
+      setCollapsed(shouldCollapseForPath || storedValue === "true");
     } catch {
-      setCollapsed(false);
+      setCollapsed(shouldAutoCollapse(pathname, config));
     }
-  }, [canCollapse, collapseStorageKey]);
+  }, [canCollapse, collapseStorageKey, config, pathname]);
 
   useEffect(() => {
     if (!canCollapse) {
@@ -117,6 +186,16 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
       // Ignore localStorage failures.
     }
   }, [canCollapse, collapseStorageKey, collapsed]);
+
+  useEffect(() => {
+    if (!canCollapse) {
+      return;
+    }
+
+    if (shouldAutoCollapse(pathname, config)) {
+      setCollapsed(true);
+    }
+  }, [canCollapse, config, pathname]);
 
   useEffect(() => {
     setExpandedByKey((current) => {

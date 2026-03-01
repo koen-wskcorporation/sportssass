@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Building2, CalendarDays, CreditCard, FileText, LayoutDashboard, MapPinned, Palette, Settings, Users, Wrench, type LucideIcon } from "lucide-react";
 import { Building2, CalendarDays, CreditCard, FileText, Globe, LayoutDashboard, Palette, Settings, Users, Wrench, type LucideIcon } from "lucide-react";
 import { OrgAreaSidebarNav, OrgAreaSidebarNavMobile, type OrgAreaSidebarConfig } from "@/components/manage/OrgAreaSidebarNav";
 import { getOrgAdminNavItems, type OrgAdminNavIcon } from "@/lib/org/toolsNav";
@@ -21,7 +22,8 @@ const iconMap: Record<OrgAdminNavIcon, LucideIcon> = {
   "credit-card": CreditCard,
   layout: LayoutDashboard,
   calendar: CalendarDays,
-  "file-text": FileText
+  "file-text": FileText,
+  map: MapPinned
 };
 
 function navConfig(orgSlug: string): OrgAreaSidebarConfig {
@@ -75,6 +77,11 @@ function navConfig(orgSlug: string): OrgAreaSidebarConfig {
     mobileLabel: "Tools",
     ariaLabel: "Tools area navigation",
     collapseStorageKey: `tools-sidebar:${orgSlug}:collapsed`,
+    autoCollapse: {
+      enabled: true,
+      includeChildItemHrefs: true,
+      minAdditionalSegments: 1
+    },
     items: sidebarItems
   };
 }

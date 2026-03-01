@@ -2,6 +2,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
 import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { listPublishedEventsForCatalog } from "@/modules/events/db/queries";
+import { listFacilityPublicAvailabilitySnapshot } from "@/modules/facilities/db/queries";
 import { listPublishedFormsForOrg } from "@/modules/forms/db/queries";
 import { listPlayersForPicker } from "@/modules/players/db/queries";
 import { listPublishedProgramsForCatalog } from "@/modules/programs/db/queries";
@@ -48,6 +49,19 @@ export async function getOrgSitePageForRender({
       }).catch(() => [])
     : [];
 
+  const requiresFacilityAvailability =
+    pageData?.blocks.some((block) => block.type === "facility_availability_calendar" || block.type === "facility_space_list") ?? false;
+  const facilityAvailability = requiresFacilityAvailability
+    ? await listFacilityPublicAvailabilitySnapshot(orgRequest.org.orgId, {
+        fromUtc: new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString(),
+        toUtc: new Date(now + 365 * 24 * 60 * 60 * 1000).toISOString()
+      }).catch(() => ({
+        generatedAtUtc: new Date().toISOString(),
+        spaces: [],
+        reservations: []
+      }))
+    : undefined;
+
   const requiresFormEmbed = pageData?.blocks.some((block) => block.type === "form_embed") ?? false;
   const publishedForms = requiresFormEmbed ? await listPublishedFormsForOrg(orgRequest.org.orgId).catch(() => []) : [];
   const sessionUser = requiresFormEmbed ? await getSessionUser() : null;
@@ -68,6 +82,7 @@ export async function getOrgSitePageForRender({
   const runtimeData = {
     programCatalogItems,
     eventsCatalogItems,
+    facilityAvailability,
     formEmbed: requiresFormEmbed
       ? {
           publishedForms,
