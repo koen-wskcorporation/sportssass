@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Building2, CalendarDays, CreditCard, FileText, LayoutDashboard, MapPinned, Palette, Settings, Users, Wrench, type LucideIcon } from "lucide-react";
-import { Building2, CalendarDays, CreditCard, FileText, Globe, LayoutDashboard, Palette, Settings, Users, Wrench, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, CreditCard, FileText, Globe, LayoutDashboard, MapPinned, Palette, Settings, Users, Wrench, type LucideIcon } from "lucide-react";
 import { OrgAreaSidebarNav, OrgAreaSidebarNavMobile, type OrgAreaSidebarConfig } from "@/components/manage/OrgAreaSidebarNav";
 import { getOrgAdminNavItems, type OrgAdminNavIcon } from "@/lib/org/toolsNav";
 
