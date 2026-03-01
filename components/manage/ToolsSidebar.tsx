@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Building2, CalendarDays, CreditCard, FileText, LayoutDashboard, Palette, Settings, Users, Wrench, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, CreditCard, FileText, Globe, LayoutDashboard, Palette, Settings, Users, Wrench, type LucideIcon } from "lucide-react";
 import { OrgAreaSidebarNav, OrgAreaSidebarNavMobile, type OrgAreaSidebarConfig } from "@/components/manage/OrgAreaSidebarNav";
 import { getOrgAdminNavItems, type OrgAdminNavIcon } from "@/lib/org/toolsNav";
 
@@ -15,6 +15,7 @@ const iconMap: Record<OrgAdminNavIcon, LucideIcon> = {
   wrench: Wrench,
   settings: Settings,
   building: Building2,
+  globe: Globe,
   palette: Palette,
   users: Users,
   "credit-card": CreditCard,
