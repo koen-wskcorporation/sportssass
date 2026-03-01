@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { buttonVariants } from "@/components/ui/button";
 import { signOutAction } from "@/app/auth/actions";
 import { getDashboardContext } from "@/lib/dashboard/getDashboardContext";
+import { AiAssistantLauncher } from "@/modules/ai/components/AiAssistantLauncher";
 
 export const metadata: Metadata = {
   title: "Dashboard"
@@ -20,6 +21,7 @@ export default async function HomePage() {
     <DashboardShell
       actions={
         <>
+          <AiAssistantLauncher askOnly buttonLabel="AI Assistant" buttonVariant="secondary" />
           <Link className={buttonVariants({ size: "sm", variant: "secondary" })} href="/account">
             Account
           </Link>

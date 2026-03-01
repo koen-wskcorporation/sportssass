@@ -16,6 +16,7 @@ export default async function OrgManageOverviewPage({ params }: { params: Promis
   const orgContext = await getOrgAuthContext(orgSlug);
   const canManageOrg = can(orgContext.membershipPermissions, "org.manage.read");
   const canReadBranding = can(orgContext.membershipPermissions, "org.branding.read") || can(orgContext.membershipPermissions, "org.branding.write");
+  const canReadFacilities = can(orgContext.membershipPermissions, "facilities.read") || can(orgContext.membershipPermissions, "facilities.write");
 
   const cards = [
     {
@@ -45,6 +46,13 @@ export default async function OrgManageOverviewPage({ params }: { params: Promis
       href: `/${orgSlug}/tools/manage/billing`,
       cta: "Open Billing",
       enabled: canManageOrg
+    },
+    {
+      title: "Facilities",
+      description: "Manage facility spaces, bookings, blackouts, and approvals.",
+      href: `/${orgSlug}/tools/facilities`,
+      cta: "Open Facilities",
+      enabled: canReadFacilities
     }
   ].filter((card) => card.enabled);
 
@@ -53,7 +61,7 @@ export default async function OrgManageOverviewPage({ params }: { params: Promis
       <PageHeader
         description="Configure organization details, access, and billing from one place."
         showBorder={false}
-        title={`${orgContext.orgName} Manage`}
+        title={`Manage`}
       />
 
       {cards.length === 0 ? <Alert variant="info">No organization management modules are available with your current permissions.</Alert> : null}

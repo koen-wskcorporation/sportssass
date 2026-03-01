@@ -11,6 +11,7 @@ import {
   FileText,
   GripVertical,
   LayoutDashboard,
+  MapPinned,
   Palette,
   Pencil,
   Plus,
@@ -30,6 +31,7 @@ import { PublishStatusIcon } from "@/components/ui/publish-status-icon";
 import { useToast } from "@/components/ui/toast";
 import { getOrgAdminNavItems, type OrgAdminNavIcon } from "@/lib/org/toolsNav";
 import { cn } from "@/lib/utils";
+import { AiAssistantLauncher } from "@/modules/ai/components/AiAssistantLauncher";
 import { saveOrgPagesAction, savePageSettingsAction } from "@/modules/site-builder/actions";
 import {
   ORG_SITE_EDITOR_STATE_EVENT,
@@ -47,6 +49,8 @@ type OrgHeaderProps = {
   governingBodyName?: string | null;
   canManageOrg: boolean;
   canEditPages: boolean;
+  showAiAssistant: boolean;
+  canActWithAi: boolean;
   pages: OrgManagePage[];
 };
 
@@ -59,7 +63,8 @@ const toolsNavIconMap: Record<OrgAdminNavIcon, LucideIcon> = {
   "credit-card": CreditCard,
   layout: LayoutDashboard,
   calendar: CalendarDays,
-  "file-text": FileText
+  "file-text": FileText,
+  map: MapPinned
 };
 
 function getOrgInitial(orgName: string) {
@@ -178,7 +183,18 @@ function EditableMenuItem({
   );
 }
 
-export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, governingBodyName, canManageOrg, canEditPages, pages }: OrgHeaderProps) {
+export function OrgHeader({
+  orgSlug,
+  orgName,
+  orgLogoUrl,
+  governingBodyLogoUrl,
+  governingBodyName,
+  canManageOrg,
+  canEditPages,
+  showAiAssistant,
+  canActWithAi,
+  pages
+}: OrgHeaderProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
   const router = useRouter();
@@ -560,7 +576,7 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
             {canEditCurrentPage && !hasInlineEditingActive ? (
               <button className={buttonVariants({ size: "sm", variant: "ghost" })} onClick={() => openEditorOnPath(currentPathname || orgBasePath)} type="button">
                 <Pencil className="h-4 w-4" />
-                Edit page
+                Edit Page
               </button>
             ) : null}
 
@@ -576,8 +592,12 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
                 type="button"
               >
                 <LayoutDashboard className="h-4 w-4" />
-                Edit menu
+                Edit Menu
               </button>
+            ) : null}
+
+            {showAiAssistant && !hasInlineEditingActive ? (
+              <AiAssistantLauncher buttonVariant="ghost" canAct={canActWithAi} orgSlug={orgSlug} />
             ) : null}
 
             {canManageOrg && !hasInlineEditingActive ? (
@@ -596,8 +616,8 @@ export function OrgHeader({ orgSlug, orgName, orgLogoUrl, governingBodyLogoUrl, 
                   onClick={() => setIsToolsMenuOpen((current) => !current)}
                   type="button"
                 >
-                  <Settings className="h-4 w-4" />
-                  Admin
+                  <Wrench className="h-4 w-4" />
+                  Tools
                   <ChevronDown className={cn("h-4 w-4 transition-transform", isToolsMenuOpen ? "rotate-180" : "rotate-0")} />
                 </button>
                 {isToolsMenuOpen ? (

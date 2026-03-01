@@ -6,9 +6,11 @@ import {
   ClipboardCheck,
   LayoutDashboard,
   LayoutList,
+  MapPinned,
   Megaphone,
   PanelTop,
   Sparkles,
+  TableProperties,
   type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -61,6 +63,14 @@ const tileMetaByType: Record<
   form_embed: {
     icon: ClipboardCheck,
     description: "Show a published form directly on the page for signed-in users."
+  },
+  facility_availability_calendar: {
+    icon: MapPinned,
+    description: "Public-facing calendar feed of facility bookings and blackout windows."
+  },
+  facility_space_list: {
+    icon: TableProperties,
+    description: "Hierarchical status list for spaces with open/closed/booked indicators."
   }
 };
 

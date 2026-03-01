@@ -82,6 +82,50 @@ npm run typecheck
 npm run lint
 ```
 
+## AI Assistant
+
+Environment variables:
+
+- `OPENAI_API_KEY` (required, server-only)
+- `OPENAI_MODEL` (optional, defaults to `gpt-4.1-mini`)
+
+API contract:
+
+- `POST /api/ai`
+- Request body:
+  - `orgSlug?: string`
+  - `userMessage: string`
+  - `mode: "ask" | "act"`
+  - `conversation: { role: "user" | "assistant"; content: string }[]`
+  - `phase?: "plan" | "confirm" | "cancel"`
+  - `proposalId?: string`
+  - `entitySelections?: Record<string, string>`
+- Response is SSE with events:
+  - `assistant.delta`
+  - `assistant.done`
+  - `tool.call`
+  - `tool.result`
+  - `proposal.ready`
+  - `execution.result`
+  - `error`
+
+Execution model:
+
+1. User requests action in `act` mode.
+2. Assistant resolves entities and produces a dry-run proposal + changeset.
+3. UI shows **Confirm & Run**.
+4. Server executes only after explicit confirm (`phase="confirm"`).
+5. All act interactions are written to `audit_logs`.
+
+### Adding a new AI Tool/Intent
+
+1. Add a Zod input schema in [`modules/ai/schemas.ts`](/Users/koenstewart/Documents/Sports SaaS/modules/ai/schemas.ts).
+2. Implement tool handler in [`modules/ai/tools/`](/Users/koenstewart/Documents/Sports SaaS/modules/ai/tools).
+3. Define required permission(s), dry-run behavior, and execute behavior.
+4. Register in [`modules/ai/tools/registry.ts`](/Users/koenstewart/Documents/Sports SaaS/modules/ai/tools/registry.ts) and expose JSON schema for OpenAI tool calling.
+5. For executable actions, emit a versioned `AiChangesetV1` and wire confirm-time execution through `execute_changes`.
+6. Add/extend migrations or RPCs as needed for transactional writes and stale-precondition checks.
+
 ## Site Management
 
 - Use `/{orgSlug}/manage/site` to manage pages and navigation.
