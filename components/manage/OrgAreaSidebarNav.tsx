@@ -141,7 +141,7 @@ function shouldAutoCollapse(pathname: string, config: OrgAreaSidebarConfig) {
 }
 
 function SoonBadge() {
-  return <Chip className="normal-case tracking-normal" color="neutral" size="small">Soon</Chip>;
+  return <Chip className="normal-case tracking-normal" color="neutral">Soon</Chip>;
 }
 
 export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }: OrgAreaSidebarNavProps) {
@@ -275,7 +275,7 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
     <aside
       className={cn(
         "border border-border bg-surface transition-[width,padding,border-radius] duration-200",
-        mobile ? "rounded-card p-4 shadow-card" : collapsed ? "w-20 rounded-[999px] p-4 shadow-card" : "w-[280px] rounded-card p-4 shadow-card"
+        mobile ? "rounded-card p-4 shadow-card" : collapsed ? "w-20 rounded-card p-4 shadow-card" : "w-[280px] rounded-card p-4 shadow-card"
       )}
     >
       {showHeader && !collapsed ? (

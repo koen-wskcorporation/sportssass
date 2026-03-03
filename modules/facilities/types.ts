@@ -1,4 +1,4 @@
-export type FacilitySpaceKind = "building" | "room" | "field" | "court" | "custom";
+export type FacilitySpaceKind = "building" | "floor" | "room" | "field" | "court" | "custom";
 
 export type FacilitySpaceStatus = "open" | "closed" | "archived";
 

@@ -42,6 +42,7 @@ import {
   ORG_SITE_SET_EDITOR_EVENT
 } from "@/modules/site-builder/events";
 import type { OrgManagePage } from "@/modules/site-builder/types";
+import { ProgramHeaderBar } from "@/components/shared/ProgramHeaderBar";
 
 type OrgHeaderProps = {
   orgSlug: string;
@@ -171,6 +172,7 @@ function EditableMenuItem({
             isPublished={page.isPublished}
             onToggle={() => onToggleVisibility(page)}
             publishLabel="Show in menu"
+            size="compact"
             statusLabel={page.isPublished ? `Published status for ${page.title}` : `Hidden status for ${page.title}`}
             unpublishLabel="Hide from menu"
           />
@@ -718,6 +720,8 @@ export function OrgHeader({
             ) : null}
           </div>
         </div>
+
+        <ProgramHeaderBar orgSlug={orgSlug} />
 
       </div>
 

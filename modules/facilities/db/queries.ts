@@ -336,6 +336,36 @@ export async function updateFacilitySpaceRecord(input: {
   return mapSpace(data as SpaceRow);
 }
 
+export async function updateFacilitySpaceHierarchyRecord(input: {
+  orgId: string;
+  spaceId: string;
+  parentSpaceId: string | null;
+  sortIndex: number;
+}): Promise<void> {
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase
+    .from("facility_spaces")
+    .update({
+      parent_space_id: input.parentSpaceId,
+      sort_index: input.sortIndex
+    })
+    .eq("org_id", input.orgId)
+    .eq("id", input.spaceId);
+
+  if (error) {
+    throw new Error(`Failed to update facility space hierarchy: ${error.message}`);
+  }
+}
+
+export async function deleteFacilitySpaceRecord(input: { orgId: string; spaceId: string }): Promise<void> {
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase.from("facility_spaces").delete().eq("org_id", input.orgId).eq("id", input.spaceId);
+
+  if (error) {
+    throw new Error(`Failed to delete facility space: ${error.message}`);
+  }
+}
+
 export async function listFacilityReservationRules(orgId: string, options?: { spaceId?: string }): Promise<FacilityReservationRule[]> {
   const supabase = await createSupabaseServer();
   let query = supabase

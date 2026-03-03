@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageTabs } from "@/components/ui/page-tabs";
 import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
+import { listCalendarReadModel, listOrgActiveTeams } from "@/modules/calendar/db/queries";
 import { FacilityManageDetailPanel, type FacilityManageDetailSection } from "@/modules/facilities/components/FacilityManageDetailPanel";
 import { listFacilityReservationReadModel } from "@/modules/facilities/db/queries";
 
@@ -25,7 +26,11 @@ export async function FacilityManageDetailPage({
     redirect("/forbidden");
   }
 
-  const readModel = await listFacilityReservationReadModel(orgContext.orgId);
+  const [readModel, calendarReadModel, activeTeams] = await Promise.all([
+    listFacilityReservationReadModel(orgContext.orgId),
+    listCalendarReadModel(orgContext.orgId),
+    listOrgActiveTeams(orgContext.orgId)
+  ]);
   const selectedSpace = readModel.spaces.find((space) => space.id === spaceId);
 
   if (!selectedSpace) {
@@ -48,6 +53,12 @@ export async function FacilityManageDetailPage({
             label: "Overview",
             description: "Status, visibility, and controls",
             href: `/${orgContext.orgSlug}/tools/facilities/${selectedSpace.id}/overview`
+          },
+          {
+            key: "structure",
+            label: "Structure",
+            description: "Floors, rooms, and nested layout",
+            href: `/${orgContext.orgSlug}/tools/facilities/${selectedSpace.id}/structure`
           },
           {
             key: "schedule",
@@ -73,7 +84,9 @@ export async function FacilityManageDetailPage({
       <FacilityManageDetailPanel
         activeSection={activeSection}
         canWrite={canWriteFacilities}
+        initialCalendarReadModel={calendarReadModel}
         initialReadModel={readModel}
+        activeTeams={activeTeams}
         orgSlug={orgContext.orgSlug}
         selectedSpace={selectedSpace}
       />

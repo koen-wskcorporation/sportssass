@@ -153,7 +153,7 @@ export function OccurrencePreviewPanel({
                   <p className="truncate text-sm font-semibold text-text">{occurrence.title || "Program session"}</p>
                   <p className="text-xs text-text-muted">{formatOccurrenceDateTime(occurrence)}</p>
                   <div className="flex items-center gap-2">
-                    <Chip color={source.color} size="small">
+                    <Chip color={source.color}>
                       {source.label}
                     </Chip>
                     <p className="text-[11px] text-text-muted">{occurrence.timezone}</p>

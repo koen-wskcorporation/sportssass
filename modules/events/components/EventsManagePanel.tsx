@@ -18,6 +18,7 @@ import { useToast } from "@/components/ui/toast";
 import { createEventAction, deleteEventAction, updateEventAction } from "@/modules/events/actions";
 import type { OrgEvent } from "@/modules/events/types";
 
+// Deprecated: old events UI; active routing now redirects to /tools/calendar.
 type EventsManagePanelProps = {
   orgSlug: string;
   events: OrgEvent[];

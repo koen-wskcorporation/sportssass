@@ -216,7 +216,7 @@ export function FacilityTreeEditor({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <CardTitle>Facility Spaces</CardTitle>
-            <CardDescription>Build a deep hierarchy across buildings, rooms, fields, courts, and custom spaces.</CardDescription>
+            <CardDescription>Build a deep hierarchy across buildings, floors, rooms, fields, courts, and custom spaces.</CardDescription>
           </div>
           <Button disabled={!canWrite} onClick={openCreatePanel} type="button">
             <Plus className="h-4 w-4" />
@@ -295,6 +295,7 @@ export function FacilityTreeEditor({
               onChange={(event) => setDraft((current) => ({ ...current, spaceKind: event.target.value as FacilitySpace["spaceKind"] }))}
               options={[
                 { value: "building", label: "Building" },
+                { value: "floor", label: "Floor" },
                 { value: "room", label: "Room" },
                 { value: "field", label: "Field" },
                 { value: "court", label: "Court" },

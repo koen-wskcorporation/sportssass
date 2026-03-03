@@ -1,82 +1,62 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import {
-  approveFacilityReservationAction,
   archiveFacilitySpaceAction,
-  cancelBlackoutAction,
-  cancelFacilityReservationAction,
-  createBlackoutAction,
-  createFacilityReservationAction,
-  deleteFacilityReservationRuleAction,
-  rejectFacilityReservationAction,
-  restoreFacilityReservationAction,
+  createFacilitySpaceAction,
+  deleteFacilitySpaceAction,
   toggleFacilitySpaceBookableAction,
   toggleFacilitySpaceOpenClosedAction,
-  updateBlackoutAction,
-  updateFacilityReservationAction,
-  upsertFacilityReservationRuleAction
+  updateFacilitySpaceAction
 } from "@/modules/facilities/actions";
 import { FacilityStatusBadge } from "@/modules/facilities/components/FacilityStatusBadge";
-import { FacilitySchedulePanel, toRulePayloadFromDraft, type RuleDraft } from "@/modules/facilities/components/FacilitySchedulePanel";
+import { FacilityStructurePanel } from "@/modules/facilities/components/FacilityStructurePanel";
 import { buildFacilitySpaceStatusOptions, formatFacilitySpaceStatusLabel, resolveFacilitySpaceStatusLabels } from "@/modules/facilities/status";
 import type { FacilityReservationException, FacilityReservationReadModel, FacilitySpace } from "@/modules/facilities/types";
-import type { ReservationEditorSubmitInput } from "@/modules/facilities/components/ReservationEditorPanel";
+import { FacilityCalendarWorkspace } from "@/modules/calendar/components/FacilityCalendarWorkspace";
+import type { CalendarReadModel } from "@/modules/calendar/types";
 
-export type FacilityManageDetailSection = "overview" | "schedule" | "exceptions" | "settings";
+export type FacilityManageDetailSection = "overview" | "structure" | "schedule" | "exceptions" | "settings";
 
 type FacilityManageDetailPanelProps = {
   orgSlug: string;
   canWrite: boolean;
   selectedSpace: FacilitySpace;
   initialReadModel: FacilityReservationReadModel;
+  initialCalendarReadModel: CalendarReadModel;
+  activeTeams: Array<{ id: string; label: string }>;
   activeSection: FacilityManageDetailSection;
 };
 
-function normalizeReservationInput(input: ReservationEditorSubmitInput, selectedSpaceId: string) {
-  return {
-    spaceId: input.spaceId || selectedSpaceId,
-    reservationKind: input.reservationKind,
-    status: input.status,
-    localDate: input.localDate,
-    localStartTime: input.localStartTime,
-    localEndTime: input.localEndTime,
-    timezone: input.timezone,
-    publicLabel: input.publicLabel,
-    internalNotes: input.internalNotes,
-    eventId: input.eventId || null,
-    programId: input.programId || null,
-    conflictOverride: input.conflictOverride
-  };
-}
-
-export function FacilityManageDetailPanel({ orgSlug, canWrite, selectedSpace, initialReadModel, activeSection }: FacilityManageDetailPanelProps) {
+export function FacilityManageDetailPanel({
+  orgSlug,
+  canWrite,
+  selectedSpace,
+  initialReadModel,
+  initialCalendarReadModel,
+  activeTeams,
+  activeSection
+}: FacilityManageDetailPanelProps) {
   const { toast } = useToast();
   const [readModel, setReadModel] = useState(initialReadModel);
   const [isMutating, startTransition] = useTransition();
+
   const currentSelectedSpace = useMemo(
     () => readModel.spaces.find((space) => space.id === selectedSpace.id) ?? selectedSpace,
     [readModel.spaces, selectedSpace]
   );
-  const selectedSpaceStatusLabels = useMemo(() => resolveFacilitySpaceStatusLabels(currentSelectedSpace), [currentSelectedSpace]);
-  const selectedSpaceStatusOptions = useMemo(
-    () => buildFacilitySpaceStatusOptions(selectedSpaceStatusLabels),
-    [selectedSpaceStatusLabels]
-  );
 
-  const scopedReservations = useMemo(
-    () => readModel.reservations.filter((reservation) => reservation.spaceId === currentSelectedSpace.id),
-    [currentSelectedSpace.id, readModel.reservations]
-  );
-  const scopedRules = useMemo(
-    () => readModel.rules.filter((rule) => rule.spaceId === currentSelectedSpace.id),
+  const selectedSpaceStatusLabels = useMemo(() => resolveFacilitySpaceStatusLabels(currentSelectedSpace), [currentSelectedSpace]);
+  const selectedSpaceStatusOptions = useMemo(() => buildFacilitySpaceStatusOptions(selectedSpaceStatusLabels), [selectedSpaceStatusLabels]);
+
+  const scopedRuleIds = useMemo(
+    () => new Set(readModel.rules.filter((rule) => rule.spaceId === currentSelectedSpace.id).map((rule) => rule.id)),
     [currentSelectedSpace.id, readModel.rules]
   );
-  const scopedRuleIds = useMemo(() => new Set(scopedRules.map((rule) => rule.id)), [scopedRules]);
+
   const scopedExceptions = useMemo(
     () => readModel.exceptions.filter((exception) => scopedRuleIds.has(exception.ruleId)),
     [readModel.exceptions, scopedRuleIds]
@@ -88,7 +68,7 @@ export function FacilityManageDetailPanel({ orgSlug, canWrite, selectedSpace, in
 
   function withToast<T extends { readModel: FacilityReservationReadModel }>(
     mutation: () => Promise<{ ok: true; data: T } | { ok: false; error: string }>,
-    successTitle: string
+    successTitle?: string
   ) {
     startTransition(async () => {
       const result = await mutation();
@@ -102,25 +82,13 @@ export function FacilityManageDetailPanel({ orgSlug, canWrite, selectedSpace, in
       }
 
       applyReadModel(result.data.readModel);
-      toast({
-        title: successTitle,
-        variant: "success"
-      });
+      if (successTitle) {
+        toast({
+          title: successTitle,
+          variant: "success"
+        });
+      }
     });
-  }
-
-  function handleRuleSave(draft: RuleDraft) {
-    const payload = toRulePayloadFromDraft(draft);
-
-    withToast(
-      () =>
-        upsertFacilityReservationRuleAction({
-          orgSlug,
-          ...payload,
-          spaceId: payload.spaceId || currentSelectedSpace.id
-        }),
-      "Rule saved"
-    );
   }
 
   function handleExceptionSummary(exceptions: FacilityReservationException[]) {
@@ -135,8 +103,6 @@ export function FacilityManageDetailPanel({ orgSlug, canWrite, selectedSpace, in
 
   return (
     <div className="ui-stack-page">
-      {isMutating ? <Alert variant="info">Saving facilities changes...</Alert> : null}
-
       {activeSection === "overview" ? (
         <Card>
           <CardHeader>
@@ -170,9 +136,7 @@ export function FacilityManageDetailPanel({ orgSlug, canWrite, selectedSpace, in
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-text-muted">
-              Use the tabs to manage bookings, review exceptions, and update settings for this facility.
-            </p>
+            <p className="text-sm text-text-muted">Use the tabs to manage bookings, review exceptions, and update settings for this facility.</p>
           </CardContent>
         </Card>
       ) : null}
@@ -180,12 +144,8 @@ export function FacilityManageDetailPanel({ orgSlug, canWrite, selectedSpace, in
       {activeSection === "settings" ? (
         <Card>
           <CardHeader>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <CardTitle>Facility settings</CardTitle>
-                <CardDescription>Update status, booking controls, and archive state.</CardDescription>
-              </div>
-            </div>
+            <CardTitle>Facility settings</CardTitle>
+            <CardDescription>Update status, booking controls, and archive state.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -253,135 +213,60 @@ export function FacilityManageDetailPanel({ orgSlug, canWrite, selectedSpace, in
         </Card>
       ) : null}
 
-      {activeSection === "schedule" ? (
-        <FacilitySchedulePanel
+      {activeSection === "structure" ? (
+        <FacilityStructurePanel
           canWrite={canWrite}
-          onApproveReservation={(reservationId) =>
+          isMutating={isMutating}
+          onArchiveSpace={(spaceId) =>
             withToast(
               () =>
-                approveFacilityReservationAction({
+                archiveFacilitySpaceAction({
                   orgSlug,
-                  reservationId
-                }),
-              "Reservation approved"
+                  spaceId
+                })
             )
           }
-          onCancelBlackout={(reservationId) =>
+          onCreateSpace={(input) =>
             withToast(
               () =>
-                cancelBlackoutAction({
+                createFacilitySpaceAction({
                   orgSlug,
-                  reservationId
-                }),
-              "Blackout cancelled"
+                  ...input
+                })
             )
           }
-          onCancelReservation={(reservationId) =>
+          onDeleteSpace={(spaceId) =>
             withToast(
               () =>
-                cancelFacilityReservationAction({
+                deleteFacilitySpaceAction({
                   orgSlug,
-                  reservationId
-                }),
-              "Reservation cancelled"
+                  spaceId
+                })
             )
           }
-          onCreateBlackout={(input: ReservationEditorSubmitInput) =>
+          onUpdateSpace={(input) =>
             withToast(
               () =>
-                createBlackoutAction({
+                updateFacilitySpaceAction({
                   orgSlug,
-                  ...normalizeReservationInput(input, currentSelectedSpace.id),
-                  reservationKind: "blackout"
-                }),
-              "Blackout created"
+                  ...input
+                })
             )
           }
-          onCreateReservation={(input: ReservationEditorSubmitInput) =>
-            withToast(
-              () =>
-                createFacilityReservationAction({
-                  orgSlug,
-                  ...normalizeReservationInput(input, currentSelectedSpace.id)
-                }),
-              "Reservation created"
-            )
-          }
-          onDeleteRule={(ruleId) =>
-            withToast(
-              () =>
-                deleteFacilityReservationRuleAction({
-                  orgSlug,
-                  ruleId
-                }),
-              "Rule deleted"
-            )
-          }
-          onRejectReservation={(reservationId) =>
-            withToast(
-              () =>
-                rejectFacilityReservationAction({
-                  orgSlug,
-                  reservationId
-                }),
-              "Reservation rejected"
-            )
-          }
-          onRestoreReservation={(reservationId) =>
-            withToast(
-              () =>
-                restoreFacilityReservationAction({
-                  orgSlug,
-                  reservationId
-                }),
-              "Reservation restored"
-            )
-          }
-          onSaveRule={handleRuleSave}
-          onUpdateBlackout={(input: ReservationEditorSubmitInput) =>
-            withToast(
-              () => {
-                if (!input.reservationId) {
-                  return Promise.resolve({
-                    ok: false as const,
-                    error: "Reservation ID is missing."
-                  });
-                }
+          orgSlug={orgSlug}
+          selectedSpace={currentSelectedSpace}
+          spaces={readModel.spaces}
+        />
+      ) : null}
 
-                return updateBlackoutAction({
-                  orgSlug,
-                  reservationId: input.reservationId,
-                  ...normalizeReservationInput(input, currentSelectedSpace.id),
-                  reservationKind: "blackout",
-                  status: input.status
-                });
-              },
-              "Blackout updated"
-            )
-          }
-          onUpdateReservation={(input: ReservationEditorSubmitInput) =>
-            withToast(
-              () => {
-                if (!input.reservationId) {
-                  return Promise.resolve({
-                    ok: false as const,
-                    error: "Reservation ID is missing."
-                  });
-                }
-
-                return updateFacilityReservationAction({
-                  orgSlug,
-                  reservationId: input.reservationId,
-                  ...normalizeReservationInput(input, currentSelectedSpace.id),
-                  status: input.status
-                });
-              },
-              "Reservation updated"
-            )
-          }
-          reservations={scopedReservations}
-          rules={scopedRules}
-          spaces={[currentSelectedSpace]}
+      {activeSection === "schedule" ? (
+        <FacilityCalendarWorkspace
+          activeTeams={activeTeams}
+          canWrite={canWrite}
+          initialReadModel={initialCalendarReadModel}
+          orgSlug={orgSlug}
+          spaceId={currentSelectedSpace.id}
+          spaceName={currentSelectedSpace.name}
         />
       ) : null}
 
