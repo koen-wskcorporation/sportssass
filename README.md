@@ -69,7 +69,19 @@ Use this branch strategy:
 
 - `.env.local`: local development values
 - `.env.production`: production values template/source for deployment env setup
+- `.env.develop.example`: develop/staging values template for dev branch deploys
 - `.env.staging.example`: staging values template/source for deployment env setup
+
+### Dev branch DB workflow
+
+When shipping changes to `develop`, keep database changes isolated to staging:
+
+1. Link Supabase CLI to staging project:
+   - `supabase link --project-ref <staging-project-ref>`
+2. Apply new migrations to staging:
+   - `supabase db push`
+3. Validate app behavior on `develop` deployment.
+4. Promote to production only through `develop` -> `main`.
 
 ### Release flow
 
