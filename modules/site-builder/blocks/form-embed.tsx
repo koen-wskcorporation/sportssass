@@ -6,7 +6,9 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { asBody, asObject, asText } from "@/modules/site-builder/blocks/helpers";
+import { FormSubmissionClosedPanel } from "@/modules/forms/components/FormSubmissionClosedPanel";
 import { RegistrationFormClient } from "@/modules/forms/components/RegistrationFormClient";
+import { getFormRequireSignIn } from "@/modules/forms/settings";
 import type { BlockContext, BlockEditorProps, BlockRenderProps, FormEmbedBlockConfig } from "@/modules/site-builder/types";
 
 function defaultFormEmbedConfig(_: BlockContext): FormEmbedBlockConfig {
@@ -45,7 +47,8 @@ export function FormEmbedBlockRender({ block, context, runtimeData, isEditing }:
   const formRuntime = runtimeData.formEmbed;
   const publishedForms = formRuntime?.publishedForms ?? [];
   const selectedForm = publishedForms.find((form) => form.id === block.config.formId) ?? null;
-  const requireSignIn = selectedForm ? selectedForm.settingsJson.requireSignIn !== false : true;
+  const submissionGate = selectedForm ? formRuntime?.submissionGateByFormId[selectedForm.id] : null;
+  const requireSignIn = selectedForm ? getFormRequireSignIn(selectedForm) : true;
 
   return (
     <section id="form-embed">
@@ -60,6 +63,13 @@ export function FormEmbedBlockRender({ block, context, runtimeData, isEditing }:
             <Alert variant="info">Choose a published form in block settings to display it here.</Alert>
           ) : isEditing ? (
             <Alert variant="info">Preview mode. Save and view the page to complete this form.</Alert>
+          ) : submissionGate?.submissionCapReached ? (
+            <FormSubmissionClosedPanel
+              description={submissionGate.submissionClosedPageDescription}
+              submissionCap={submissionGate.submissionCap}
+              submissionCount={submissionGate.submissionCount}
+              title={submissionGate.submissionClosedPageTitle}
+            />
           ) : !formRuntime?.viewer && requireSignIn ? (
             <div className="space-y-3">
               <Alert variant="info">Sign in to complete this form.</Alert>

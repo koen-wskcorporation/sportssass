@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { saveFormDraftAction } from "@/modules/forms/actions";
+import { getFormSubmissionCap } from "@/modules/forms/settings";
 import type { OrgForm } from "@/modules/forms/types";
 import type { Program, ProgramNode } from "@/modules/programs/types";
 
@@ -18,6 +20,7 @@ type FormSettingsPanelProps = {
   form: OrgForm;
   programs: Program[];
   programNodes: ProgramNode[];
+  submissionCount: number;
   canWrite?: boolean;
 };
 
@@ -30,9 +33,10 @@ function slugify(value: string) {
     .replace(/^-|-$/g, "");
 }
 
-export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWrite = true }: FormSettingsPanelProps) {
+export function FormSettingsPanel({ orgSlug, form, programs, programNodes, submissionCount, canWrite = true }: FormSettingsPanelProps) {
   const { toast } = useToast();
   const [isSaving, startSaving] = useTransition();
+  const submissionCapDefaults = useMemo(() => getFormSubmissionCap(form), [form]);
 
   const [name, setName] = useState(form.name);
   const [slug, setSlug] = useState(form.slug);
@@ -44,7 +48,16 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
   const [lockedProgramNodeId, setLockedProgramNodeId] = useState(form.lockedProgramNodeId ?? "");
   const [allowMultiplePlayers, setAllowMultiplePlayers] = useState(Boolean(form.settingsJson.allowMultiplePlayers));
   const [requireSignIn, setRequireSignIn] = useState(form.settingsJson.requireSignIn !== false);
+  const [submissionCapEnabled, setSubmissionCapEnabled] = useState(submissionCapDefaults.enabled);
+  const [submissionCap, setSubmissionCap] = useState(submissionCapDefaults.cap ? String(submissionCapDefaults.cap) : "");
   const effectiveRequireSignIn = formKind === "program_registration" ? true : requireSignIn;
+  const parsedSubmissionCap = submissionCap.trim().length > 0 ? Number.parseInt(submissionCap, 10) : null;
+  const hasValidSubmissionCap = typeof parsedSubmissionCap === "number" && Number.isFinite(parsedSubmissionCap) && parsedSubmissionCap > 0;
+  const normalizedSubmissionCap = hasValidSubmissionCap ? parsedSubmissionCap : null;
+  const submissionCapRemaining = normalizedSubmissionCap !== null ? Math.max(normalizedSubmissionCap - submissionCount, 0) : null;
+  const submissionCapReached = Boolean(
+    formKind === "generic" && submissionCapEnabled && normalizedSubmissionCap !== null && submissionCount >= normalizedSubmissionCap
+  );
   const registrationProgramName = useMemo(() => programs.find((program) => program.id === programId)?.name ?? null, [programs, programId]);
 
   useEffect(() => {
@@ -81,6 +94,15 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
       return;
     }
 
+    if (formKind === "generic" && submissionCapEnabled && !hasValidSubmissionCap) {
+      toast({
+        title: "Submission cap required",
+        description: "Set a cap greater than 0 when cap mode is enabled.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     startSaving(async () => {
       const result = await saveFormDraftAction({
         orgSlug,
@@ -95,6 +117,8 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
         lockedProgramNodeId: targetMode === "locked" ? lockedProgramNodeId || null : null,
         allowMultiplePlayers,
         requireSignIn: effectiveRequireSignIn,
+        submissionCapEnabled: formKind === "generic" ? submissionCapEnabled : false,
+        submissionCap: formKind === "generic" ? normalizedSubmissionCap : null,
         schemaJson: JSON.stringify(form.schemaJson)
       });
 
@@ -233,6 +257,43 @@ export function FormSettingsPanel({ orgSlug, form, programs, programNodes, canWr
             Require sign-in to submit
             {formKind === "program_registration" ? " (required for registration forms)" : ""}
           </label>
+
+          {formKind === "generic" ? (
+            <div className="space-y-3 rounded-control border bg-surface-muted px-4 py-4 md:col-span-2">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-text">Submission cap</p>
+                <p className="text-xs text-text-muted">
+                  Current submissions: {submissionCount}
+                  {normalizedSubmissionCap !== null ? ` of ${normalizedSubmissionCap}` : ""}
+                  {submissionCapEnabled && submissionCapRemaining !== null ? ` (${submissionCapRemaining} remaining)` : ""}
+                </p>
+              </div>
+
+              <label className="ui-inline-toggle">
+                <Checkbox checked={submissionCapEnabled} disabled={!canWrite} onChange={(event) => setSubmissionCapEnabled(event.target.checked)} />
+                Stop new submissions after a specific count
+              </label>
+
+              {submissionCapEnabled ? (
+                <FormField hint="Users will be blocked once this many submissions are recorded." label="Maximum submissions">
+                  <Input
+                    disabled={!canWrite}
+                    min={1}
+                    onChange={(event) => setSubmissionCap(event.target.value)}
+                    step={1}
+                    type="number"
+                    value={submissionCap}
+                  />
+                </FormField>
+              ) : null}
+
+              <Alert variant="info">Edit the submissions-closed message in Builder on the locked "Submissions closed" page.</Alert>
+
+              {submissionCapReached ? (
+                <Alert variant="warning">Submission cap is currently reached. Users now see the closed page before they can start the form.</Alert>
+              ) : null}
+            </div>
+          ) : null}
 
           <FormField className="md:col-span-2" label="Description">
             <Textarea className="min-h-[90px]" disabled={!canWrite} onChange={(event) => setDescription(event.target.value)} value={description} />

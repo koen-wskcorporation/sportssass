@@ -4,8 +4,10 @@ import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { FormSubmissionClosedPanel } from "@/modules/forms/components/FormSubmissionClosedPanel";
 import { RegistrationFormClient } from "@/modules/forms/components/RegistrationFormClient";
-import { getFormBySlug } from "@/modules/forms/db/queries";
+import { getFormBySlug, getPublicFormSubmissionGate } from "@/modules/forms/db/queries";
+import { getFormRequireSignIn } from "@/modules/forms/settings";
 import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
 import { listPlayersForPicker } from "@/modules/players/db/queries";
 import { listProgramNodes } from "@/modules/programs/db/queries";
@@ -44,8 +46,25 @@ export default async function OrgFormRegistrationPage({
     notFound();
   }
 
+  const submissionGate = form.formKind === "generic" ? await getPublicFormSubmissionGate(org.orgSlug, form.slug).catch(() => null) : null;
+  if (submissionGate?.submissionCapReached) {
+    return (
+      <main className="app-page-shell w-full py-8 md:py-10">
+        <div className="ui-stack-page">
+          <PageHeader description={form.description ?? "Complete the form and submit registration."} title={form.name} />
+          <FormSubmissionClosedPanel
+            description={submissionGate.submissionClosedPageDescription}
+            submissionCap={submissionGate.submissionCap}
+            submissionCount={submissionGate.submissionCount}
+            title={submissionGate.submissionClosedPageTitle}
+          />
+        </div>
+      </main>
+    );
+  }
+
   const user = await getSessionUser();
-  const requireSignIn = form.formKind === "program_registration" || form.settingsJson.requireSignIn !== false;
+  const requireSignIn = getFormRequireSignIn(form);
 
   if (requireSignIn && !user) {
     redirect(`/auth/login?next=${encodeURIComponent(`/${org.orgSlug}/register/${form.slug}`)}`);

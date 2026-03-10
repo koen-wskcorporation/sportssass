@@ -6,7 +6,15 @@ import { REGISTRATION_PAGE_KEYS, REGISTRATION_PAGE_ORDER } from "@/modules/forms
 const fieldTypeValues = ["text", "textarea", "email", "phone", "number", "date", "select", "checkbox"] as const;
 const ruleOperatorValues = ["equals", "not_equals", "is_true", "is_false"] as const;
 const ruleEffectValues = ["show", "require"] as const;
-const pageKeyValues = ["generic_custom", "generic_success", "registration_player", "registration_division_questions", "registration_payment", "registration_success"] as const;
+const pageKeyValues = [
+  "generic_custom",
+  "generic_success",
+  "generic_submission_closed",
+  "registration_player",
+  "registration_division_questions",
+  "registration_payment",
+  "registration_success"
+] as const;
 
 const optionSchema = z.object({
   value: z.string().trim().min(1).max(120),
@@ -69,7 +77,7 @@ const legacyFormSchemaValidator = z.object({
   rules: z.array(ruleSchema).default([])
 });
 
-function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_custom" | "generic_success">): FormPage {
+function createRegistrationPageTemplate(pageKey: Exclude<FormPageKey, "generic_custom" | "generic_success" | "generic_submission_closed">): FormPage {
   if (pageKey === REGISTRATION_PAGE_KEYS.player) {
     return {
       id: "page-registration-player",
@@ -147,6 +155,19 @@ function createDefaultGenericSuccessPage(): FormPage {
   };
 }
 
+function createDefaultGenericSubmissionClosedPage(): FormPage {
+  return {
+    id: "page-submission-closed",
+    pageKey: "generic_submission_closed",
+    title: "This form is no longer accepting submissions",
+    description: "The submission limit has been reached. Please contact us if you have questions.",
+    fields: [],
+    successButtons: [],
+    showSubmitAnotherResponseButton: false,
+    locked: true
+  };
+}
+
 export function createDefaultRegistrationPages(): FormPage[] {
   return REGISTRATION_PAGE_ORDER.map((pageKey) => createRegistrationPageTemplate(pageKey));
 }
@@ -156,7 +177,10 @@ export function createDefaultFormSchema(name = "Form", formKind: FormKind = "gen
     version: 2,
     title: name,
     description: null,
-    pages: formKind === "program_registration" ? createDefaultRegistrationPages() : [createDefaultGenericPage(), createDefaultGenericSuccessPage()],
+    pages:
+      formKind === "program_registration"
+        ? createDefaultRegistrationPages()
+        : [createDefaultGenericPage(), createDefaultGenericSuccessPage(), createDefaultGenericSubmissionClosedPage()],
     rules: []
   };
 }
@@ -190,16 +214,18 @@ function normalizeField(field: {
 function mapGenericPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
   const mappedPages: FormPage[] = pages.map((page, index) => ({
     id: page.id,
-    pageKey: page.pageKey === "generic_success" ? "generic_success" : "generic_custom",
+    pageKey:
+      page.pageKey === "generic_success" ? "generic_success" : page.pageKey === "generic_submission_closed" ? "generic_submission_closed" : "generic_custom",
     title: page.title || `Page ${index + 1}`,
     description: page.description ?? null,
     fields: (page.fields ?? []).map((field) => normalizeField(field)),
     successButtons: normalizeButtons(page.successButtons, { max: 4 }),
     showSubmitAnotherResponseButton: Boolean(page.showSubmitAnotherResponseButton),
-    locked: page.pageKey === "generic_success"
+    locked: page.pageKey === "generic_success" || page.pageKey === "generic_submission_closed"
   }));
   const customPages = mappedPages.filter((page) => page.pageKey === "generic_custom");
   const successPage = mappedPages.find((page) => page.pageKey === "generic_success");
+  const submissionClosedPage = mappedPages.find((page) => page.pageKey === "generic_submission_closed");
 
   return [
     ...(customPages.length > 0 ? customPages : [createDefaultGenericPage()]),
@@ -212,7 +238,17 @@ function mapGenericPages(pages: Array<z.infer<typeof pageSchema>>): FormPage[] {
           showSubmitAnotherResponseButton: Boolean(successPage.showSubmitAnotherResponseButton),
           locked: true
         }
-      : createDefaultGenericSuccessPage()
+      : createDefaultGenericSuccessPage(),
+    submissionClosedPage
+      ? {
+          ...submissionClosedPage,
+          pageKey: "generic_submission_closed",
+          fields: [],
+          successButtons: [],
+          showSubmitAnotherResponseButton: false,
+          locked: true
+        }
+      : createDefaultGenericSubmissionClosedPage()
   ];
 }
 
@@ -322,7 +358,8 @@ function parseLegacySchema(value: unknown, fallbackName: string, formKind: FormK
 
   const pagesWithSuccess = [
     ...pages,
-    createDefaultGenericSuccessPage()
+    createDefaultGenericSuccessPage(),
+    createDefaultGenericSubmissionClosedPage()
   ];
 
   return {

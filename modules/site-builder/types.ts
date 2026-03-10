@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type { LinkValue, SiteButton } from "@/lib/links";
 import type { CalendarPublicCatalogItem } from "@/modules/calendar/types";
-import type { OrgForm } from "@/modules/forms/types";
+import type { OrgForm, PublicFormSubmissionGate } from "@/modules/forms/types";
 import type { PlayerPickerItem } from "@/modules/players/types";
 import type { ProgramCatalogItem } from "@/modules/programs/types";
 import type { ProgramNode } from "@/modules/programs/types";
@@ -204,6 +204,7 @@ export type OrgSiteRuntimeData = {
   };
   formEmbed?: {
     publishedForms: OrgForm[];
+    submissionGateByFormId: Record<string, PublicFormSubmissionGate>;
     viewer: {
       id: string;
       email: string | null;

@@ -66,6 +66,26 @@ export type FacilityMapReadModel = {
   nodes: FacilityNode[];
 };
 
+export type FacilityMapDraftNode = {
+  id: string;
+  publishedNodeId: string | null;
+  parentId: string | null;
+  name: string;
+  nodeKind: FacilityNodeKind;
+  status: FacilityStatus;
+  isBookable: boolean;
+  capacity: number | null;
+  layout: FacilityNodeLayout;
+  metadataJson: Record<string, unknown>;
+  sortIndex: number;
+};
+
+export type FacilityMapDraft = {
+  version: 1;
+  updatedAtUtc: string;
+  nodes: FacilityMapDraftNode[];
+};
+
 export type FacilityBookingSelectionPayload = {
   occurrenceId: string;
   facilityId: string;

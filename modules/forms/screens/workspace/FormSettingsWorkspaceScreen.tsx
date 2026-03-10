@@ -10,7 +10,7 @@ import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
 import { can } from "@/lib/permissions/can";
 import { FormPublishToggleButton } from "@/modules/forms/components/FormPublishToggleButton";
 import { FormSettingsPanel } from "@/modules/forms/components/FormSettingsPanel";
-import { getFormById } from "@/modules/forms/db/queries";
+import { getFormById, getFormSubmissionCount } from "@/modules/forms/db/queries";
 import { listProgramNodes, listProgramsForManage } from "@/modules/programs/db/queries";
 
 export const metadata: Metadata = {
@@ -37,9 +37,10 @@ export default async function OrgManageFormSettingsRedirectPage({
 
   const canWriteForms = can(orgContext.membershipPermissions, "forms.write");
   const canAccessPrograms = can(orgContext.membershipPermissions, "programs.read") || can(orgContext.membershipPermissions, "programs.write");
-  const [programs, programNodes] = await Promise.all([
+  const [programs, programNodes, submissionCount] = await Promise.all([
     canAccessPrograms ? listProgramsForManage(orgContext.orgId) : Promise.resolve([]),
-    canAccessPrograms && form.programId ? listProgramNodes(form.programId) : Promise.resolve([])
+    canAccessPrograms && form.programId ? listProgramNodes(form.programId) : Promise.resolve([]),
+    getFormSubmissionCount(orgContext.orgId, form.id)
   ]);
   const statusLabel = form.status === "published" ? "Published" : "Not published";
   const statusColor = form.status === "published" ? "green" : "yellow";
@@ -94,7 +95,14 @@ export default async function OrgManageFormSettingsRedirectPage({
         ]}
       />
       {!canWriteForms ? <Alert variant="info">You have read-only access to this form.</Alert> : null}
-      <FormSettingsPanel canWrite={canWriteForms} form={form} orgSlug={orgContext.orgSlug} programNodes={programNodes} programs={programs} />
+      <FormSettingsPanel
+        canWrite={canWriteForms}
+        form={form}
+        orgSlug={orgContext.orgSlug}
+        programNodes={programNodes}
+        programs={programs}
+        submissionCount={submissionCount}
+      />
     </PageStack>
   );
 }

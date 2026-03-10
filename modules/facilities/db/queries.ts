@@ -189,6 +189,29 @@ export async function updateFacilityRecord(input: {
   return mapFacility(data as FacilityRow);
 }
 
+export async function updateFacilityMetadataRecord(input: {
+  orgId: string;
+  facilityId: string;
+  metadataJson: Record<string, unknown>;
+}): Promise<Facility> {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase
+    .from("facilities")
+    .update({
+      metadata_json: input.metadataJson
+    })
+    .eq("org_id", input.orgId)
+    .eq("id", input.facilityId)
+    .select(facilitySelect)
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update facility metadata: ${error.message}`);
+  }
+
+  return mapFacility(data as FacilityRow);
+}
+
 export async function deleteFacilityRecord(input: { orgId: string; facilityId: string }): Promise<void> {
   const supabase = await createSupabaseServer();
   const { error } = await supabase.from("facilities").delete().eq("org_id", input.orgId).eq("id", input.facilityId);

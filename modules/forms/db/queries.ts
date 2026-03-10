@@ -12,7 +12,8 @@ import type {
   SubmissionStatus,
   TargetMode,
   FormKind,
-  FormStatus
+  FormStatus,
+  PublicFormSubmissionGate
 } from "@/modules/forms/types";
 
 const formSelect =
@@ -126,6 +127,17 @@ type GoogleSheetSyncRunRow = {
   started_at: string;
   completed_at: string | null;
   created_at: string;
+};
+
+type PublicFormSubmissionGateRow = {
+  form_id: string;
+  form_kind: FormKind;
+  submission_count: number | string;
+  submission_cap_enabled: boolean | null;
+  submission_cap: number | string | null;
+  submission_cap_reached: boolean | null;
+  submission_closed_page_title: string | null;
+  submission_closed_page_description: string | null;
 };
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -247,6 +259,27 @@ function mapGoogleSheetSyncRun(row: GoogleSheetSyncRunRow): OrgFormGoogleSheetSy
     startedAt: row.started_at,
     completedAt: row.completed_at,
     createdAt: row.created_at
+  };
+}
+
+function mapPublicFormSubmissionGate(row: PublicFormSubmissionGateRow): PublicFormSubmissionGate {
+  const rawCap =
+    typeof row.submission_cap === "number"
+      ? row.submission_cap
+      : typeof row.submission_cap === "string" && row.submission_cap.trim().length > 0
+        ? Number.parseInt(row.submission_cap, 10)
+        : Number.NaN;
+  const normalizedCap = Number.isFinite(rawCap) && rawCap > 0 ? Math.trunc(rawCap) : null;
+
+  return {
+    formId: row.form_id,
+    formKind: row.form_kind,
+    submissionCount: Number(row.submission_count ?? 0),
+    submissionCapEnabled: Boolean(row.submission_cap_enabled),
+    submissionCap: normalizedCap,
+    submissionCapReached: Boolean(row.submission_cap_reached),
+    submissionClosedPageTitle: row.submission_closed_page_title ?? "",
+    submissionClosedPageDescription: row.submission_closed_page_description ?? ""
   };
 }
 
@@ -453,6 +486,44 @@ export async function listFormSubmissions(orgId: string, formId: string): Promis
   }
 
   return (data ?? []).map((row) => mapSubmission(row as SubmissionRow));
+}
+
+export async function getFormSubmissionCount(orgId: string, formId: string): Promise<number> {
+  const supabase = await createSupabaseServer();
+  const { count, error } = await supabase
+    .from("org_form_submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("form_id", formId);
+
+  if (error) {
+    throw new Error(`Failed to count submissions: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+
+export async function getPublicFormSubmissionGate(orgSlug: string, formSlug: string): Promise<PublicFormSubmissionGate | null> {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase.rpc("get_form_submission_gate", {
+    input_org_slug: orgSlug,
+    input_form_slug: formSlug
+  });
+
+  if (error) {
+    if (error.message.includes("FORM_NOT_FOUND") || error.message.includes("ORG_NOT_FOUND")) {
+      return null;
+    }
+
+    throw new Error(`Failed to load form submission gate: ${error.message}`);
+  }
+
+  const row = Array.isArray(data) ? (data[0] as PublicFormSubmissionGateRow | undefined) : undefined;
+  if (!row) {
+    return null;
+  }
+
+  return mapPublicFormSubmissionGate(row);
 }
 
 export async function listFormSubmissionsWithEntries(orgId: string, formId: string): Promise<FormSubmissionWithEntries[]> {

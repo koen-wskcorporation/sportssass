@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { submitFormResponseAction } from "@/modules/forms/actions";
+import { getFormAllowMultiplePlayers } from "@/modules/forms/settings";
 import { REGISTRATION_PAGE_KEYS } from "@/modules/forms/types";
 import { createPlayerAction } from "@/modules/players/actions";
 import { resolveButtonHref } from "@/lib/links";
@@ -297,11 +298,13 @@ function parseStoredFormProgress(raw: string): StoredFormProgress | null {
 export function RegistrationFormClient({ orgSlug, formSlug, form, players, programNodes }: RegistrationFormClientProps) {
   const { toast } = useToast();
 
-  const allowMultiplePlayers = Boolean(form.settingsJson.allowMultiplePlayers);
+  const allowMultiplePlayers = getFormAllowMultiplePlayers(form);
   const requiresPlayers = form.formKind === "program_registration";
   const schemaPages = form.schemaJson.pages;
   const successPage = schemaPages.find((page) => page.pageKey === "generic_success" || page.pageKey === REGISTRATION_PAGE_KEYS.success);
-  const flowPages = schemaPages.filter((page) => page.pageKey !== "generic_success" && page.pageKey !== REGISTRATION_PAGE_KEYS.success);
+  const flowPages = schemaPages.filter(
+    (page) => page.pageKey !== "generic_success" && page.pageKey !== "generic_submission_closed" && page.pageKey !== REGISTRATION_PAGE_KEYS.success
+  );
   const nodeById = useMemo(() => new Map(programNodes.map((node) => [node.id, node])), [programNodes]);
   const hasTeamNodes = useMemo(() => programNodes.some((node) => node.nodeKind === "team"), [programNodes]);
   const nodeLabel = hasTeamNodes ? "Division / Team" : "Division";

@@ -1016,6 +1016,8 @@ export function FormFieldsVisualEditor({ orgSlug, formName, formDescription, for
           <Alert variant="info">
             {!isRegistration && activePage?.pageKey === "generic_success"
               ? "Success page is fixed in your form flow. Customize title/description here; field editing is disabled."
+              : !isRegistration && activePage?.pageKey === "generic_submission_closed"
+                ? "Submissions closed page is fixed in your form flow. Customize title/description here; field editing is disabled."
               : activePage?.pageKey === REGISTRATION_PAGE_KEYS.player
               ? "Player page is fixed. Configure title/description here; player selection UI is built-in."
               : activePage?.pageKey === REGISTRATION_PAGE_KEYS.success
@@ -1049,7 +1051,9 @@ export function FormFieldsVisualEditor({ orgSlug, formName, formDescription, for
 
           {previewFields.length === 0 ? (
             <Alert variant="info">
-              {isRegistration && activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions
+              {!isRegistration && activePage?.pageKey === "generic_submission_closed"
+                ? "This page is shown before the form starts when the submission cap is reached."
+                : isRegistration && activePage?.pageKey === REGISTRATION_PAGE_KEYS.divisionQuestions
                 ? "No fields match this previewed division selection."
                 : "No fields yet. Open the field library to add fields."}
             </Alert>

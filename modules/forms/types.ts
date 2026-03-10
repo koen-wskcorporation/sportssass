@@ -10,7 +10,14 @@ export type SubmissionStatus = "submitted" | "in_review" | "approved" | "rejecte
 
 export type FormFieldType = "text" | "textarea" | "email" | "phone" | "number" | "date" | "select" | "checkbox";
 
-export type FormPageKey = "generic_custom" | "generic_success" | "registration_player" | "registration_division_questions" | "registration_payment" | "registration_success";
+export type FormPageKey =
+  | "generic_custom"
+  | "generic_success"
+  | "generic_submission_closed"
+  | "registration_player"
+  | "registration_division_questions"
+  | "registration_payment"
+  | "registration_success";
 
 export const REGISTRATION_PAGE_KEYS = {
   player: "registration_player",
@@ -93,6 +100,17 @@ export type OrgForm = {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PublicFormSubmissionGate = {
+  formId: string;
+  formKind: FormKind;
+  submissionCount: number;
+  submissionCapEnabled: boolean;
+  submissionCap: number | null;
+  submissionCapReached: boolean;
+  submissionClosedPageTitle: string;
+  submissionClosedPageDescription: string;
 };
 
 export type OrgFormVersion = {

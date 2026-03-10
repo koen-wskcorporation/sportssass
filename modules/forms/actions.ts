@@ -20,6 +20,7 @@ import {
   getFormGoogleSheetIntegration,
   getFormById,
   getFormBySlug,
+  getPublicFormSubmissionGate,
   getLatestFormVersion,
   listRecentFormGoogleSheetSyncRuns,
   listFormSubmissionViews,
@@ -38,6 +39,11 @@ import {
   updateFormGoogleSheetIntegrationRecord,
   updateFormRecord
 } from "@/modules/forms/db/queries";
+import {
+  getFormSubmissionClosedPage,
+  getFormRequireSignIn,
+  getFormSubmissionCap
+} from "@/modules/forms/settings";
 import {
   connectFormToGoogleSheet,
   disableFormGoogleSheetIntegration,
@@ -74,7 +80,9 @@ const createFormSchema = z.object({
   targetMode: z.enum(["locked", "choice"]),
   lockedProgramNodeId: z.string().uuid().nullable().optional(),
   allowMultiplePlayers: z.boolean().optional(),
-  requireSignIn: z.boolean().optional()
+  requireSignIn: z.boolean().optional(),
+  submissionCapEnabled: z.boolean().optional(),
+  submissionCap: z.number().int().positive().max(500000).nullable().optional()
 });
 
 const saveFormDraftSchema = createFormSchema.extend({
@@ -297,6 +305,62 @@ function normalizeOptional(value: string | null | undefined) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeSubmissionCapValue(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const normalized = Math.trunc(value);
+  return normalized > 0 ? normalized : null;
+}
+
+function resolveFormSettingsJson(input: {
+  formKind: "generic" | "program_registration";
+  existingSettings?: Record<string, unknown>;
+  allowMultiplePlayers?: boolean;
+  requireSignIn?: boolean;
+  submissionCapEnabled?: boolean;
+  submissionCap?: number | null;
+}): { settingsJson: Record<string, unknown>; error?: string } {
+  const existingSettings = input.existingSettings ?? {};
+  const existingCap = getFormSubmissionCap({
+    formKind: input.formKind,
+    settingsJson: existingSettings
+  });
+
+  const allowMultiplePlayers = input.allowMultiplePlayers ?? Boolean(existingSettings.allowMultiplePlayers);
+  const requireSignIn =
+    input.formKind === "program_registration"
+      ? true
+      : input.requireSignIn ??
+        getFormRequireSignIn({
+          formKind: input.formKind,
+          settingsJson: existingSettings
+        });
+  const submissionCapEnabled = input.formKind === "generic" ? (input.submissionCapEnabled ?? existingCap.enabled) : false;
+  const submissionCap =
+    input.formKind === "generic"
+      ? normalizeSubmissionCapValue(input.submissionCap !== undefined ? input.submissionCap : existingCap.cap)
+      : null;
+
+  if (input.formKind === "generic" && submissionCapEnabled && submissionCap === null) {
+    return {
+      settingsJson: {},
+      error: "Set a submission cap greater than 0 when cap mode is enabled."
+    };
+  }
+
+  return {
+    settingsJson: {
+      ...existingSettings,
+      allowMultiplePlayers,
+      requireSignIn,
+      submissionCapEnabled,
+      submissionCap
+    }
+  };
+}
+
 function normalizePlayerEntries(entries: z.infer<typeof submitFormSchema>["playerEntries"]): RegistrationPlayerEntryInput[] {
   return entries.map((entry) => ({
     playerId: entry.playerId,
@@ -428,7 +492,6 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
     const payload = parsed.data;
     const org = await requireFormsReadOrWrite(payload.orgSlug);
     let resolvedName = payload.name;
-    const resolvedRequireSignIn = payload.formKind === "program_registration" ? true : payload.requireSignIn ?? true;
 
     if (payload.formKind === "program_registration") {
       if (!payload.programId) {
@@ -447,6 +510,18 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
       resolvedName = result.name;
     }
 
+    const resolvedSettingsResult = resolveFormSettingsJson({
+      formKind: payload.formKind,
+      allowMultiplePlayers: payload.allowMultiplePlayers,
+      requireSignIn: payload.requireSignIn,
+      submissionCapEnabled: payload.submissionCapEnabled,
+      submissionCap: payload.submissionCap
+    });
+
+    if (resolvedSettingsResult.error) {
+      return asError(resolvedSettingsResult.error);
+    }
+
     const created = await createFormRecord({
       orgId: org.orgId,
       createdByUserId: org.userId,
@@ -458,10 +533,7 @@ export async function createFormAction(input: z.input<typeof createFormSchema>):
       programId: payload.programId ?? null,
       targetMode: payload.targetMode,
       lockedProgramNodeId: payload.lockedProgramNodeId ?? null,
-      settingsJson: {
-        allowMultiplePlayers: payload.allowMultiplePlayers ?? false,
-        requireSignIn: resolvedRequireSignIn
-      }
+      settingsJson: resolvedSettingsResult.settingsJson
     });
 
     if (payload.status === "published") {
@@ -499,10 +571,14 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
 
   const payload = parsed.data;
   let resolvedName = payload.name;
-  const resolvedRequireSignIn = payload.formKind === "program_registration" ? true : payload.requireSignIn ?? true;
 
   try {
     const org = await requireOrgPermission(payload.orgSlug, "forms.write");
+    const existingForm = await getFormById(org.orgId, payload.formId);
+
+    if (!existingForm) {
+      return asError("Form not found.");
+    }
 
     if (payload.formKind === "program_registration") {
       if (!payload.programId) {
@@ -522,6 +598,19 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
       resolvedName = result.name;
     }
 
+    const resolvedSettingsResult = resolveFormSettingsJson({
+      formKind: payload.formKind,
+      existingSettings: existingForm.settingsJson,
+      allowMultiplePlayers: payload.allowMultiplePlayers,
+      requireSignIn: payload.requireSignIn,
+      submissionCapEnabled: payload.submissionCapEnabled,
+      submissionCap: payload.submissionCap
+    });
+
+    if (resolvedSettingsResult.error) {
+      return asError(resolvedSettingsResult.error);
+    }
+
     const parsedSchema = parseFormSchemaJson(payload.schemaJson, resolvedName, payload.formKind);
     if (parsedSchema.error) {
       return asError(parsedSchema.error);
@@ -539,10 +628,7 @@ export async function saveFormDraftAction(input: z.input<typeof saveFormDraftSch
       targetMode: payload.targetMode,
       lockedProgramNodeId: payload.lockedProgramNodeId ?? null,
       schemaJson: parsedSchema.schema,
-      settingsJson: {
-        allowMultiplePlayers: payload.allowMultiplePlayers ?? false,
-        requireSignIn: resolvedRequireSignIn
-      }
+      settingsJson: resolvedSettingsResult.settingsJson
     });
 
     revalidatePath(`/${org.orgSlug}/workspace/forms`);
@@ -883,8 +969,19 @@ export async function submitFormResponseAction(input: z.input<typeof submitFormS
       return asError("Form not found.");
     }
 
+    const submissionClosedPage = getFormSubmissionClosedPage({
+      formKind: form.formKind,
+      settingsJson: form.settingsJson,
+      pages: form.schemaJson.pages
+    });
+    const submissionClosedError = submissionClosedPage.description;
+    const submissionGate = await getPublicFormSubmissionGate(payload.orgSlug, payload.formSlug).catch(() => null);
+    if (submissionGate?.submissionCapReached) {
+      return asError(submissionGate.submissionClosedPageDescription || submissionClosedError);
+    }
+
     const user = await getSessionUser();
-    const requireSignIn = form.formKind === "program_registration" || form.settingsJson.requireSignIn !== false;
+    const requireSignIn = getFormRequireSignIn(form);
 
     if (requireSignIn && !user) {
       return asError("Please sign in to submit this form.");
@@ -901,6 +998,10 @@ export async function submitFormResponseAction(input: z.input<typeof submitFormS
     });
 
     if (error) {
+      if (error.message.includes("SUBMISSION_CAP_REACHED")) {
+        return asError(submissionGate?.submissionClosedPageDescription || submissionClosedError);
+      }
+
       if (error.message.includes("AUTH_REQUIRED")) {
         const allowGuestGenericSubmit = !requireSignIn && !user && form.formKind === "generic";
         if (allowGuestGenericSubmit) {
@@ -927,6 +1028,10 @@ export async function submitFormResponseAction(input: z.input<typeof submitFormS
             })
             .select("id, status")
             .single();
+
+          if (insertError?.message.includes("SUBMISSION_CAP_REACHED")) {
+            return asError(submissionGate?.submissionClosedPageDescription || submissionClosedError);
+          }
 
           if (insertError || !insertedSubmission?.id) {
             throw new Error(insertError?.message ?? "GUEST_SUBMISSION_INSERT_FAILED");
@@ -967,6 +1072,11 @@ export async function submitFormResponseAction(input: z.input<typeof submitFormS
     };
   } catch (error) {
     rethrowIfNavigationError(error);
+
+    if (error instanceof Error && error.message.includes("SUBMISSION_CAP_REACHED")) {
+      return asError("This form is no longer accepting submissions.");
+    }
+
     return asError("Unable to submit this registration right now.");
   }
 }

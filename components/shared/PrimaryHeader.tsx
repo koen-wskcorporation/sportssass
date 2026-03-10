@@ -16,7 +16,7 @@ export function PrimaryHeader() {
             alt="Sports SaaS logo"
             className="block max-w-full object-contain"
             src="/brand/logo.svg"
-            style={{ height: "auto", maxHeight: "auto", maxWidth: "135px", width: "auto" }}
+            style={{ height: "auto", maxHeight: "auto", maxWidth: "175px", width: "auto" }}
           />
         </Link>
 

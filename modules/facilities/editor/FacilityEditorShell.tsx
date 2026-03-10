@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { Move, Plus, Save, Trash2 } from "lucide-react";
-import { Alert } from "@/components/ui/alert";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent
+} from "react";
+import { Move, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { AutosaveIndicator, type AutosaveState } from "@/components/ui/autosave-indicator";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import { deleteFacilityNodeAction, upsertFacilityNodeAction } from "@/modules/facilities/actions";
-import type { Facility, FacilityMapReadModel, FacilityNode } from "@/modules/facilities/types";
+import { publishFacilityMapDraftAction, saveFacilityMapDraftAction } from "@/modules/facilities/actions";
+import type { Facility, FacilityMapDraft, FacilityMapDraftNode, FacilityMapReadModel, FacilityNode } from "@/modules/facilities/types";
 import { DEFAULT_NODE_LAYOUT, sortNodes } from "@/modules/facilities/utils";
 
 type FacilityEditorShellProps = {
@@ -27,7 +37,7 @@ const GRID_SIZE = 24;
 const MIN_NODE_SIZE = 48;
 const ZOOM_MIN = 0.45;
 const ZOOM_MAX = 2.1;
-const ZOOM_STEP = 0.12;
+const ZOOM_STEP = 0.03;
 
 type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -37,12 +47,12 @@ type InteractionState = {
   handle?: ResizeHandle;
   startX: number;
   startY: number;
-  originLayout: FacilityNode["layout"];
+  originLayout: FacilityMapDraftNode["layout"];
 };
 
-function sortFacilityNodes(readModel: FacilityMapReadModel, facilityId: string) {
-  return sortNodes(readModel.nodes.filter((node) => node.facilityId === facilityId));
-}
+type EditorDraftNode = FacilityMapDraftNode & {
+  facilityId: string;
+};
 
 function snapToGrid(value: number) {
   return Math.round(value / GRID_SIZE) * GRID_SIZE;
@@ -90,18 +100,120 @@ function snapLayoutToGrid(layout: FacilityNode["layout"]) {
   };
 }
 
+function isDraftNodeArray(value: unknown): value is FacilityMapDraftNode[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return value.every((item) => {
+    if (!item || typeof item !== "object") {
+      return false;
+    }
+    const node = item as Record<string, unknown>;
+    return (
+      typeof node.id === "string" &&
+      (typeof node.publishedNodeId === "string" || node.publishedNodeId === null) &&
+      (typeof node.parentId === "string" || node.parentId === null) &&
+      typeof node.name === "string" &&
+      typeof node.nodeKind === "string" &&
+      typeof node.status === "string" &&
+      typeof node.isBookable === "boolean" &&
+      (typeof node.capacity === "number" || node.capacity === null) &&
+      typeof node.sortIndex === "number" &&
+      node.layout &&
+      typeof node.layout === "object"
+    );
+  });
+}
+
+function toEditorDraftNode(node: FacilityNode): EditorDraftNode {
+  return {
+    facilityId: node.facilityId,
+    id: node.id,
+    publishedNodeId: node.id,
+    parentId: node.parentNodeId,
+    name: node.name,
+    nodeKind: node.nodeKind,
+    status: node.status,
+    isBookable: node.isBookable,
+    capacity: node.capacity,
+    layout: node.layout,
+    metadataJson: node.metadataJson,
+    sortIndex: node.sortIndex
+  };
+}
+
+function buildInitialDraftNodes(facility: Facility, initialReadModel: FacilityMapReadModel): EditorDraftNode[] {
+  const publishedNodes = sortNodes(initialReadModel.nodes.filter((node) => node.facilityId === facility.id));
+  const metadataDraft = (facility.metadataJson as Record<string, unknown>).mapDraft as FacilityMapDraft | undefined;
+
+  if (metadataDraft && metadataDraft.version === 1 && isDraftNodeArray(metadataDraft.nodes)) {
+    return metadataDraft.nodes.map((node) => ({
+      ...node,
+      facilityId: facility.id,
+      layout: normalizeResizedLayout(
+        node.layout.x,
+        node.layout.y,
+        node.layout.x + node.layout.w,
+        node.layout.y + node.layout.h,
+        node.layout
+      )
+    }));
+  }
+
+  return publishedNodes.map((node) => toEditorDraftNode(node));
+}
+
+function getInitialDraftUpdatedAtUtc(facility: Facility) {
+  const metadataDraft = (facility.metadataJson as Record<string, unknown>).mapDraft;
+  if (!metadataDraft || typeof metadataDraft !== "object" || Array.isArray(metadataDraft)) {
+    return null;
+  }
+
+  const updatedAtUtc = (metadataDraft as Record<string, unknown>).updatedAtUtc;
+  return typeof updatedAtUtc === "string" ? updatedAtUtc : null;
+}
+
+function toDraftPayload(node: EditorDraftNode): FacilityMapDraftNode {
+  return {
+    id: node.id,
+    publishedNodeId: node.publishedNodeId,
+    parentId: node.parentId,
+    name: node.name,
+    nodeKind: node.nodeKind,
+    status: node.status,
+    isBookable: node.isBookable,
+    capacity: node.capacity,
+    layout: node.layout,
+    metadataJson: node.metadataJson,
+    sortIndex: node.sortIndex
+  };
+}
+
 export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadModel, onReadModelChange }: FacilityEditorShellProps) {
   const { toast } = useToast();
-  const [readModel, setReadModel] = useState(initialReadModel);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const initialDraftUpdatedAtUtc = getInitialDraftUpdatedAtUtc(facility);
+  const [nodes, setNodes] = useState<EditorDraftNode[]>(() => buildInitialDraftNodes(facility, initialReadModel));
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [interactionState, setInteractionState] = useState<InteractionState | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [pan, setPan] = useState({ x: 120, y: 90 });
   const [zoom, setZoom] = useState(1);
-  const [isSaving, startSaving] = useTransition();
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>(initialDraftUpdatedAtUtc ? "saved" : "idle");
+  const [lastSavedAtUtc, setLastSavedAtUtc] = useState<string | null>(initialDraftUpdatedAtUtc);
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const [isPublishing, startPublishing] = useTransition();
+  const saveRequestRef = useRef(0);
+  const lastSavedSnapshotRef = useRef<string>(
+    JSON.stringify(buildInitialDraftNodes(facility, initialReadModel).map((node) => toDraftPayload(node)))
+  );
+  const draftPayload = useMemo(() => nodes.map((node) => toDraftPayload(node)), [nodes]);
+  const draftSnapshot = useMemo(() => JSON.stringify(draftPayload), [draftPayload]);
+  const hasUnsavedChanges = draftSnapshot !== lastSavedSnapshotRef.current;
 
-  const nodes = useMemo(() => sortFacilityNodes(readModel, facility.id), [facility.id, readModel]);
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId]);
+  const firstAreaId = useMemo(() => nodes.find((node) => node.nodeKind === "zone")?.id ?? null, [nodes]);
 
   useEffect(() => {
     if (selectedNodeId && !nodes.some((node) => node.id === selectedNodeId)) {
@@ -115,9 +227,8 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
     }
 
     const handleMove = (event: PointerEvent) => {
-      setReadModel((current) => ({
-        ...current,
-        nodes: current.nodes.map((node) => {
+      setNodes((current) =>
+        current.map((node) => {
           if (node.id !== interactionState.nodeId) {
             return node;
           }
@@ -169,16 +280,11 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
             layout: nextLayout
           };
         })
-      }));
+      );
     };
 
     const handleUp = () => {
-      const movedNode = readModel.nodes.find((node) => node.id === interactionState.nodeId);
       setInteractionState(null);
-      if (!movedNode || !canWrite) {
-        return;
-      }
-      void saveNode(movedNode);
     };
 
     window.addEventListener("pointermove", handleMove);
@@ -188,80 +294,47 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [canWrite, interactionState, readModel.nodes, zoom]);
+  }, [interactionState, zoom]);
 
-  function applyReadModel(next: FacilityMapReadModel) {
-    setReadModel(next);
-    onReadModelChange?.(next);
+  function mutateNode(nodeId: string, updater: (node: EditorDraftNode) => EditorDraftNode) {
+    setNodes((current) => current.map((node) => (node.id === nodeId ? updater(node) : node)));
   }
 
-  async function saveNode(node: FacilityNode) {
-    const result = await upsertFacilityNodeAction({
-      orgSlug,
-      nodeId: node.id,
-      facilityId: node.facilityId,
-      parentNodeId: node.parentNodeId,
-      name: node.name,
-      nodeKind: node.nodeKind,
-      status: node.status,
-      isBookable: node.isBookable,
-      capacity: node.capacity,
-      sortIndex: node.sortIndex,
-      layout: node.layout,
-      metadataJson: node.metadataJson
-    });
+  function createTypedNode(nodeKind: FacilityNode["nodeKind"], name: string) {
+    const parentId = nodeKind === "zone" ? null : selectedNode?.id ?? firstAreaId;
 
-    if (!result.ok) {
+    if (!canWrite) {
+      return;
+    }
+
+    if (nodeKind !== "zone" && !parentId) {
       toast({
-        title: "Unable to save node",
-        description: result.error,
+        title: "Add an area first",
+        description: "Every map requires at least one area before adding structures or spaces.",
         variant: "destructive"
       });
       return;
     }
 
-    applyReadModel(result.data.readModel);
-  }
+    const nextSort = nodes.filter((node) => node.parentId === parentId).length;
+    const draftId = `draft-${crypto.randomUUID()}`;
+    const nextNode: EditorDraftNode = {
+      id: draftId,
+      publishedNodeId: null,
+      facilityId: facility.id,
+      parentId,
+      name,
+      nodeKind,
+      status: "open",
+      isBookable: true,
+      capacity: null,
+      layout: snapLayoutToGrid(DEFAULT_NODE_LAYOUT),
+      metadataJson: {},
+      sortIndex: nextSort
+    };
 
-  function mutateNode(nodeId: string, updater: (node: FacilityNode) => FacilityNode) {
-    setReadModel((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) => (node.id === nodeId ? updater(node) : node))
-    }));
-  }
-
-  function createNode(parentNodeId: string | null) {
-    if (!canWrite) {
-      return;
-    }
-
-    startSaving(async () => {
-      const nextSort = nodes.filter((node) => node.parentNodeId === parentNodeId).length;
-      const result = await upsertFacilityNodeAction({
-        orgSlug,
-        facilityId: facility.id,
-        parentNodeId,
-        name: "New space",
-        nodeKind: "custom",
-        status: "open",
-        isBookable: true,
-        layout: snapLayoutToGrid(DEFAULT_NODE_LAYOUT),
-        sortIndex: nextSort
-      });
-
-      if (!result.ok) {
-        toast({
-          title: "Unable to create node",
-          description: result.error,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      applyReadModel(result.data.readModel);
-      setSelectedNodeId(result.data.nodeId);
-      toast({ title: "Node created", variant: "success" });
-    });
+    setNodes((current) => [...current, nextNode]);
+    setSelectedNodeId(draftId);
   }
 
   function deleteNode(nodeId: string) {
@@ -269,41 +342,140 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
       return;
     }
 
-    startSaving(async () => {
-      const result = await deleteFacilityNodeAction({
+    const childCount = nodes.filter((node) => node.parentId === nodeId).length;
+    if (childCount > 0) {
+      toast({
+        title: "Delete child nodes first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const node = nodes.find((item) => item.id === nodeId);
+    if (node?.nodeKind === "zone") {
+      const areaCount = nodes.filter((item) => item.nodeKind === "zone").length;
+      if (areaCount <= 1) {
+        toast({
+          title: "Each map requires at least one area",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    setNodes((current) => current.filter((node) => node.id !== nodeId));
+    if (selectedNodeId === nodeId) {
+      setSelectedNodeId(null);
+    }
+  }
+
+  const persistDraft = useCallback(
+    async (snapshot: string, payload: FacilityMapDraftNode[]) => {
+      if (!canWrite) {
+        return false;
+      }
+
+      if (snapshot === lastSavedSnapshotRef.current) {
+        return true;
+      }
+
+      setAutosaveState("saving");
+      setAutosaveError(null);
+      const requestId = saveRequestRef.current + 1;
+      saveRequestRef.current = requestId;
+
+      const result = await saveFacilityMapDraftAction({
         orgSlug,
-        nodeId
+        facilityId: facility.id,
+        nodes: payload
+      });
+
+      if (saveRequestRef.current !== requestId) {
+        return false;
+      }
+
+      if (!result.ok) {
+        setAutosaveState("error");
+        setAutosaveError(result.error);
+        return false;
+      }
+
+      lastSavedSnapshotRef.current = snapshot;
+      setAutosaveState("saved");
+      setAutosaveError(null);
+      setLastSavedAtUtc(result.data.updatedAtUtc);
+      return true;
+    },
+    [canWrite, facility.id, orgSlug]
+  );
+
+  useEffect(() => {
+    if (!canWrite) {
+      return;
+    }
+
+    if (!hasUnsavedChanges) {
+      return;
+    }
+
+    setAutosaveState((current) => (current === "saving" ? current : "dirty"));
+
+    const timeoutId = window.setTimeout(() => {
+      void persistDraft(draftSnapshot, draftPayload);
+    }, 480);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [canWrite, draftPayload, draftSnapshot, hasUnsavedChanges, persistDraft]);
+
+  function saveDraftNow() {
+    void persistDraft(draftSnapshot, draftPayload);
+  }
+
+  function publishDraft() {
+    if (!canWrite) {
+      return;
+    }
+
+    startPublishing(async () => {
+      const saved = await persistDraft(draftSnapshot, draftPayload);
+      if (!saved) {
+        toast({
+          title: "Unable to publish draft",
+          description: "Resolve autosave errors and try publishing again.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const result = await publishFacilityMapDraftAction({
+        orgSlug,
+        facilityId: facility.id
       });
 
       if (!result.ok) {
         toast({
-          title: "Unable to delete node",
+          title: "Unable to publish draft",
           description: result.error,
           variant: "destructive"
         });
         return;
       }
 
-      applyReadModel(result.data.readModel);
-      if (selectedNodeId === nodeId) {
-        setSelectedNodeId(null);
-      }
-      toast({ title: "Node deleted", variant: "success" });
+      const publishedNodes = sortNodes(result.data.readModel.nodes.filter((node) => node.facilityId === facility.id));
+      const nextDraftNodes = publishedNodes.map((node) => toEditorDraftNode(node));
+      setNodes(nextDraftNodes);
+      lastSavedSnapshotRef.current = JSON.stringify(nextDraftNodes.map((node) => toDraftPayload(node)));
+      setAutosaveState("saved");
+      setAutosaveError(null);
+      setLastSavedAtUtc(new Date().toISOString());
+      onReadModelChange?.(result.data.readModel);
+      toast({ title: "Draft published", variant: "success" });
     });
   }
 
-  function saveSelectedNode() {
-    if (!selectedNode || !canWrite) {
-      return;
-    }
-
-    startSaving(async () => {
-      await saveNode(selectedNode);
-      toast({ title: "Node saved", variant: "success" });
-    });
-  }
-
-  function startMoveInteraction(node: FacilityNode, event: React.PointerEvent) {
+  function startMoveInteraction(node: EditorDraftNode, event: ReactPointerEvent) {
     if (!canWrite) {
       return;
     }
@@ -319,7 +491,7 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
     });
   }
 
-  function startResizeInteraction(node: FacilityNode, handle: ResizeHandle, event: React.PointerEvent) {
+  function startResizeInteraction(node: EditorDraftNode, handle: ResizeHandle, event: ReactPointerEvent) {
     if (!canWrite) {
       return;
     }
@@ -339,11 +511,11 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
   const parentNameById = useMemo(() => new Map(nodes.map((node) => [node.id, node.name])), [nodes]);
 
   const parentGroups = useMemo(() => {
-    const byParent = new Map<string | null, FacilityNode[]>();
+    const byParent = new Map<string | null, EditorDraftNode[]>();
     for (const node of nodes) {
-      const current = byParent.get(node.parentNodeId) ?? [];
+      const current = byParent.get(node.parentId) ?? [];
       current.push(node);
-      byParent.set(node.parentNodeId, current);
+      byParent.set(node.parentId, current);
     }
 
     return Array.from(byParent.entries()).map(([parentNodeId, groupNodes]) => {
@@ -354,7 +526,7 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
       const padding = 20;
       return {
         parentNodeId,
-        label: parentNodeId ? `Parent: ${parentNameById.get(parentNodeId) ?? "Unknown"}` : "Parent: Root",
+        label: parentNodeId ? `Parent: ${parentNameById.get(parentNodeId) ?? "Unknown"}` : "Top-level Areas",
         x: Math.max(0, left - padding),
         y: Math.max(0, top - padding),
         w: Math.min(CANVAS_WIDTH, right + padding) - Math.max(0, left - padding),
@@ -367,13 +539,13 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
     setZoom(clamp(nextZoom, ZOOM_MIN, ZOOM_MAX));
   }
 
-  function handleCanvasWheel(event: React.WheelEvent<HTMLDivElement>) {
+  function handleCanvasWheel(event: ReactWheelEvent<HTMLDivElement>) {
     event.preventDefault();
     const direction = event.deltaY < 0 ? 1 : -1;
     updateZoom(zoom + direction * ZOOM_STEP);
   }
 
-  function handleViewportPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+  function handleViewportPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
     if (target.closest("[data-pan-block='true']")) {
       return;
@@ -401,61 +573,62 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
     window.addEventListener("pointerup", handleUp, { once: true });
   }
 
-  const selectedPanelStyle = useMemo(() => {
+  const scaledGridSize = Math.max(10, GRID_SIZE * zoom);
+  const gridOffsetX = ((pan.x % scaledGridSize) + scaledGridSize) % scaledGridSize;
+  const gridOffsetY = ((pan.y % scaledGridSize) + scaledGridSize) % scaledGridSize;
+
+  const selectedPanelStyle = useMemo<CSSProperties | null>(() => {
     if (!selectedNode) {
       return null;
     }
 
+    const viewportWidth = viewportRef.current?.clientWidth ?? CANVAS_WIDTH;
+    const viewportHeight = viewportRef.current?.clientHeight ?? CANVAS_HEIGHT;
+    const panelWidth = 340;
+    const panelHeight = 520;
     const idealLeft = selectedNode.layout.x + selectedNode.layout.w + 20;
-    const maxLeft = CANVAS_WIDTH - 360;
+    const maxLeft = (viewportWidth - pan.x) / Math.max(zoom, 0.01) - panelWidth;
     const left = Math.max(12, Math.min(maxLeft, idealLeft));
     const idealTop = selectedNode.layout.y;
-    const maxTop = CANVAS_HEIGHT - 520;
+    const maxTop = (viewportHeight - pan.y) / Math.max(zoom, 0.01) - panelHeight;
     const top = Math.max(12, Math.min(maxTop, idealTop));
 
     return {
       left: `${left}px`,
-      top: `${top}px`
+      top: `${top}px`,
+      transform: `scale(${1 / zoom})`,
+      transformOrigin: "top left"
     };
-  }, [selectedNode]);
+  }, [pan.x, pan.y, selectedNode, zoom]);
 
   return (
     <div className="relative h-full min-h-0">
-      {isSaving ? (
-        <div className="absolute inset-x-0 top-0 z-30 px-4 pt-2">
-          <Alert variant="info">Saving map changes...</Alert>
-        </div>
-      ) : null}
       <div
         className={isPanning ? "relative h-full min-h-0 overflow-hidden rounded-control border bg-surface cursor-grabbing" : "relative h-full min-h-0 overflow-hidden rounded-control border bg-surface cursor-grab"}
         onPointerDown={handleViewportPointerDown}
         onWheel={handleCanvasWheel}
+        ref={viewportRef}
+        style={{
+          backgroundColor: "hsl(var(--surface))",
+          backgroundImage:
+            "linear-gradient(hsl(var(--border)/0.55) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border)/0.55) 1px, transparent 1px)",
+          backgroundSize: `${scaledGridSize}px ${scaledGridSize}px`,
+          backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`
+        }}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4" data-pan-block="true">
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-4" data-pan-block="true">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-full border border-border/80 bg-surface/95 px-2 py-2 shadow-[0_12px_30px_hsl(220_35%_12%/0.14)] backdrop-blur">
-            <Button disabled={!canWrite} onClick={() => createNode(null)} size="sm" type="button" variant="secondary">
+            <Button disabled={!canWrite} onClick={() => createTypedNode("room", "Space")} size="sm" type="button" variant="secondary">
               <Plus className="h-4 w-4" />
-              Root
+              Space
             </Button>
-            <Button
-              disabled={!canWrite || !selectedNode}
-              onClick={() => createNode(selectedNode?.id ?? null)}
-              size="sm"
-              type="button"
-              variant="secondary"
-            >
+            <Button disabled={!canWrite} onClick={() => createTypedNode("section", "Structure")} size="sm" type="button" variant="secondary">
               <Plus className="h-4 w-4" />
-              Child
+              Structure
             </Button>
-            <Button
-              disabled={!canWrite || !selectedNode}
-              onClick={() => createNode(selectedNode?.parentNodeId ?? null)}
-              size="sm"
-              type="button"
-              variant="secondary"
-            >
+            <Button disabled={!canWrite} onClick={() => createTypedNode("zone", "Area")} size="sm" type="button" variant="secondary">
               <Plus className="h-4 w-4" />
-              Sibling
+              Area
             </Button>
             <Button
               className="text-danger"
@@ -472,31 +645,42 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
               <Trash2 className="h-4 w-4" />
               Delete
             </Button>
-            <Button disabled={!canWrite || !selectedNode} onClick={saveSelectedNode} size="sm" type="button">
+            <Button disabled={!canWrite || autosaveState === "saving" || !hasUnsavedChanges} onClick={saveDraftNow} size="sm" type="button">
               <Save className="h-4 w-4" />
-              Save
+              Save draft
             </Button>
+            <Button disabled={!canWrite || isPublishing || !firstAreaId} onClick={publishDraft} size="sm" type="button">
+              {isPublishing ? "Publishing..." : "Publish"}
+            </Button>
+            <AutosaveIndicator
+              className="ml-1"
+              errorMessage={autosaveError}
+              lastSavedAtUtc={lastSavedAtUtc}
+              state={autosaveState}
+            />
             <Button onClick={() => setSelectedNodeId(null)} size="sm" type="button" variant="ghost">
               Clear
             </Button>
-            <Button onClick={() => updateZoom(zoom + ZOOM_STEP)} size="sm" type="button" variant="secondary">
-              Zoom in
+            <Button aria-label="Zoom in" onClick={() => updateZoom(zoom + ZOOM_STEP)} size="sm" type="button" variant="secondary">
+              +
             </Button>
-            <Button onClick={() => updateZoom(zoom - ZOOM_STEP)} size="sm" type="button" variant="secondary">
-              Zoom out
+            <Button aria-label="Zoom out" onClick={() => updateZoom(zoom - ZOOM_STEP)} size="sm" type="button" variant="secondary">
+              -
             </Button>
           </div>
         </div>
 
+        {!firstAreaId ? (
+          <div className="pointer-events-none absolute inset-x-0 top-20 z-20 flex justify-center px-4" data-pan-block="true">
+            <div className="rounded-full border border-accent/40 bg-accent/12 px-4 py-2 text-xs font-semibold text-text">
+              Add at least one Area first. Structures and Spaces must be inside an Area.
+            </div>
+          </div>
+        ) : null}
+
         <div
           className="absolute left-0 top-0"
           style={{
-            width: `${CANVAS_WIDTH}px`,
-            height: `${CANVAS_HEIGHT}px`,
-            backgroundColor: "hsl(var(--surface))",
-            backgroundImage:
-              "linear-gradient(hsl(var(--border)/0.55) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border)/0.55) 1px, transparent 1px)",
-            backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: "top left"
           }}
@@ -512,7 +696,9 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
                 height: `${group.h}px`
               }}
             >
-              <span className="absolute -top-6 left-0 rounded-full border border-accent/35 bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-muted">
+              <span
+                className="absolute -top-6 left-0 rounded-full border border-accent/35 bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-muted"
+              >
                 {group.label}
               </span>
             </div>
@@ -522,12 +708,11 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
             <div
               className={
                 node.id === selectedNodeId
-                  ? "absolute rounded-control border border-accent bg-accent/20 px-2 py-2 text-left shadow-sm"
-                  : "absolute rounded-control border border-border bg-surface px-2 py-2 text-left shadow-sm"
+                  ? "group absolute rounded-control border border-accent bg-accent/20 shadow-sm"
+                  : "group absolute rounded-control border border-border bg-surface shadow-sm"
               }
               data-pan-block="true"
               key={node.id}
-              onClick={() => setSelectedNodeId(node.id)}
               style={{
                 left: `${node.layout.x}px`,
                 top: `${node.layout.y}px`,
@@ -536,77 +721,117 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
                 zIndex: node.layout.z
               }}
             >
-              <p className="truncate text-sm font-semibold text-text">{node.name}</p>
-              <p className="truncate text-xs text-text-muted">{node.nodeKind}</p>
-
-              {node.id === selectedNodeId ? (
-                <>
-                  <button
-                    aria-label="Move node"
-                    className="absolute left-1/2 top-[-12px] z-10 inline-flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-muted shadow-sm hover:text-text"
-                    onPointerDown={(event) => startMoveInteraction(node, event)}
-                    type="button"
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-2">
+                <div className="pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full border border-border/65 bg-surface/90 px-3 py-1.5 shadow-sm backdrop-blur-sm transition-all duration-200">
+                  <span className="max-w-[180px] truncate text-xs font-semibold text-text">{node.name}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">{node.nodeKind}</span>
+                  <div
+                    className={
+                      node.id === selectedNodeId
+                        ? "flex max-w-20 items-center gap-1 overflow-hidden opacity-100 transition-all duration-200"
+                        : "flex max-w-0 -translate-x-1 items-center gap-1 overflow-hidden opacity-0 transition-all duration-200 group-hover:max-w-20 group-hover:translate-x-0 group-hover:opacity-100"
+                    }
                   >
-                    <Move className="h-3.5 w-3.5" />
-                  </button>
+                    <button
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-surface text-text-muted transition-colors hover:text-text"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setSelectedNodeId(node.id);
+                      }}
+                      type="button"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-danger/35 bg-surface text-danger transition-colors hover:bg-danger/10"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        deleteNode(node.id);
+                      }}
+                      type="button"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-                  <button
-                    aria-label="Resize north"
-                    className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 cursor-ns-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "n", event)}
-                    type="button"
-                  />
-                  <button
-                    aria-label="Resize south"
-                    className="absolute -bottom-2 left-1/2 h-4 w-4 -translate-x-1/2 cursor-ns-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "s", event)}
-                    type="button"
-                  />
-                  <button
-                    aria-label="Resize east"
-                    className="absolute right-[-8px] top-1/2 h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "e", event)}
-                    type="button"
-                  />
-                  <button
-                    aria-label="Resize west"
-                    className="absolute left-[-8px] top-1/2 h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "w", event)}
-                    type="button"
-                  />
-                  <button
-                    aria-label="Resize north-west"
-                    className="absolute -left-2 -top-2 h-4 w-4 cursor-nwse-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "nw", event)}
-                    type="button"
-                  />
-                  <button
-                    aria-label="Resize north-east"
-                    className="absolute -right-2 -top-2 h-4 w-4 cursor-nesw-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "ne", event)}
-                    type="button"
-                  />
-                  <button
-                    aria-label="Resize south-west"
-                    className="absolute -bottom-2 -left-2 h-4 w-4 cursor-nesw-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "sw", event)}
-                    type="button"
-                  />
-                  <button
-                    aria-label="Resize south-east"
-                    className="absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full border border-border bg-surface shadow-sm"
-                    onPointerDown={(event) => startResizeInteraction(node, "se", event)}
-                    type="button"
-                  />
-                </>
-              ) : null}
+              <div
+                className={
+                  node.id === selectedNodeId
+                    ? "pointer-events-auto opacity-100 transition-opacity duration-150"
+                    : "pointer-events-none opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100"
+                }
+              >
+                <button
+                  aria-label="Move node"
+                  className="absolute left-1/2 top-[-12px] z-10 inline-flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-muted shadow-sm hover:text-text"
+                  onPointerDown={(event) => startMoveInteraction(node, event)}
+                  type="button"
+                >
+                  <Move className="h-3.5 w-3.5" />
+                </button>
+
+                <button
+                  aria-label="Resize north"
+                  className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 cursor-ns-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "n", event)}
+                  type="button"
+                />
+                <button
+                  aria-label="Resize south"
+                  className="absolute -bottom-2 left-1/2 h-4 w-4 -translate-x-1/2 cursor-ns-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "s", event)}
+                  type="button"
+                />
+                <button
+                  aria-label="Resize east"
+                  className="absolute right-[-8px] top-1/2 h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "e", event)}
+                  type="button"
+                />
+                <button
+                  aria-label="Resize west"
+                  className="absolute left-[-8px] top-1/2 h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "w", event)}
+                  type="button"
+                />
+                <button
+                  aria-label="Resize north-west"
+                  className="absolute -left-2 -top-2 h-4 w-4 cursor-nwse-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "nw", event)}
+                  type="button"
+                />
+                <button
+                  aria-label="Resize north-east"
+                  className="absolute -right-2 -top-2 h-4 w-4 cursor-nesw-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "ne", event)}
+                  type="button"
+                />
+                <button
+                  aria-label="Resize south-west"
+                  className="absolute -bottom-2 -left-2 h-4 w-4 cursor-nesw-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "sw", event)}
+                  type="button"
+                />
+                <button
+                  aria-label="Resize south-east"
+                  className="absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full border border-border bg-surface shadow-sm"
+                  onPointerDown={(event) => startResizeInteraction(node, "se", event)}
+                  type="button"
+                />
+              </div>
             </div>
           ))}
 
           {!selectedNode ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
-              <div className="rounded-full border border-border/70 bg-surface/95 px-4 py-2 text-xs text-text-muted shadow-sm backdrop-blur">
-                Click a node to edit it. Drag to reposition on the grid.
+            <div className="pointer-events-none absolute inset-x-0 bottom-20 flex justify-center px-4">
+              <div
+                className="rounded-full border border-border/70 bg-surface/95 px-4 py-2 text-xs text-text-muted shadow-sm backdrop-blur"
+              >
+                Hover a node to drag or resize. Use the pencil icon to edit. Drag white space to pan. Scroll to zoom.
               </div>
             </div>
           ) : null}
@@ -627,28 +852,6 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
                       disabled={!canWrite}
                       onChange={(event) => mutateNode(selectedNode.id, (node) => ({ ...node, name: event.target.value }))}
                       value={selectedNode.name}
-                    />
-                  </FormField>
-
-                  <FormField label="Parent node">
-                    <Select
-                      disabled={!canWrite}
-                      onChange={(event) =>
-                        mutateNode(selectedNode.id, (node) => ({
-                          ...node,
-                          parentNodeId: event.target.value || null
-                        }))
-                      }
-                      options={[
-                        { value: "", label: "No parent" },
-                        ...nodes
-                          .filter((node) => node.id !== selectedNode.id)
-                          .map((node) => ({
-                            value: node.id,
-                            label: node.name
-                          }))
-                      ]}
-                      value={selectedNode.parentNodeId ?? ""}
                     />
                   </FormField>
 
@@ -679,43 +882,6 @@ export function FacilityEditorShell({ orgSlug, facility, canWrite, initialReadMo
                       value={selectedNode.nodeKind}
                     />
                   </FormField>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <FormField label="Width">
-                      <Input
-                        disabled={!canWrite}
-                        min={MIN_NODE_SIZE}
-                        onChange={(event) =>
-                          mutateNode(selectedNode.id, (node) => ({
-                            ...node,
-                            layout: {
-                              ...node.layout,
-                              w: Number.parseInt(event.target.value || "0", 10) || MIN_NODE_SIZE
-                            }
-                          }))
-                        }
-                        type="number"
-                        value={String(selectedNode.layout.w)}
-                      />
-                    </FormField>
-                    <FormField label="Height">
-                      <Input
-                        disabled={!canWrite}
-                        min={MIN_NODE_SIZE}
-                        onChange={(event) =>
-                          mutateNode(selectedNode.id, (node) => ({
-                            ...node,
-                            layout: {
-                              ...node.layout,
-                              h: Number.parseInt(event.target.value || "0", 10) || MIN_NODE_SIZE
-                            }
-                          }))
-                        }
-                        type="number"
-                        value={String(selectedNode.layout.h)}
-                      />
-                    </FormField>
-                  </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <FormField label="Status">

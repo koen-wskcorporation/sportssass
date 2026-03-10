@@ -4,7 +4,8 @@ import { isOrgFeatureEnabled } from "@/lib/org/features";
 import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
 import { listPublishedCalendarCatalog } from "@/modules/calendar/db/queries";
 import { listFacilityPublicAvailabilitySnapshot } from "@/modules/facilities/db/queries";
-import { listPublishedFormsForOrg } from "@/modules/forms/db/queries";
+import { getPublicFormSubmissionGate, listPublishedFormsForOrg } from "@/modules/forms/db/queries";
+import type { PublicFormSubmissionGate } from "@/modules/forms/types";
 import { listPlayersForPicker } from "@/modules/players/db/queries";
 import { listPublishedProgramsForCatalog } from "@/modules/programs/db/queries";
 import { listProgramNodes } from "@/modules/programs/db/queries";
@@ -81,6 +82,19 @@ export async function getOrgSitePageForRender({
 
   const requiresFormEmbed = pageData?.blocks.some((block) => block.type === "form_embed") ?? false;
   const publishedForms = requiresFormEmbed ? await listPublishedFormsForOrg(orgRequest.org.orgId).catch(() => []) : [];
+  const submissionGates = requiresFormEmbed
+    ? await Promise.all(
+        publishedForms.map((form) => getPublicFormSubmissionGate(orgRequest.org.orgSlug, form.slug).catch(() => null))
+      )
+    : [];
+  const submissionGateByFormId: Record<string, PublicFormSubmissionGate> = {};
+  for (const gate of submissionGates) {
+    if (!gate) {
+      continue;
+    }
+
+    submissionGateByFormId[gate.formId] = gate;
+  }
   const sessionUser = requiresFormEmbed ? await getSessionUser() : null;
   const players = requiresFormEmbed && sessionUser ? await listPlayersForPicker(sessionUser.id).catch(() => []) : [];
   const programIds = requiresFormEmbed
@@ -104,6 +118,7 @@ export async function getOrgSitePageForRender({
     formEmbed: requiresFormEmbed
       ? {
           publishedForms,
+          submissionGateByFormId,
           viewer: sessionUser,
           players,
           programNodesByProgramId
