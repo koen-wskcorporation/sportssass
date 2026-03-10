@@ -18,13 +18,15 @@ export type Permission =
   | "calendar.read"
   | "calendar.write"
   | "facilities.read"
-  | "facilities.write";
+  | "facilities.write"
+  | "communications.read"
+  | "communications.write";
 
 export type PermissionDefinition = {
   permission: Permission;
   label: string;
   description: string;
-  group: "Organization" | "Site Builder" | "Programs" | "Forms" | "Calendar" | "Events" | "Facilities";
+  group: "Organization" | "Site Builder" | "Programs" | "Forms" | "Calendar" | "Events" | "Facilities" | "Communications";
 };
 
 export type CustomRolePermissionSource = {
@@ -48,7 +50,9 @@ export const allPermissions: Permission[] = [
   "calendar.read",
   "calendar.write",
   "facilities.read",
-  "facilities.write"
+  "facilities.write",
+  "communications.read",
+  "communications.write"
 ];
 
 const permissionSet = new Set(allPermissions);
@@ -149,6 +153,18 @@ export const permissionDefinitions: PermissionDefinition[] = [
     label: "Facilities write",
     description: "Create and manage spaces, bookings, approvals, rules, and blackouts.",
     group: "Facilities"
+  },
+  {
+    permission: "communications.read",
+    label: "Inbox read",
+    description: "View inbox conversations, messages, contacts, and identity suggestions.",
+    group: "Communications"
+  },
+  {
+    permission: "communications.write",
+    label: "Inbox write",
+    description: "Link identities, resolve conversations, and merge communication contacts.",
+    group: "Communications"
   }
 ];
 

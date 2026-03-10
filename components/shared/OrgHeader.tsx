@@ -12,6 +12,7 @@ import {
   Globe,
   GripVertical,
   LayoutDashboard,
+  Inbox,
   MapPinned,
   Palette,
   Pencil,
@@ -68,7 +69,8 @@ const toolsNavIconMap: Record<OrgAdminNavIcon, LucideIcon> = {
   layout: LayoutDashboard,
   calendar: CalendarDays,
   "file-text": FileText,
-  map: MapPinned
+  map: MapPinned,
+  inbox: Inbox
 };
 
 function getOrgInitial(orgName: string) {

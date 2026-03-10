@@ -9,7 +9,8 @@ export type OrgAdminNavIcon =
   | "layout"
   | "calendar"
   | "file-text"
-  | "map";
+  | "map"
+  | "inbox";
 
 export type OrgAdminNavItem = {
   key: string;
@@ -106,6 +107,14 @@ export function getOrgAdminNavItems(orgSlug: string): OrgAdminNavItem[] {
       href: `/${orgSlug}/tools/forms`,
       description: "Build forms and process submissions.",
       icon: "file-text",
+      showInHome: true
+    },
+    {
+      key: "inbox",
+      label: "Inbox",
+      href: `/${orgSlug}/tools/inbox`,
+      description: "Resolve and manage unified conversations across channels.",
+      icon: "inbox",
       showInHome: true
     },
     {

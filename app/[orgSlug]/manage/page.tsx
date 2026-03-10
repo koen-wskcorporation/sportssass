@@ -27,6 +27,7 @@ export default async function OrgManageOverviewPage({
   const canManageOrg = can(orgContext.membershipPermissions, "org.manage.read");
   const canReadBranding = can(orgContext.membershipPermissions, "org.branding.read") || can(orgContext.membershipPermissions, "org.branding.write");
   const canReadFacilities = can(orgContext.membershipPermissions, "facilities.read") || can(orgContext.membershipPermissions, "facilities.write");
+  const canReadInbox = can(orgContext.membershipPermissions, "communications.read") || can(orgContext.membershipPermissions, "communications.write");
 
   const cards = [
     {
@@ -68,6 +69,14 @@ export default async function OrgManageOverviewPage({
       href: `/${orgSlug}/tools/manage/billing`,
       cta: "Open Billing",
       enabled: canManageOrg
+    },
+    {
+      section: "operations" as const,
+      title: "Inbox",
+      description: "Review unified communications and resolve contact identities.",
+      href: `/${orgSlug}/tools/inbox`,
+      cta: "Open Inbox",
+      enabled: canReadInbox
     },
     {
       section: "operations" as const,
