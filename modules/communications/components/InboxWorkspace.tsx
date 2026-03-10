@@ -18,8 +18,7 @@ import {
   searchInboxContactsAction,
   unlinkChannelIdentityAction
 } from "@/modules/communications/actions";
-import { mapReasonsToLabel } from "@/modules/communications/service";
-import type { CommContact, InboxWorkspaceReadModel } from "@/modules/communications/types";
+import type { CommContact, ContactMatchReasonCode, InboxWorkspaceReadModel } from "@/modules/communications/types";
 
 type InboxWorkspaceProps = {
   orgSlug: string;
@@ -38,6 +37,22 @@ function formatDateTime(value: string) {
   }
 
   return date.toLocaleString();
+}
+
+function mapReasonsToLabel(reasons: ContactMatchReasonCode[]) {
+  if (reasons.includes("authenticated_claim")) {
+    return "Authenticated account match";
+  }
+  if (reasons.includes("exact_primary_email") || reasons.includes("exact_known_identity_email")) {
+    return "Exact email match";
+  }
+  if (reasons.includes("exact_primary_phone") || reasons.includes("exact_known_identity_phone")) {
+    return "Exact phone number match";
+  }
+  if (reasons.includes("name_similarity")) {
+    return "Name similarity match";
+  }
+  return "Possible profile match";
 }
 
 export function InboxWorkspace({ orgSlug, canWrite, initialReadModel }: InboxWorkspaceProps) {
