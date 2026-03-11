@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { connectFacebookPageAction, disconnectInboxIntegrationAction, getInboxConnectionsDataAction } from "@/modules/communications/actions";
 import type { CommChannelIntegration } from "@/modules/communications/types";
@@ -13,6 +12,23 @@ type InboxConnectionsWorkspaceProps = {
   orgSlug: string;
   canWrite: boolean;
   initialIntegrations: CommChannelIntegration[];
+};
+
+type FacebookOauthPage = {
+  id: string;
+  name: string;
+  accessToken: string;
+};
+
+type FacebookOauthPagesMessage = {
+  type: "orgframe:facebook-oauth-pages";
+  orgSlug: string;
+  pages: FacebookOauthPage[];
+};
+
+type FacebookOauthErrorMessage = {
+  type: "orgframe:facebook-oauth-error";
+  error: string;
 };
 
 function formatDateTime(value: string | null) {
@@ -32,9 +48,7 @@ export function InboxConnectionsWorkspace({ orgSlug, canWrite, initialIntegratio
   const { toast } = useToast();
   const [isMutating, startTransition] = useTransition();
   const [integrations, setIntegrations] = useState(initialIntegrations);
-  const [pageId, setPageId] = useState("");
-  const [pageName, setPageName] = useState("");
-  const [pageAccessToken, setPageAccessToken] = useState("");
+  const [oauthPages, setOauthPages] = useState<FacebookOauthPage[]>([]);
 
   function refresh(successTitle?: string) {
     startTransition(async () => {
@@ -55,7 +69,7 @@ export function InboxConnectionsWorkspace({ orgSlug, canWrite, initialIntegratio
     });
   }
 
-  function connectPage() {
+  function connectPageFromOauth(page: FacebookOauthPage, successTitle = "Facebook page connected") {
     if (!canWrite) {
       return;
     }
@@ -63,9 +77,9 @@ export function InboxConnectionsWorkspace({ orgSlug, canWrite, initialIntegratio
     startTransition(async () => {
       const result = await connectFacebookPageAction({
         orgSlug,
-        pageId,
-        pageName,
-        pageAccessToken
+        pageId: page.id,
+        pageName: page.name,
+        pageAccessToken: page.accessToken
       });
 
       if (!result.ok) {
@@ -77,9 +91,37 @@ export function InboxConnectionsWorkspace({ orgSlug, canWrite, initialIntegratio
         return;
       }
 
-      setPageAccessToken("");
-      refresh("Facebook page connected");
+      setOauthPages((existing) => existing.filter((item) => item.id !== page.id));
+      refresh(successTitle);
     });
+  }
+
+  function launchFacebookPopup() {
+    if (!canWrite) {
+      return;
+    }
+
+    const width = 620;
+    const height = 760;
+    const left = Math.max(0, Math.floor(window.screenX + (window.outerWidth - width) / 2));
+    const top = Math.max(0, Math.floor(window.screenY + (window.outerHeight - height) / 2));
+
+    const popup = window.open(
+      `/api/integrations/facebook/oauth/start?orgSlug=${encodeURIComponent(orgSlug)}`,
+      "orgframe-facebook-oauth",
+      `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+    );
+
+    if (!popup) {
+      toast({
+        title: "Popup blocked",
+        description: "Allow popups for this site to connect Facebook.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    popup.focus();
   }
 
   function disconnectIntegration(integrationId: string) {
@@ -106,6 +148,66 @@ export function InboxConnectionsWorkspace({ orgSlug, canWrite, initialIntegratio
     });
   }
 
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
+      const payload = event.data as FacebookOauthPagesMessage | FacebookOauthErrorMessage | null;
+      if (!payload || typeof payload !== "object" || typeof payload.type !== "string") {
+        return;
+      }
+
+      if (payload.type === "orgframe:facebook-oauth-error") {
+        toast({
+          title: "Facebook connection failed",
+          description: payload.error,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (payload.type !== "orgframe:facebook-oauth-pages") {
+        return;
+      }
+
+      if (payload.orgSlug !== orgSlug) {
+        return;
+      }
+
+      if (!Array.isArray(payload.pages) || payload.pages.length === 0) {
+        toast({
+          title: "No pages found",
+          description: "No Facebook pages were available on this account.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setOauthPages(payload.pages);
+
+      if (payload.pages.length === 1) {
+        const [singlePage] = payload.pages;
+        if (singlePage) {
+          connectPageFromOauth(singlePage, "Facebook page connected automatically");
+        }
+        return;
+      }
+
+      toast({
+        title: "Choose a page",
+        description: `Found ${payload.pages.length} pages. Select which page to connect.`,
+        variant: "info"
+      });
+    }
+
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+    };
+  }, [orgSlug, toast]);
+
   return (
     <div className="ui-stack-page">
       {isMutating ? <Alert variant="info">Updating connections...</Alert> : null}
@@ -114,36 +216,44 @@ export function InboxConnectionsWorkspace({ orgSlug, canWrite, initialIntegratio
         <CardHeader>
           <CardTitle>Facebook Messenger Connection</CardTitle>
           <CardDescription>
-            Connect a Facebook Page per organization. Incoming page messages route to this org&apos;s inbox by Page ID.
+            Connect one or more Facebook Pages for this organization. Webhook events route to this org by connected Page ID.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {!canWrite ? <Alert variant="info">You have read-only access for inbox connections.</Alert> : null}
 
           <div className="ui-muted-block space-y-2 text-sm text-text-muted">
-            <p>1. In Meta, generate a Page Access Token for Messenger.</p>
-            <p>2. Paste the Page ID and token below.</p>
-            <p>3. Configure webhook callback: <code>/api/webhooks/facebook/messenger</code></p>
+            <p>1. Click Connect with Facebook.</p>
+            <p>2. Log in and grant page permissions in the popup.</p>
+            <p>3. If multiple pages are returned, pick which one to link to this org.</p>
+            <p>4. Configure webhook callback in Meta: <code>/api/webhooks/facebook/messenger</code>.</p>
           </div>
 
-          <Input disabled={!canWrite} onChange={(event) => setPageId(event.target.value)} placeholder="Facebook Page ID" value={pageId} />
-          <Input disabled={!canWrite} onChange={(event) => setPageName(event.target.value)} placeholder="Page name (optional)" value={pageName} />
-          <Input
-            disabled={!canWrite}
-            onChange={(event) => setPageAccessToken(event.target.value)}
-            placeholder="Page access token"
-            type="password"
-            value={pageAccessToken}
-          />
-
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!canWrite || isMutating} onClick={connectPage} type="button">
-              Connect Facebook Page
+            <Button disabled={!canWrite || isMutating} onClick={launchFacebookPopup} type="button">
+              Connect with Facebook
             </Button>
             <Button href={`/${orgSlug}/tools/inbox`} variant="secondary">
               Back to Inbox
             </Button>
           </div>
+
+          {oauthPages.length > 1 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Pick a Page to Connect</p>
+              {oauthPages.map((page) => (
+                <div className="ui-list-item" key={page.id}>
+                  <p className="font-semibold text-text">{page.name}</p>
+                  <p className="text-xs text-text-muted">Page ID: {page.id}</p>
+                  <div className="mt-2">
+                    <Button disabled={!canWrite || isMutating} onClick={() => connectPageFromOauth(page)} size="sm" type="button">
+                      Connect This Page
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -163,7 +273,13 @@ export function InboxConnectionsWorkspace({ orgSlug, canWrite, initialIntegratio
               <p className="text-xs text-text-muted">Token: {integration.tokenHint ?? "not stored"}</p>
               {integration.lastError ? <p className="mt-1 text-xs text-danger">Last error: {integration.lastError}</p> : null}
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button disabled={!canWrite || integration.status === "disconnected"} onClick={() => disconnectIntegration(integration.id)} size="sm" type="button" variant="ghost">
+                <Button
+                  disabled={!canWrite || integration.status === "disconnected"}
+                  onClick={() => disconnectIntegration(integration.id)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
                   Disconnect
                 </Button>
               </div>

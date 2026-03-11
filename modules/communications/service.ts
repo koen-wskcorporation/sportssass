@@ -745,18 +745,26 @@ export async function connectFacebookPageIntegration(input: {
     pageAccessToken: trimmedToken
   });
 
-  const integration = await upsertChannelIntegration({
-    orgId: input.orgId,
-    channelType: "facebook_messenger",
-    provider: "meta",
-    providerAccountId: verifiedPage.id,
-    providerAccountName: input.pageName?.trim() || verifiedPage.name || null,
-    status: "active",
-    connectedByUserId: input.actorUserId,
-    disconnectedAt: null,
-    lastError: null,
-    client: input.client
-  });
+  let integration;
+  try {
+    integration = await upsertChannelIntegration({
+      orgId: input.orgId,
+      channelType: "facebook_messenger",
+      provider: "meta",
+      providerAccountId: verifiedPage.id,
+      providerAccountName: input.pageName?.trim() || verifiedPage.name || null,
+      status: "active",
+      connectedByUserId: input.actorUserId,
+      disconnectedAt: null,
+      lastError: null,
+      client: input.client
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("org_comm_channel_integrations_channel_type_provider_account_id_key")) {
+      throw new Error("FACEBOOK_PAGE_ALREADY_CONNECTED_TO_ANOTHER_ORG");
+    }
+    throw error;
+  }
 
   const serviceRoleClient = createOptionalSupabaseServiceRoleClient();
   if (!serviceRoleClient) {
