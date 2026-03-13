@@ -16,7 +16,11 @@ function parseConfiguredOrigin(value: string | undefined): string | null {
 
 function parseForwardedHost(request: Request, fallbackHost: string): string {
   const forwardedHost = request.headers.get("x-forwarded-host");
-  const host = (forwardedHost ?? request.headers.get("host") ?? fallbackHost).trim().toLowerCase();
+  const hostCandidate = (forwardedHost ?? request.headers.get("host") ?? fallbackHost)
+    .split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  const host = hostCandidate || fallbackHost;
   return host.split(":")[0] ?? fallbackHost;
 }
 
@@ -53,13 +57,11 @@ function mapSubdomainHost(hostname: string, target: CrossAppTarget): string | nu
   const labels = hostname.split(".");
   if (labels.length < 2) return null;
 
-  if (target === "app" && labels[0] === "web") {
-    labels[0] = "app";
-    return labels.join(".");
-  }
-
-  if (target === "web" && labels[0] === "app") {
-    labels[0] = "web";
+  const desired = target;
+  const source = target === "app" ? "web" : "app";
+  const index = labels.findIndex((label) => label === source);
+  if (index >= 0) {
+    labels[index] = desired;
     return labels.join(".");
   }
 
@@ -120,9 +122,10 @@ export function resolveCrossAppOrigin(request: Request, target: CrossAppTarget):
     }
   }
 
-  if (protocol === "http") {
+  if (protocol === "http" || hostname === requestUrl.hostname) {
     return resolveLocalOrigin(requestUrl, target);
   }
 
-  return PRODUCTION_ORIGIN[target];
+  // Last-resort fallback should keep users on their own domain, not a hardcoded one.
+  return `${requestUrl.protocol}//${requestUrl.hostname}`;
 }
