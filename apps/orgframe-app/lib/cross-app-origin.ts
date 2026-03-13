@@ -49,9 +49,39 @@ function mapVercelHost(hostname: string, target: CrossAppTarget): string | null 
   return null;
 }
 
+function mapSubdomainHost(hostname: string, target: CrossAppTarget): string | null {
+  const labels = hostname.split(".");
+  if (labels.length < 2) return null;
+
+  if (target === "app" && labels[0] === "web") {
+    labels[0] = "app";
+    return labels.join(".");
+  }
+
+  if (target === "web" && labels[0] === "app") {
+    labels[0] = "web";
+    return labels.join(".");
+  }
+
+  return null;
+}
+
 function resolveLocalOrigin(requestUrl: URL, target: CrossAppTarget): string {
   const host = requestUrl.hostname;
   const protocol = requestUrl.protocol;
+  const currentPort = requestUrl.port;
+
+  // If either app is running on 3000/3001, infer the counterpart port dynamically.
+  if (currentPort === "3000" || currentPort === "3001") {
+    const oppositePort = currentPort === "3000" ? "3001" : "3000";
+    if (target === "app") {
+      const configuredPort = process.env.ORGFRAME_APP_PORT?.trim();
+      return `${protocol}//${host}:${configuredPort || oppositePort}`;
+    }
+    const configuredPort = process.env.ORGFRAME_WEB_PORT?.trim();
+    return `${protocol}//${host}:${configuredPort || oppositePort}`;
+  }
+
   const configuredPort = target === "app" ? process.env.ORGFRAME_APP_PORT : process.env.ORGFRAME_WEB_PORT;
   const defaultPort = target === "app" ? "3001" : "3000";
   const targetPort = configuredPort?.trim() || defaultPort;
@@ -78,12 +108,9 @@ export function resolveCrossAppOrigin(request: Request, target: CrossAppTarget):
     return PRODUCTION_ORIGIN[target];
   }
 
-  if (target === "app" && hostname.startsWith("web.")) {
-    return `https://${hostname.replace(/^web\./, "app.")}`;
-  }
-
-  if (target === "web" && hostname.startsWith("app.")) {
-    return `https://${hostname.replace(/^app\./, "")}`;
+  const subdomainMapped = mapSubdomainHost(hostname, target);
+  if (subdomainMapped) {
+    return `https://${subdomainMapped}`;
   }
 
   if (hostname.endsWith(".vercel.app")) {
@@ -99,4 +126,3 @@ export function resolveCrossAppOrigin(request: Request, target: CrossAppTarget):
 
   return PRODUCTION_ORIGIN[target];
 }
-
