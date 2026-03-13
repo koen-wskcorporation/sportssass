@@ -122,7 +122,7 @@ export function resolveCrossAppOrigin(request: Request, target: CrossAppTarget):
     }
   }
 
-  if (protocol === "http" || hostname === requestUrl.hostname) {
+  if (protocol === "http") {
     return resolveLocalOrigin(requestUrl, target);
   }
 

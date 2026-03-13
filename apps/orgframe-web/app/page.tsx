@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Button } from "@orgframe/ui";
+import { buttonVariants } from "@orgframe/ui";
 
 export default function HomePage() {
   return (
@@ -17,9 +17,12 @@ export default function HomePage() {
             OrgFrame is not yet publicly available. Access is currently limited to organizations with existing login credentials.
           </p>
           <div className="mt-10">
-            <Button className="h-12 px-8 text-base" href="/x/app/auth/login" size="lg">
+            <a
+              className={`${buttonVariants({ size: "lg" })} h-12 px-8 text-base`}
+              href="/x/app/auth/login"
+            >
               Log In
-            </Button>
+            </a>
           </div>
         </div>
       </div>
