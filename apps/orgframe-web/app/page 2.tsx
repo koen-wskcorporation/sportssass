@@ -17,7 +17,7 @@ export default function HomePage() {
             OrgFrame is not yet publicly available. Access is currently limited to organizations with existing login credentials.
           </p>
           <div className="mt-10">
-            <Button className="h-12 px-8 text-base" href="/x/app/auth/login" size="lg">
+            <Button className="h-12 px-8 text-base" href="/login" size="lg">
               Log In
             </Button>
           </div>
