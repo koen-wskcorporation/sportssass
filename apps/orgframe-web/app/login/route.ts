@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-  return NextResponse.redirect(new URL("/x/app/auth", request.url), { status: 307 });
+  const configuredOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? process.env.ORGFRAME_APP_ORIGIN ?? "https://app.orgframe.com";
+  const normalizedOrigin = configuredOrigin.replace(/\/+$/, "");
+  return NextResponse.redirect(new URL("/auth", normalizedOrigin), { status: 307 });
 }

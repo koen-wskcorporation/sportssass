@@ -17,10 +17,33 @@ export const metadata: Metadata = {
   title: "Dashboard"
 };
 
+function getMarketingOriginForHost(host: string) {
+  const normalizedHost = normalizeHost(host);
+
+  if (normalizedHost === "staging.orgframe.app") {
+    return (process.env.NEXT_PUBLIC_STAGING_WEB_ORIGIN ?? process.env.ORGFRAME_STAGING_WEB_ORIGIN ?? "https://staging.orgframeapp.com").replace(/\/+$/, "");
+  }
+
+  if (normalizedHost === "orgframe.app") {
+    return (process.env.NEXT_PUBLIC_WEB_ORIGIN ?? process.env.ORGFRAME_WEB_ORIGIN ?? "https://orgframeapp.com").replace(/\/+$/, "");
+  }
+
+  return null;
+}
+
 export default async function HomePage() {
   const user = await getSessionUser();
   if (!user) {
-    redirect("/x/web");
+    const headerStore = await headers();
+    const forwardedHost = headerStore.get("x-forwarded-host")?.split(",")[0]?.trim();
+    const host = normalizeHost(forwardedHost || headerStore.get("host"));
+    const marketingOrigin = getMarketingOriginForHost(host);
+
+    if (marketingOrigin) {
+      redirect(marketingOrigin);
+    }
+
+    redirect("/auth");
   }
 
   const { organizations } = await getDashboardContext();

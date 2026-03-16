@@ -1,7 +1,15 @@
 import Image from "next/image";
 import { buttonVariants } from "@orgframe/ui";
 
+function getAppAuthUrl() {
+  const configuredOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? process.env.ORGFRAME_APP_ORIGIN ?? "https://app.orgframe.com";
+  const normalizedOrigin = configuredOrigin.replace(/\/+$/, "");
+  return `${normalizedOrigin}/auth`;
+}
+
 export default function HomePage() {
+  const appAuthUrl = getAppAuthUrl();
+
   return (
     <main className="landing-dramatic relative min-h-screen overflow-hidden">
       <div className="landing-grid" />
@@ -19,7 +27,7 @@ export default function HomePage() {
           <div className="mt-10">
             <a
               className={`${buttonVariants({ size: "lg" })} h-12 px-8 text-base`}
-              href="/x/app/auth"
+              href={appAuthUrl}
             >
               Log In
             </a>
