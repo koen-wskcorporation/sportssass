@@ -763,7 +763,7 @@ export async function upsertCalendarRuleAction(input: z.input<typeof upsertRuleS
       });
     }
 
-    const ruleAllocations = await listCalendarRuleFacilityAllocations(actor.orgId, savedRule.id);
+    const ruleAllocations = await listCalendarRuleFacilityAllocations(actor.orgId, { ruleId: savedRule.id });
     if (ruleAllocations.length > 0) {
       const occurrences = await listCalendarOccurrencesByRule(actor.orgId, savedRule.id);
       await applyRuleAllocationsToOccurrences({
