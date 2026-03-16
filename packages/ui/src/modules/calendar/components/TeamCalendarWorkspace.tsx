@@ -5,6 +5,7 @@ import { Button } from "@orgframe/ui/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
 import { Input } from "@orgframe/ui/ui/input";
 import { Panel } from "@orgframe/ui/ui/panel";
+import { Select } from "@orgframe/ui/ui/select";
 import { useToast } from "@orgframe/ui/ui/toast";
 import { UnifiedCalendar, type UnifiedCalendarQuickAddDraft } from "@orgframe/ui/calendar/UnifiedCalendar";
 import {
