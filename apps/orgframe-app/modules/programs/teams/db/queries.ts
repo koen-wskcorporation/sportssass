@@ -24,6 +24,8 @@ const memberSelect =
 const staffSelect = "id, team_id, org_id, program_id, user_id, role, is_primary, notes, created_at, updated_at";
 
 const playerSelect = "id, first_name, last_name, preferred_name, date_of_birth";
+const teamCalendarVisibilityValues = ["team_members", "program_members", "org_members"] as const;
+type TeamCalendarVisibility = (typeof teamCalendarVisibilityValues)[number];
 
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -119,6 +121,13 @@ function mapPlayerLabel(player: any): PlayerPickerItem & { dateOfBirth: string |
     subtitle: player.date_of_birth ? `DOB: ${player.date_of_birth}` : null,
     dateOfBirth: player.date_of_birth ?? null
   };
+}
+
+function asTeamCalendarVisibility(value: unknown): TeamCalendarVisibility | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  return teamCalendarVisibilityValues.includes(value as TeamCalendarVisibility) ? (value as TeamCalendarVisibility) : null;
 }
 
 async function listAuthUsersByIds(userIds: string[]): Promise<Map<string, { email: string | null }>> {
@@ -456,6 +465,33 @@ export async function getProgramTeamDetail(teamId: string): Promise<ProgramTeamD
 
   const team = mapTeam(teamRow);
   const node = asRelationObject(teamRow.program_nodes);
+  const teamSettings = asObject(team.settingsJson);
+  const teamSetting = asTeamCalendarVisibility(teamSettings.calendarTeamVisibility);
+
+  const divisionId = getOptionalString(node, "parent_id");
+  const [divisionNode, programRow] = await Promise.all([
+    divisionId
+      ? supabase.from("program_nodes").select("id, settings_json").eq("id", divisionId).maybeSingle()
+      : Promise.resolve({ data: null as any, error: null as any }),
+    supabase.from("programs").select("id, settings_json").eq("id", team.programId).maybeSingle()
+  ]);
+
+  if (divisionNode.error) {
+    throw new Error(`Failed to load division settings: ${divisionNode.error.message}`);
+  }
+  if (programRow.error) {
+    throw new Error(`Failed to load program settings: ${programRow.error.message}`);
+  }
+
+  const divisionSettings = asObject(divisionNode.data?.settings_json);
+  const programSettings = asObject(programRow.data?.settings_json);
+  const divisionDefault = asTeamCalendarVisibility(divisionSettings.calendarTeamVisibilityDefault);
+  const divisionForced = asTeamCalendarVisibility(divisionSettings.calendarTeamVisibilityForced);
+  const programDefault = asTeamCalendarVisibility(programSettings.calendarTeamVisibilityDefault);
+  const programForced = asTeamCalendarVisibility(programSettings.calendarTeamVisibilityForced);
+  const forcedValue = divisionForced ?? programForced ?? null;
+  const forcedBy = divisionForced ? ("division" as const) : programForced ? ("program" as const) : null;
+  const effective = forcedValue ?? teamSetting ?? divisionDefault ?? programDefault ?? "team_members";
 
   const roster: ProgramTeamMemberDetail[] = (rosterRows ?? []).map((row: any) => {
     const member = mapMember(row);
@@ -486,7 +522,16 @@ export async function getProgramTeamDetail(teamId: string): Promise<ProgramTeamD
     staff,
     rosterCandidates: [],
     staffCandidates: [],
-    facilities: []
+    facilities: [],
+    calendarVisibility: {
+      effective,
+      teamSetting,
+      divisionDefault,
+      programDefault,
+      forcedValue,
+      forcedBy,
+      teamSettingLocked: Boolean(forcedValue)
+    }
   };
 }
 
@@ -621,8 +666,20 @@ export async function upsertTeamProfile(input: {
   colorSecondary: string | null;
   homeFacilityId: string | null;
   notes: string | null;
+  calendarTeamVisibility?: TeamCalendarVisibility | null;
 }): Promise<ProgramTeam> {
   const supabase = await createSupabaseServer();
+  const { data: existing, error: existingError } = await supabase.from("program_teams").select("settings_json").eq("id", input.teamId).maybeSingle();
+  if (existingError) {
+    throw new Error(`Failed to load existing team settings: ${existingError.message}`);
+  }
+  const nextSettings = asObject(existing?.settings_json);
+  if (input.calendarTeamVisibility) {
+    nextSettings.calendarTeamVisibility = input.calendarTeamVisibility;
+  } else if ("calendarTeamVisibility" in nextSettings) {
+    delete nextSettings.calendarTeamVisibility;
+  }
+
   const { data, error } = await supabase
     .from("program_teams")
     .update({
@@ -634,7 +691,8 @@ export async function upsertTeamProfile(input: {
       color_primary: input.colorPrimary,
       color_secondary: input.colorSecondary,
       home_facility_id: input.homeFacilityId,
-      notes: input.notes
+      notes: input.notes,
+      settings_json: nextSettings
     })
     .eq("id", input.teamId)
     .select(teamSelect)

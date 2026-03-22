@@ -4,8 +4,12 @@ import { Alert } from "@orgframe/ui/ui/alert";
 import { Button } from "@orgframe/ui/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
 import { PageHeader } from "@orgframe/ui/ui/page-header";
+import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
 import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
-import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
+import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
+import { can } from "@/lib/permissions/can";
+import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
+import { scopeCalendarReadModelByContext } from "@/modules/calendar/read-model-scope";
 import { listPublishedFormsForProgram } from "@/modules/forms/db/queries";
 import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
 import { listProgramScheduleTimelineWithFallback } from "@/modules/programs/schedule/db/queries";
@@ -66,13 +70,17 @@ function formatOccurrenceLine(input: { startsAtUtc: string; endsAtUtc: string; t
 }
 
 export default async function OrgProgramDetailPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ orgSlug: string; programSlug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgSlug, programSlug } = await params;
-  const org = await getOrgPublicContext(orgSlug);
-  const details = await getProgramDetailsBySlug(org.orgId, programSlug, {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const tab = typeof resolvedSearchParams?.tab === "string" ? resolvedSearchParams.tab : "home";
+  const orgRequest = await getOrgRequestContext(orgSlug);
+  const details = await getProgramDetailsBySlug(orgRequest.org.orgId, programSlug, {
     includeDraft: false
   });
 
@@ -81,12 +89,33 @@ export default async function OrgProgramDetailPage({
   }
 
   const [forms, scheduleTimeline] = await Promise.all([
-    listPublishedFormsForProgram(org.orgId, details.program.id),
+    listPublishedFormsForProgram(orgRequest.org.orgId, details.program.id),
     listProgramScheduleTimelineWithFallback({
       programId: details.program.id,
       legacyDetails: details
     })
   ]);
+  const canReadPrograms = Boolean(
+    orgRequest.membership &&
+      (can(orgRequest.membership.permissions, "programs.read") ||
+        can(orgRequest.membership.permissions, "programs.write") ||
+        can(orgRequest.membership.permissions, "calendar.read") ||
+        can(orgRequest.membership.permissions, "calendar.write"))
+  );
+  const canWritePrograms = Boolean(
+    orgRequest.membership &&
+      (can(orgRequest.membership.permissions, "programs.write") ||
+        can(orgRequest.membership.permissions, "calendar.write") ||
+        can(orgRequest.membership.permissions, "org.manage.read"))
+  );
+  const workspaceData = tab === "calendar" && canReadPrograms ? await getCalendarWorkspaceDataAction({ orgSlug }) : null;
+  const scopedReadModel =
+    workspaceData?.ok
+      ? scopeCalendarReadModelByContext({
+          readModel: workspaceData.data.readModel,
+          programId: details.program.id
+        })
+      : null;
 
   const nodeById = new Map(details.nodes.map((node) => [node.id, node]));
 
@@ -141,58 +170,75 @@ export default async function OrgProgramDetailPage({
           </Card>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Program Structure</CardTitle>
-            <CardDescription>Published structure nodes and capacity planning.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {details.nodes.length === 0 ? <Alert variant="info">No structure nodes published yet.</Alert> : null}
-            {details.nodes.map((node) => {
-              const parent = node.parentId ? nodeById.get(node.parentId) ?? null : null;
-              const href =
-                node.nodeKind === "division"
-                  ? `/${orgSlug}/programs/${details.program.slug}/${node.slug}`
-                  : parent
-                    ? `/${orgSlug}/programs/${details.program.slug}/${parent.slug}/${node.slug}`
-                    : null;
+        {tab === "calendar" ? (
+          <div className="space-y-2">
+            {!canReadPrograms ? <Alert variant="info">Program calendar visibility is limited to authorized members.</Alert> : null}
+            {canReadPrograms && workspaceData?.ok && scopedReadModel ? (
+              <ManageCalendarSection
+                activeTeams={workspaceData.data.activeTeams}
+                canWrite={canWritePrograms}
+                initialFacilityReadModel={workspaceData.data.facilityReadModel}
+                initialReadModel={scopedReadModel}
+                orgSlug={orgSlug}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Program Structure</CardTitle>
+                <CardDescription>Published structure nodes and capacity planning.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {details.nodes.length === 0 ? <Alert variant="info">No structure nodes published yet.</Alert> : null}
+                {details.nodes.map((node) => {
+                  const parent = node.parentId ? nodeById.get(node.parentId) ?? null : null;
+                  const href =
+                    node.nodeKind === "division"
+                      ? `/${orgSlug}/programs/${details.program.slug}/${node.slug}`
+                      : parent
+                        ? `/${orgSlug}/programs/${details.program.slug}/${parent.slug}/${node.slug}`
+                        : null;
 
-              return (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-control border bg-surface px-3 py-2 text-sm" key={node.id}>
-                  <div>
-                    <p className="font-medium text-text">{node.name}</p>
-                    <p className="text-xs text-text-muted">
-                      {node.nodeKind}
-                      {typeof node.capacity === "number" ? ` · Capacity ${node.capacity}` : " · Open capacity"}
-                      {node.waitlistEnabled ? " · Waitlist enabled" : ""}
-                    </p>
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-control border bg-surface px-3 py-2 text-sm" key={node.id}>
+                      <div>
+                        <p className="font-medium text-text">{node.name}</p>
+                        <p className="text-xs text-text-muted">
+                          {node.nodeKind}
+                          {typeof node.capacity === "number" ? ` · Capacity ${node.capacity}` : " · Open capacity"}
+                          {node.waitlistEnabled ? " · Waitlist enabled" : ""}
+                        </p>
+                      </div>
+                      {href ? (
+                        <Button href={href} size="sm" variant="ghost">
+                          View
+                        </Button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Schedule</CardTitle>
+                <CardDescription>Published session timeline.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {scheduleTimeline.occurrences.length === 0 ? <Alert variant="info">No schedule sessions yet.</Alert> : null}
+                {scheduleTimeline.occurrences.map((occurrence) => (
+                  <div className="rounded-control border bg-surface px-3 py-2 text-sm" key={occurrence.id}>
+                    <p className="font-medium text-text">{occurrence.title ?? "Program session"}</p>
+                    <p className="text-xs text-text-muted">{formatOccurrenceLine(occurrence)}</p>
                   </div>
-                  {href ? (
-                    <Button href={href} size="sm" variant="ghost">
-                      View
-                    </Button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule</CardTitle>
-            <CardDescription>Published session timeline.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {scheduleTimeline.occurrences.length === 0 ? <Alert variant="info">No schedule sessions yet.</Alert> : null}
-            {scheduleTimeline.occurrences.map((occurrence) => (
-              <div className="rounded-control border bg-surface px-3 py-2 text-sm" key={occurrence.id}>
-                <p className="font-medium text-text">{occurrence.title ?? "Program session"}</p>
-                <p className="text-xs text-text-muted">{formatOccurrenceLine(occurrence)}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                ))}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </main>
   );

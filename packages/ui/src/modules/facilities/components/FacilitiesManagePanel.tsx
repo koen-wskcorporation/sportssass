@@ -33,7 +33,18 @@ export function FacilitiesManagePanel({ orgSlug, canWrite, initialReadModel }: F
     successTitle: string
   ) {
     startTransition(async () => {
-      const result = await mutation();
+      let result: { ok: true; data: T } | { ok: false; error: string };
+      try {
+        result = await mutation();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unexpected server response.";
+        toast({
+          title: "Action failed",
+          description: message,
+          variant: "destructive"
+        });
+        return;
+      }
       if (!result.ok) {
         toast({
           title: "Action failed",

@@ -7,7 +7,7 @@ import { Input } from "@orgframe/ui/ui/input";
 import { Panel, PanelScreens } from "@orgframe/ui/ui/panel";
 import { Select } from "@orgframe/ui/ui/select";
 import { useToast } from "@orgframe/ui/ui/toast";
-import { UnifiedCalendar, type UnifiedCalendarQuickAddDraft } from "@orgframe/ui/calendar/UnifiedCalendar";
+import { Calendar, type CalendarQuickAddDraft } from "@orgframe/ui/calendar/Calendar";
 import {
   createCalendarEntryAction,
   createManualOccurrenceAction,
@@ -122,7 +122,7 @@ export function TeamCalendarWorkspace({
   );
   const [selectedOccurrenceId, setSelectedOccurrenceId] = useState<string | null>(null);
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(() => buildInitialSelectedSourceIds(initialReadModel.sources));
-  const [quickAddDraft, setQuickAddDraft] = useState<(UnifiedCalendarQuickAddDraft & { open: boolean }) | null>(null);
+  const [quickAddDraft, setQuickAddDraft] = useState<(CalendarQuickAddDraft & { open: boolean }) | null>(null);
   const [createScreen, setCreateScreen] = useState<"basics" | "location" | "schedule">("basics");
   const [locationDraft, setLocationDraft] = useState("");
   const [locationMode, setLocationMode] = useState<"tbd" | "other" | "facility">("tbd");
@@ -369,7 +369,7 @@ export function TeamCalendarWorkspace({
     });
   }, [scopedReadModel.sources]);
 
-  function quickAddTeamPractice(draft: UnifiedCalendarQuickAddDraft) {
+  function quickAddTeamPractice(draft: CalendarQuickAddDraft) {
     const now = new Date().toISOString();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const startParts = toLocalParts(draft.startsAtUtc, timezone);
@@ -585,7 +585,7 @@ export function TeamCalendarWorkspace({
     });
   }
 
-  function openCreateComposer(draft: UnifiedCalendarQuickAddDraft) {
+  function openCreateComposer(draft: CalendarQuickAddDraft) {
     setSelectedOccurrenceId(null);
     setQuickAddDraft({ ...draft, open: true });
     setCreateScreen("basics");
@@ -1040,7 +1040,7 @@ export function TeamCalendarWorkspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <UnifiedCalendar
+      <Calendar
         canEdit={canWrite}
         disableHoverGhost={Boolean(selectedOccurrenceId) || Boolean(quickAddDraft?.open) || facilityDialogOpen}
         className="min-h-0 flex-1"

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Alert } from "@orgframe/ui/ui/alert";
 import { Button } from "@orgframe/ui/ui/button";
+import { Copy, RotateCw, Settings2, Trash2 } from "lucide-react";
 import { type CanvasViewportHandle } from "@orgframe/ui/ui/canvas-viewport";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
 import { Checkbox } from "@orgframe/ui/ui/checkbox";
@@ -10,102 +11,61 @@ import { Chip } from "@orgframe/ui/ui/chip";
 import { useConfirmDialog } from "@orgframe/ui/ui/confirm-dialog";
 import { FormField } from "@orgframe/ui/ui/form-field";
 import { Input } from "@orgframe/ui/ui/input";
-import { Panel } from "@orgframe/ui/ui/panel";
+import { Popover } from "@orgframe/ui/ui/popover";
 import { Popup } from "@orgframe/ui/ui/popup";
 import { Select } from "@orgframe/ui/ui/select";
 import { StructureCanvas } from "@orgframe/ui/modules/core/components/StructureCanvas";
 import { StructureNode } from "@orgframe/ui/modules/core/components/StructureNode";
+import {
+  buildRoundedPolygonPath,
+  getFacilityPolygonGeometry,
+  getPolygonBounds,
+  pointInPolygon,
+  polygonSelfIntersects,
+  polygonToFloorPlanPatch,
+  translatePolygon,
+  type PolygonPoint
+} from "@orgframe/ui/modules/facilities/lib/polygon-geometry";
 import type { FacilitySpace } from "@/modules/facilities/types";
 
 type StructureElementType = "room" | "court" | "field" | "custom" | "structure";
 
-type InlineCreateDraft = {
+type SpaceEditorDraft = {
+  mode: "edit";
+  spaceId: string | null;
   name: string;
-  elementType: StructureElementType;
-  isBookable: boolean;
-};
-
-type InlineEditDraft = {
-  spaceId: string;
-  name: string;
+  slug: string;
   elementType: StructureElementType;
   status: FacilitySpace["status"];
   isBookable: boolean;
+  timezone: string;
+  capacity: string;
 };
 
+type EditorTabKey = "general" | "scheduling" | "access" | "attributes" | "relationships" | "advanced";
+
 type RoomLayout = {
+  points: PolygonPoint[];
+  smoothPoints: number[];
   x: number;
   y: number;
   width: number;
   height: number;
 };
 
-type ResizeEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
-
 const CANVAS_GRID_SIZE = 25;
 const CANVAS_GRID_PITCH = CANVAS_GRID_SIZE;
 const CANVAS_POSITION_STEP = CANVAS_GRID_PITCH;
 const CANVAS_SIZE_STEP = CANVAS_GRID_SIZE;
 const NODE_MIN_SIZE = 5;
-const RESIZE_HIT_RADIUS = 10;
+const HANDLE_SIZE = 14;
+const MIN_POLYGON_SPAN = CANVAS_GRID_SIZE;
 const GRID_NUMERIC_SCALE = 10;
-
-function edgeToCursor(edge: ResizeEdge) {
-  switch (edge) {
-    case "n":
-      return "n-resize";
-    case "s":
-      return "s-resize";
-    case "e":
-      return "e-resize";
-    case "w":
-      return "w-resize";
-    case "ne":
-      return "ne-resize";
-    case "nw":
-      return "nw-resize";
-    case "se":
-      return "se-resize";
-    case "sw":
-      return "sw-resize";
-    default:
-      return "default";
-  }
-}
-
-function getResizeEdgeFromPoint(localX: number, localY: number, width: number, height: number): ResizeEdge | null {
-  const nearLeft = localX <= RESIZE_HIT_RADIUS;
-  const nearRight = localX >= width - RESIZE_HIT_RADIUS;
-  const nearTop = localY <= RESIZE_HIT_RADIUS;
-  const nearBottom = localY >= height - RESIZE_HIT_RADIUS;
-
-  if (nearTop && nearLeft) {
-    return "nw";
-  }
-  if (nearTop && nearRight) {
-    return "ne";
-  }
-  if (nearBottom && nearLeft) {
-    return "sw";
-  }
-  if (nearBottom && nearRight) {
-    return "se";
-  }
-  if (nearTop) {
-    return "n";
-  }
-  if (nearBottom) {
-    return "s";
-  }
-  if (nearLeft) {
-    return "w";
-  }
-  if (nearRight) {
-    return "e";
-  }
-
-  return null;
-}
+const EDGE_INSERT_HIT_DISTANCE = 10;
+const EDGE_INSERT_VERTEX_EXCLUSION_DISTANCE = 18;
+const EDGE_INSERT_ICON_OFFSET = 10;
+const ROTATE_HANDLE_OFFSET = 26;
+const ROTATION_STEP_RADIANS = Math.PI / 4;
 
 function slugify(value: string) {
   return value
@@ -132,6 +92,17 @@ function asNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function asIntegerArray(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((entry) => Math.trunc(Number(entry))).filter((entry) => Number.isFinite(entry));
+}
+
+function isFinitePoint(point: PolygonPoint) {
+  return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
 function snapByStep(value: number, step: number) {
   const scaledValue = Math.round(value * GRID_NUMERIC_SCALE);
   const scaledStep = Math.max(1, Math.round(step * GRID_NUMERIC_SCALE));
@@ -146,26 +117,44 @@ function getRoomLayout(space: FacilitySpace, index: number): RoomLayout {
   const fallbackY = CANVAS_GRID_PITCH + Math.floor(index / 6) * 150;
   const rawWidth = Math.max(NODE_MIN_SIZE, asNumber(floorPlan.width, CANVAS_GRID_SIZE * 8));
   const rawHeight = Math.max(NODE_MIN_SIZE, asNumber(floorPlan.height, CANVAS_GRID_SIZE * 5));
-
-  return {
-    x: snapToGrid(asNumber(floorPlan.x, fallbackX)),
-    y: snapToGrid(asNumber(floorPlan.y, fallbackY)),
-    width: snapSizeToGrid(rawWidth),
-    height: snapSizeToGrid(rawHeight)
-  };
+  const geometry = getFacilityPolygonGeometry(floorPlan, {
+    x: asNumber(floorPlan.x, fallbackX),
+    y: asNumber(floorPlan.y, fallbackY),
+    width: rawWidth,
+    height: rawHeight
+  });
+  const explicitSmoothPoints = normalizeSmoothPoints(asIntegerArray(floorPlan.smoothPoints), geometry.points.length);
+  const smoothPoints = explicitSmoothPoints.length > 0
+    ? explicitSmoothPoints
+    : deriveSmoothPointsFromCurvedEdges(asIntegerArray(floorPlan.curvedEdges), geometry.points.length);
+  return layoutFromPoints(
+    geometry.points.map((point) => ({ x: snapToGrid(point.x), y: snapToGrid(point.y) })),
+    smoothPoints
+  );
 }
 
 function roundLayout(layout: RoomLayout): RoomLayout {
-  return {
-    x: snapToGrid(layout.x),
-    y: snapToGrid(layout.y),
-    width: snapSizeToGrid(layout.width),
-    height: snapSizeToGrid(layout.height)
-  };
+  return layoutFromPoints(
+    layout.points.map((point) => ({ x: snapToGrid(point.x), y: snapToGrid(point.y) })),
+    layout.smoothPoints
+  );
 }
 
 function areLayoutsEqual(a: RoomLayout, b: RoomLayout) {
-  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+  if (a.points.length !== b.points.length) {
+    return false;
+  }
+  const pointsMatch = a.points.every((point, index) => {
+    const other = b.points[index];
+    return other && point.x === other.x && point.y === other.y;
+  });
+  if (!pointsMatch) {
+    return false;
+  }
+  if (a.smoothPoints.length !== b.smoothPoints.length) {
+    return false;
+  }
+  return a.smoothPoints.every((index, position) => b.smoothPoints[position] === index);
 }
 
 function snapToGrid(value: number) {
@@ -180,6 +169,200 @@ function snapSizeToGrid(value: number) {
 
   const snappedRemainder = snapByStep(value - CANVAS_GRID_SIZE, CANVAS_GRID_PITCH);
   return Math.max(minSize, CANVAS_GRID_SIZE + Math.max(0, snappedRemainder));
+}
+
+function normalizeSmoothPoints(smoothPoints: number[], pointCount: number): number[] {
+  const unique = new Set<number>();
+  smoothPoints.forEach((entry) => {
+    const index = Math.trunc(entry);
+    if (index >= 0 && index < pointCount) {
+      unique.add(index);
+    }
+  });
+  return Array.from(unique).sort((a, b) => a - b);
+}
+
+function deriveSmoothPointsFromCurvedEdges(curvedEdges: number[], pointCount: number): number[] {
+  if (pointCount < 3) {
+    return [];
+  }
+  const normalizedEdges = new Set(
+    curvedEdges
+      .map((entry) => Math.trunc(entry))
+      .filter((index) => index >= 0 && index < pointCount)
+  );
+  const smoothPoints: number[] = [];
+  for (let index = 0; index < pointCount; index += 1) {
+    const incomingEdge = ((index - 1) + pointCount) % pointCount;
+    const outgoingEdge = index;
+    if (normalizedEdges.has(incomingEdge) && normalizedEdges.has(outgoingEdge)) {
+      smoothPoints.push(index);
+    }
+  }
+  return smoothPoints;
+}
+
+function layoutFromPoints(points: PolygonPoint[], smoothPoints: number[] = []): RoomLayout {
+  const bounds = getPolygonBounds(points);
+  return {
+    points,
+    smoothPoints: normalizeSmoothPoints(smoothPoints, points.length),
+    x: bounds.left,
+    y: bounds.top,
+    width: Math.max(NODE_MIN_SIZE, bounds.width),
+    height: Math.max(NODE_MIN_SIZE, bounds.height)
+  };
+}
+
+function rectPolygonPoints(x: number, y: number, width: number, height: number): PolygonPoint[] {
+  return [
+    { x, y },
+    { x: x + width, y },
+    { x: x + width, y: y + height },
+    { x, y: y + height }
+  ];
+}
+
+function isEditablePolygon(points: PolygonPoint[]) {
+  if (points.length < 3) {
+    return false;
+  }
+  if (polygonSelfIntersects(points)) {
+    return false;
+  }
+  const bounds = getPolygonBounds(points);
+  return bounds.width >= MIN_POLYGON_SPAN && bounds.height >= MIN_POLYGON_SPAN;
+}
+
+function isDeletablePolygon(points: PolygonPoint[]) {
+  if (points.length < 3) {
+    return false;
+  }
+  return !polygonSelfIntersects(points);
+}
+
+function getDistance(a: PolygonPoint, b: PolygonPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function getClosestPointOnSegment(
+  point: PolygonPoint,
+  segmentStart: PolygonPoint,
+  segmentEnd: PolygonPoint
+): { x: number; y: number; distance: number } {
+  const dx = segmentEnd.x - segmentStart.x;
+  const dy = segmentEnd.y - segmentStart.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq <= Number.EPSILON) {
+    return {
+      x: segmentStart.x,
+      y: segmentStart.y,
+      distance: getDistance(point, segmentStart)
+    };
+  }
+  const t = Math.max(0, Math.min(1, ((point.x - segmentStart.x) * dx + (point.y - segmentStart.y) * dy) / lengthSq));
+  const x = segmentStart.x + t * dx;
+  const y = segmentStart.y + t * dy;
+  return {
+    x,
+    y,
+    distance: Math.hypot(point.x - x, point.y - y)
+  };
+}
+
+function getEdgeInsertCandidate(point: PolygonPoint, points: PolygonPoint[]) {
+  if (points.length < 3) {
+    return null;
+  }
+  const tooCloseToVertex = points.some((vertex) => getDistance(point, vertex) <= EDGE_INSERT_VERTEX_EXCLUSION_DISTANCE);
+  if (tooCloseToVertex) {
+    return null;
+  }
+  let best:
+    | {
+        edgeIndex: number;
+        x: number;
+        y: number;
+        distance: number;
+      }
+    | null = null;
+  for (let index = 0; index < points.length; index += 1) {
+    const start = points[index];
+    const end = points[(index + 1) % points.length];
+    const candidate = getClosestPointOnSegment(point, start, end);
+    if (!best || candidate.distance < best.distance) {
+      best = {
+        edgeIndex: index,
+        x: candidate.x,
+        y: candidate.y,
+        distance: candidate.distance
+      };
+    }
+  }
+  if (!best || best.distance > EDGE_INSERT_HIT_DISTANCE) {
+    return null;
+  }
+  return best;
+}
+
+function getPolygonCentroid(points: PolygonPoint[]): PolygonPoint {
+  if (points.length === 0) {
+    return { x: 0, y: 0 };
+  }
+  if (points.length < 3) {
+    const avg = points.reduce(
+      (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+      { x: 0, y: 0 }
+    );
+    return { x: avg.x / points.length, y: avg.y / points.length };
+  }
+
+  let areaTwice = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const cross = a.x * b.y - b.x * a.y;
+    areaTwice += cross;
+    cx += (a.x + b.x) * cross;
+    cy += (a.y + b.y) * cross;
+  }
+
+  if (Math.abs(areaTwice) < 1e-7) {
+    const avg = points.reduce(
+      (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+      { x: 0, y: 0 }
+    );
+    return { x: avg.x / points.length, y: avg.y / points.length };
+  }
+
+  return {
+    x: cx / (3 * areaTwice),
+    y: cy / (3 * areaTwice)
+  };
+}
+
+function rotatePoint(point: PolygonPoint, center: PolygonPoint, angleRadians: number): PolygonPoint {
+  const cos = Math.cos(angleRadians);
+  const sin = Math.sin(angleRadians);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos
+  };
+}
+
+function remapSmoothPointsAfterInsert(smoothPoints: number[], insertedAfterEdgeIndex: number): number[] {
+  return smoothPoints.map((pointIndex) => (pointIndex > insertedAfterEdgeIndex ? pointIndex + 1 : pointIndex));
+}
+
+function remapSmoothPointsAfterDelete(smoothPoints: number[], deletedVertexIndex: number, nextPointCount: number): number[] {
+  const remapped = smoothPoints
+    .filter((pointIndex) => pointIndex !== deletedVertexIndex)
+    .map((pointIndex) => (pointIndex > deletedVertexIndex ? pointIndex - 1 : pointIndex));
+  return normalizeSmoothPoints(remapped, nextPointCount);
 }
 
 function resolveElementType(space: FacilitySpace | null): StructureElementType {
@@ -324,35 +507,64 @@ export function FacilityStructurePanel({
   onDeleteSpace
 }: FacilityStructurePanelProps) {
   const { confirm } = useConfirmDialog();
+  const isMutating = _isMutating;
   const [structureSearch, setStructureSearch] = useState("");
   const [structureScale, setStructureScale] = useState(1);
   const [structureZoomPercent, setStructureZoomPercent] = useState(100);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
-  const [inlineCreateDraft, setInlineCreateDraft] = useState<InlineCreateDraft | null>(null);
-  const [inlineCreateLayout, setInlineCreateLayout] = useState<RoomLayout | null>(null);
-  const [nodeEditorDraft, setNodeEditorDraft] = useState<InlineEditDraft | null>(null);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [spaceEditorDraft, setSpaceEditorDraft] = useState<SpaceEditorDraft | null>(null);
+  const [spaceEditorInitialDraft, setSpaceEditorInitialDraft] = useState<SpaceEditorDraft | null>(null);
+  const [editorTab, setEditorTab] = useState<EditorTabKey>("general");
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [isStructureCanvasEditMode, setIsStructureCanvasEditMode] = useState(false);
-  const [hoverResizeEdgeByRoomId, setHoverResizeEdgeByRoomId] = useState<Record<string, ResizeEdge | null>>({});
   const [copiedRoomId, setCopiedRoomId] = useState<string | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
+  const [vertexPopover, setVertexPopover] = useState<{ roomId: string; vertexIndex: number; x: number; y: number } | null>(null);
+  const [roomActionPopover, setRoomActionPopover] = useState<{ roomId: string; x: number; y: number } | null>(null);
+  const [edgeInsertHover, setEdgeInsertHover] = useState<{ roomId: string; edgeIndex: number; x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<
     | {
-        mode: "move" | "resize";
+        mode: "move";
         roomId: string;
         roomIds: string[];
         startX: number;
         startY: number;
         origin: RoomLayout;
         originsByRoomId?: Record<string, RoomLayout>;
-        edge?: ResizeEdge;
+        originLeft: number;
+        originTop: number;
+        snappedDeltaX: number;
+        snappedDeltaY: number;
+        hasCrossedThreshold: boolean;
+      }
+    | {
+        mode: "vertex";
+        roomId: string;
+        startX: number;
+        startY: number;
+        vertexIndex: number;
+        originPoints: PolygonPoint[];
+        smoothPoints: number[];
+        hasCrossedThreshold: boolean;
+      }
+    | {
+        mode: "rotate";
+        roomId: string;
+        startX: number;
+        startY: number;
+        originPoints: PolygonPoint[];
+        smoothPoints: number[];
+        center: PolygonPoint;
+        centerClientX: number;
+        centerClientY: number;
+        startAngle: number;
         hasCrossedThreshold: boolean;
       }
     | null
   >(null);
+  const recentHandleDragAtRef = useRef(0);
   const [layoutDraftByRoomId, setLayoutDraftByRoomId] = useState<Record<string, RoomLayout>>({});
   const layoutDraftByRoomIdRef = useRef<Record<string, RoomLayout>>({});
   const structureCanvasRef = useRef<CanvasViewportHandle | null>(null);
@@ -390,6 +602,7 @@ export function FacilityStructurePanel({
 
     setOptimisticSpaces((current) => [...current, optimisticSpace]);
     onCreateSpace(input);
+    return optimisticSpace;
   }
 
   function updateSpaceOptimistically(input: Parameters<FacilityStructurePanelProps["onUpdateSpace"]>[0]) {
@@ -432,6 +645,7 @@ export function FacilityStructurePanel({
     setActiveRoomId(null);
     setSelectedRoomIds([]);
     setHoveredRoomId(null);
+    setEdgeInsertHover(null);
   }
 
   function handleCanvasPointerDownCapture(event: ReactPointerEvent<HTMLDivElement>) {
@@ -480,6 +694,11 @@ export function FacilityStructurePanel({
     return { left, top, width, height };
   }, [layoutDraftByRoomId, rooms]);
 
+  const autoFitSignature = useMemo(
+    () => rooms.map((room) => room.id).join("|"),
+    [rooms]
+  );
+
   function handleFitToRooms(options?: { viewportOffsetX?: number; viewportOffsetY?: number; animated?: boolean }) {
     if (!roomFitBounds) {
       structureCanvasRef.current?.fitToView(options);
@@ -510,6 +729,17 @@ export function FacilityStructurePanel({
     setActiveRoomId((current) => (current && roomIdSet.has(current) ? current : null));
   }, [rooms]);
 
+  useEffect(() => {
+    const closePopovers = () => {
+      setVertexPopover(null);
+      setRoomActionPopover(null);
+    };
+    window.addEventListener("structure-node-actions-open", closePopovers as EventListener);
+    return () => {
+      window.removeEventListener("structure-node-actions-open", closePopovers as EventListener);
+    };
+  }, []);
+
   const normalizedSearch = structureSearch.trim().toLowerCase();
   const normalizeSearchKey = useCallback((value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, ""), []);
   const matchingRooms = useMemo(() => {
@@ -527,6 +757,39 @@ export function FacilityStructurePanel({
 
   const canvasCenterTitle = mappingRoot.name;
   const mapCanEdit = canWrite && isStructureCanvasEditMode;
+  const editorTabs: Array<{ key: EditorTabKey; label: string; description: string }> = [
+    { key: "general", label: "General", description: "Name and core node identity." },
+    { key: "scheduling", label: "Scheduling", description: "Timezone and booking-time defaults." },
+    { key: "access", label: "Access / Visibility", description: "Operational status and booking access." },
+    { key: "attributes", label: "Attributes / Settings", description: "Capacities and node-level configuration." },
+    { key: "relationships", label: "Relationships", description: "Parent and facility context." },
+    { key: "advanced", label: "Advanced", description: "IDs and destructive actions." }
+  ];
+
+  const sanitizeDraft = useCallback((draft: SpaceEditorDraft): SpaceEditorDraft => {
+    const elementType = draft.elementType;
+    const nonBookable = isNonBookableElementType(elementType);
+    return {
+      ...draft,
+      isBookable: nonBookable ? false : draft.isBookable,
+      slug: slugify(draft.slug || draft.name),
+      timezone: draft.timezone.trim() || mappingRoot.timezone,
+      capacity: draft.capacity.trim()
+    };
+  }, [mappingRoot.timezone]);
+
+  const activeEditorDraft = spaceEditorDraft ? sanitizeDraft(spaceEditorDraft) : null;
+  const isEditorOpen = Boolean(spaceEditorDraft);
+  const activeNameInvalid = Boolean(activeEditorDraft && activeEditorDraft.name.trim().length < 2);
+  const tabHasError: Partial<Record<EditorTabKey, boolean>> = {
+    general: activeNameInvalid
+  };
+  const activeSpaceForEditor = useMemo(() => {
+    if (!activeEditorDraft?.spaceId) {
+      return null;
+    }
+    return spaceById.get(activeEditorDraft.spaceId) ?? null;
+  }, [activeEditorDraft?.spaceId, spaceById]);
 
   function persistRoomLayout(roomId: string, layout: RoomLayout) {
     const room = spaceById.get(roomId);
@@ -535,14 +798,15 @@ export function FacilityStructurePanel({
     }
 
     const roundedLayout = roundLayout(layout);
+    if (roundedLayout.points.length < 3 || !roundedLayout.points.every(isFinitePoint)) {
+      return;
+    }
+    if (!roundedLayout.smoothPoints.every((index) => Number.isInteger(index) && index >= 0 && index < roundedLayout.points.length)) {
+      return;
+    }
     const metadata = asObject(room.metadataJson);
     const floorPlan = asObject(metadata.floorPlan);
-    const existingLayout: RoomLayout = {
-      x: snapToGrid(asNumber(floorPlan.x, roundedLayout.x)),
-      y: snapToGrid(asNumber(floorPlan.y, roundedLayout.y)),
-      width: snapSizeToGrid(asNumber(floorPlan.width, roundedLayout.width)),
-      height: snapSizeToGrid(asNumber(floorPlan.height, roundedLayout.height))
-    };
+    const existingLayout = getRoomLayout(room, 0);
     if (areLayoutsEqual(existingLayout, roundedLayout)) {
       return;
     }
@@ -560,13 +824,7 @@ export function FacilityStructurePanel({
       sortIndex: room.sortIndex,
       metadataJson: {
         ...metadata,
-        floorPlan: {
-          ...floorPlan,
-          x: roundedLayout.x,
-          y: roundedLayout.y,
-          width: roundedLayout.width,
-          height: roundedLayout.height
-        }
+        floorPlan: polygonToFloorPlanPatch(roundedLayout.points, floorPlan, roundedLayout.smoothPoints)
       }
     });
   }
@@ -582,81 +840,98 @@ export function FacilityStructurePanel({
         return;
       }
 
-      const dx = (event.clientX - dragState.startX) / Math.max(0.2, structureScale);
-      const dy = (event.clientY - dragState.startY) / Math.max(0.2, structureScale);
-      const hasCrossedThreshold =
-        dragState.mode === "resize" || dragState.hasCrossedThreshold || Math.abs(dx) >= 4 || Math.abs(dy) >= 4;
-
-      if (dragState.mode === "move" && !hasCrossedThreshold) {
+      const dxRaw = (event.clientX - dragState.startX) / Math.max(0.2, structureScale);
+      const dyRaw = (event.clientY - dragState.startY) / Math.max(0.2, structureScale);
+      const hasCrossedThreshold = dragState.hasCrossedThreshold || Math.abs(dxRaw) >= 4 || Math.abs(dyRaw) >= 4;
+      if (!hasCrossedThreshold) {
         return;
       }
 
-      if (!dragState.hasCrossedThreshold && hasCrossedThreshold) {
+      if (!dragState.hasCrossedThreshold) {
         setDragState((current) => (current ? { ...current, hasCrossedThreshold: true } : current));
       }
 
-      setLayoutDraftByRoomId((current) => {
-        const nextState = { ...current };
-        if (dragState.mode === "move") {
+      if (dragState.mode === "move") {
+        const snappedLeft = snapToGrid(dragState.originLeft + dxRaw);
+        const snappedTop = snapToGrid(dragState.originTop + dyRaw);
+        const deltaX = snappedLeft - dragState.originLeft;
+        const deltaY = snappedTop - dragState.originTop;
+
+        setDragState((current) =>
+          current && current.mode === "move"
+            ? {
+                ...current,
+                snappedDeltaX: deltaX,
+                snappedDeltaY: deltaY
+              }
+            : current
+        );
+
+        setLayoutDraftByRoomId((current) => {
+          const nextState = { ...current };
           const origins = dragState.originsByRoomId ?? { [dragState.roomId]: dragState.origin };
           for (const moveRoomId of dragState.roomIds) {
             const origin = origins[moveRoomId];
             if (!origin) {
               continue;
             }
-            const previous = current[moveRoomId] ?? origin;
-            nextState[moveRoomId] = {
-              ...previous,
-              x: snapToGrid(origin.x + dx),
-              y: snapToGrid(origin.y + dy)
-            };
+            const translated = translatePolygon(origin.points, deltaX, deltaY).map((point) => ({
+              x: snapToGrid(point.x),
+              y: snapToGrid(point.y)
+            }));
+            nextState[moveRoomId] = layoutFromPoints(translated, origin.smoothPoints);
           }
-        } else {
-          const previous = current[dragState.roomId] ?? dragState.origin;
-          const minWidth = NODE_MIN_SIZE;
-          const minHeight = NODE_MIN_SIZE;
-          let x = dragState.origin.x;
-          let y = dragState.origin.y;
-          let width = dragState.origin.width;
-          let height = dragState.origin.height;
-          const edge = dragState.edge ?? "se";
+          layoutDraftByRoomIdRef.current = nextState;
+          return nextState;
+        });
+        return;
+      }
 
-          if (edge.includes("e")) {
-            width = Math.max(minWidth, snapSizeToGrid(dragState.origin.width + dx));
-          }
-          if (edge.includes("s")) {
-            height = Math.max(minHeight, snapSizeToGrid(dragState.origin.height + dy));
-          }
-          if (edge.includes("w")) {
-            const right = dragState.origin.x + dragState.origin.width;
-            x = snapToGrid(dragState.origin.x + dx);
-            width = right - x;
-            if (width < minWidth) {
-              width = minWidth;
-              x = right - minWidth;
-            }
-          }
-          if (edge.includes("n")) {
-            const bottom = dragState.origin.y + dragState.origin.height;
-            y = snapToGrid(dragState.origin.y + dy);
-            height = bottom - y;
-            if (height < minHeight) {
-              height = minHeight;
-              y = bottom - minHeight;
-            }
-          }
-
-          width = Math.max(minWidth, snapSizeToGrid(width));
-          height = Math.max(minHeight, snapSizeToGrid(height));
-          nextState[dragState.roomId] = {
-            ...previous,
-            x,
-            y,
-            width,
-            height
-          };
+      if (dragState.mode === "vertex") {
+        const originVertex = dragState.originPoints[dragState.vertexIndex];
+        if (!originVertex) {
+          return;
         }
+        const nextPoints = dragState.originPoints.map((point, index) =>
+          index === dragState.vertexIndex
+            ? {
+                x: snapToGrid(originVertex.x + dxRaw),
+                y: snapToGrid(originVertex.y + dyRaw)
+              }
+            : point
+        );
+        if (!isEditablePolygon(nextPoints)) {
+          return;
+        }
+        setLayoutDraftByRoomId((current) => {
+          const nextState = {
+            ...current,
+            [dragState.roomId]: layoutFromPoints(nextPoints, dragState.smoothPoints)
+          };
+          layoutDraftByRoomIdRef.current = nextState;
+          return nextState;
+        });
+        return;
+      }
 
+      const pointerAngle = Math.atan2(event.clientY - dragState.centerClientY, event.clientX - dragState.centerClientX);
+      const rawDeltaAngle = pointerAngle - dragState.startAngle;
+      const deltaAngle = Math.round(rawDeltaAngle / ROTATION_STEP_RADIANS) * ROTATION_STEP_RADIANS;
+      const rotatedPoints = dragState.originPoints.map((point) => {
+        const rotated = rotatePoint(point, dragState.center, deltaAngle);
+        return {
+          x: snapToGrid(rotated.x),
+          y: snapToGrid(rotated.y)
+        };
+      });
+      if (!isEditablePolygon(rotatedPoints)) {
+        return;
+      }
+      setLayoutDraftByRoomId((current) => {
+        const nextState = {
+          ...current,
+          [dragState.roomId]: layoutFromPoints(rotatedPoints, dragState.smoothPoints)
+        };
         layoutDraftByRoomIdRef.current = nextState;
         return nextState;
       });
@@ -678,9 +953,33 @@ export function FacilityStructurePanel({
           const layout = layoutDraftByRoomIdRef.current[moveRoomId] ?? fallbackLayout;
           persistRoomLayout(moveRoomId, layout);
         }
+      } else if (dragState.mode === "vertex") {
+        if (!dragState.hasCrossedThreshold) {
+          openVertexDeletePopover({
+            roomId: dragState.roomId,
+            vertexIndex: dragState.vertexIndex,
+            x: dragState.startX + 10,
+            y: dragState.startY + 10
+          });
+          setDragState(null);
+          return;
+        }
+        const layout = layoutDraftByRoomIdRef.current[dragState.roomId];
+        if (layout) {
+          persistRoomLayout(dragState.roomId, layout);
+        }
+        if (dragState.hasCrossedThreshold) {
+          recentHandleDragAtRef.current = Date.now();
+        }
       } else {
-        const layout = layoutDraftByRoomIdRef.current[dragState.roomId] ?? dragState.origin;
-        persistRoomLayout(dragState.roomId, layout);
+        if (!dragState.hasCrossedThreshold) {
+          setDragState(null);
+          return;
+        }
+        const layout = layoutDraftByRoomIdRef.current[dragState.roomId];
+        if (layout) {
+          persistRoomLayout(dragState.roomId, layout);
+        }
       }
       setDragState(null);
     };
@@ -695,118 +994,124 @@ export function FacilityStructurePanel({
   }, [dragState, structureScale]);
 
   function startInlineCreate(elementType: StructureElementType = "room") {
-    const defaultName = elementType === "structure" ? "Structure" : "";
-    setInlineCreateDraft({
-      name: defaultName,
-      elementType,
-      isBookable: isNonBookableElementType(elementType) ? false : true,
-    });
-    setInlineCreateLayout({
-      x: CANVAS_GRID_PITCH + (rooms.length % 5) * 200,
-      y: CANVAS_GRID_PITCH + Math.floor(rooms.length / 5) * 150,
-      width: CANVAS_GRID_SIZE * 8,
-      height: CANVAS_GRID_SIZE * 5
-    });
-    setIsCreateOpen(true);
-    setActiveRoomId(null);
-    setSelectedRoomIds([]);
-    setHoveredRoomId(null);
-  }
-
-  function openEditRoomPanel(room: FacilitySpace) {
-    setActiveRoomId(room.id);
-    setSelectedRoomIds([room.id]);
-    setNodeEditorDraft({
-      spaceId: room.id,
-      name: room.name,
-      elementType: resolveElementType(room),
-      status: room.status,
-      isBookable: room.isBookable
-    });
-    setIsEditOpen(true);
-  }
-
-  function submitNodeEditor() {
-    if (!canWrite || !nodeEditorDraft) {
+    if (!canWrite) {
       return;
     }
 
-    const room = spaceById.get(nodeEditorDraft.spaceId);
-    if (!room) {
-      return;
-    }
-
-    const name = nodeEditorDraft.name.trim();
-    if (name.length < 2) {
-      return;
-    }
-
-    const existingMetadata = room ? asObject(room.metadataJson) : {};
-    updateSpaceOptimistically({
-      spaceId: nodeEditorDraft.spaceId,
-      parentSpaceId: room.parentSpaceId,
-      name,
-      slug: room.slug || slugify(name),
-      spaceKind: toSpaceKind(nodeEditorDraft.elementType),
-      status: nodeEditorDraft.status,
-      isBookable: isNonBookableElementType(nodeEditorDraft.elementType) ? false : nodeEditorDraft.isBookable,
-      timezone: room.timezone,
-      capacity: room.capacity,
-      sortIndex: room.sortIndex,
-      metadataJson: {
-        ...existingMetadata,
-        floorPlan: {
-          ...asObject(existingMetadata.floorPlan),
-          elementType: nodeEditorDraft.elementType
-        }
-      }
-    });
-    setIsEditOpen(false);
-  }
-
-  function submitInlineCreate() {
-    if (!canWrite || !inlineCreateDraft || !inlineCreateLayout) {
-      return;
-    }
-
-    const name = inlineCreateDraft.name.trim();
-    if (name.length < 2) {
-      return;
-    }
-
+    const layout = layoutFromPoints(
+      rectPolygonPoints(
+        CANVAS_GRID_PITCH + (rooms.length % 5) * 200,
+        CANVAS_GRID_PITCH + Math.floor(rooms.length / 5) * 150,
+        CANVAS_GRID_SIZE * 8,
+        CANVAS_GRID_SIZE * 5
+      )
+    );
+    const usedNames = new Set(rooms.map((room) => room.name.toLowerCase()));
     const usedSlugs = new Set(effectiveSpaces.map((candidate) => candidate.slug));
-    const baseSlug = slugify(name);
-    let slug = baseSlug;
-    let index = 2;
-    while (usedSlugs.has(slug)) {
-      slug = `${baseSlug}-${index}`;
-      index += 1;
+    const baseName = "New Space";
+    let nextName = baseName;
+    let nameCounter = 2;
+    while (usedNames.has(nextName.toLowerCase())) {
+      nextName = `${baseName} ${nameCounter}`;
+      nameCounter += 1;
     }
 
-    createSpaceOptimistically({
+    const baseSlug = slugify(nextName);
+    let nextSlug = baseSlug;
+    let slugCounter = 2;
+    while (usedSlugs.has(nextSlug)) {
+      nextSlug = `${baseSlug}-${slugCounter}`;
+      slugCounter += 1;
+    }
+
+    const created = createSpaceOptimistically({
       parentSpaceId: mappingRoot.id,
-      name,
-      slug,
-      spaceKind: toSpaceKind(inlineCreateDraft.elementType),
+      name: nextName,
+      slug: nextSlug,
+      spaceKind: toSpaceKind(elementType),
       status: "open",
-      isBookable: isNonBookableElementType(inlineCreateDraft.elementType) ? false : inlineCreateDraft.isBookable,
+      isBookable: isNonBookableElementType(elementType) ? false : true,
       timezone: mappingRoot.timezone,
       capacity: null,
       sortIndex: rooms.length,
       metadataJson: {
         floorPlan: {
-          x: inlineCreateLayout.x,
-          y: inlineCreateLayout.y,
-          width: inlineCreateLayout.width,
-          height: inlineCreateLayout.height,
-          elementType: inlineCreateDraft.elementType
+          ...polygonToFloorPlanPatch(layout.points, {}, layout.smoothPoints),
+          elementType
         }
       }
     });
 
-    setInlineCreateDraft(null);
-    setInlineCreateLayout(null);
-    setIsCreateOpen(false);
+    openEditRoomPanel(created);
+    setHoveredRoomId(null);
+  }
+
+  function openEditRoomPanel(room: FacilitySpace) {
+    const draft: SpaceEditorDraft = {
+      mode: "edit",
+      spaceId: room.id,
+      name: room.name,
+      slug: room.slug,
+      elementType: resolveElementType(room),
+      status: room.status,
+      isBookable: room.isBookable,
+      timezone: room.timezone,
+      capacity: room.capacity === null ? "" : String(room.capacity)
+    };
+    setActiveRoomId(room.id);
+    setSelectedRoomIds([room.id]);
+    setSpaceEditorDraft(draft);
+    setSpaceEditorInitialDraft(draft);
+    setEditorTab("general");
+    setEditorError(null);
+  }
+
+  function submitNodeEditor() {
+    if (!canWrite || !activeEditorDraft || !activeEditorDraft.spaceId) {
+      return false;
+    }
+
+    const room = spaceById.get(activeEditorDraft.spaceId);
+    if (!room) {
+      return false;
+    }
+
+    const name = activeEditorDraft.name.trim();
+    if (name.length < 2) {
+      setEditorTab("general");
+      setEditorError("Name must be at least 2 characters.");
+      return false;
+    }
+
+    const existingMetadata = room ? asObject(room.metadataJson) : {};
+    const floorPlan = asObject(existingMetadata.floorPlan);
+    const layout = layoutDraftByRoomId[room.id] ?? getRoomLayout(room, 0);
+    const parsedCapacity = activeEditorDraft.capacity ? Number.parseInt(activeEditorDraft.capacity, 10) : null;
+    const capacity = Number.isFinite(parsedCapacity) ? Math.max(0, parsedCapacity ?? 0) : room.capacity;
+    updateSpaceOptimistically({
+      spaceId: activeEditorDraft.spaceId,
+      parentSpaceId: room.parentSpaceId,
+      name,
+      slug: activeEditorDraft.slug || slugify(name),
+      spaceKind: toSpaceKind(activeEditorDraft.elementType),
+      status: activeEditorDraft.status,
+      isBookable: isNonBookableElementType(activeEditorDraft.elementType) ? false : activeEditorDraft.isBookable,
+      timezone: activeEditorDraft.timezone || room.timezone,
+      capacity,
+      sortIndex: room.sortIndex,
+      metadataJson: {
+        ...existingMetadata,
+        floorPlan: {
+          ...polygonToFloorPlanPatch(layout.points, floorPlan, layout.smoothPoints),
+          elementType: activeEditorDraft.elementType
+        }
+      }
+    });
+    setEditorError(null);
+    const nextDraft = { ...activeEditorDraft, name, capacity: capacity === null ? "" : String(capacity) };
+    setSpaceEditorDraft(nextDraft);
+    setSpaceEditorInitialDraft(nextDraft);
+    return true;
   }
 
   function focusRoomFromSearch(query: string) {
@@ -857,12 +1162,10 @@ export function FacilityStructurePanel({
     }
 
     const offset = CANVAS_GRID_PITCH * Math.max(1, offsetMultiplier);
-    const baseLayout: RoomLayout = {
-      x: snapToGrid(roomLayout.x + offset),
-      y: snapToGrid(roomLayout.y + offset),
-      width: roomLayout.width,
-      height: roomLayout.height
-    };
+    const shiftedPoints = translatePolygon(roomLayout.points, offset, offset).map((point) => ({
+      x: snapToGrid(point.x),
+      y: snapToGrid(point.y)
+    }));
     createSpaceOptimistically({
       parentSpaceId: mappingRoot.id,
       name: nextName,
@@ -876,11 +1179,7 @@ export function FacilityStructurePanel({
       metadataJson: {
         ...metadata,
         floorPlan: {
-          ...floorPlan,
-          x: baseLayout.x,
-          y: baseLayout.y,
-          width: baseLayout.width,
-          height: baseLayout.height
+          ...polygonToFloorPlanPatch(shiftedPoints, floorPlan, roomLayout.smoothPoints)
         }
       }
     });
@@ -913,9 +1212,9 @@ export function FacilityStructurePanel({
       setActiveRoomId(null);
     }
     setSelectedRoomIds((current) => current.filter((roomId) => roomId !== spaceId));
-    if (nodeEditorDraft?.spaceId === spaceId) {
-      setNodeEditorDraft(null);
-      setIsEditOpen(false);
+    if (spaceEditorDraft?.spaceId === spaceId) {
+      setSpaceEditorDraft(null);
+      setSpaceEditorInitialDraft(null);
     }
   }
 
@@ -996,13 +1295,101 @@ export function FacilityStructurePanel({
       };
     }
 
-    if (dragState.mode === "resize") {
-      document.body.style.cursor = edgeToCursor(dragState.edge ?? "se");
+    if (dragState.mode === "vertex" || dragState.mode === "rotate") {
+      document.body.style.cursor = "grabbing";
       return () => {
         document.body.style.removeProperty("cursor");
       };
     }
   }, [dragState]);
+
+  function updateEditorDraft(updater: (current: SpaceEditorDraft) => SpaceEditorDraft) {
+    setSpaceEditorDraft((current) => {
+      if (!current) {
+        return current;
+      }
+      return updater(current);
+    });
+    setEditorError(null);
+  }
+
+  function openVertexDeletePopover(input: { roomId: string; vertexIndex: number; x: number; y: number }) {
+    window.dispatchEvent(new CustomEvent("structure-node-actions-open", { detail: { ownerId: "facility-vertex-popover" } }));
+    setVertexPopover(input);
+  }
+
+  function openRoomActionMenu(input: { roomId: string; x: number; y: number }) {
+    window.dispatchEvent(new CustomEvent("structure-node-actions-open", { detail: { ownerId: "facility-room-popover" } }));
+    setRoomActionPopover(input);
+  }
+
+  function deleteVertexPoint(roomId: string, vertexIndex: number) {
+    const layout = layoutDraftByRoomIdRef.current[roomId];
+    if (!layout) {
+      return;
+    }
+    if (layout.points.length <= 3) {
+      return;
+    }
+    if (vertexIndex < 0 || vertexIndex >= layout.points.length) {
+      return;
+    }
+    const nextPoints = layout.points.filter((_, index) => index !== vertexIndex);
+    if (!isDeletablePolygon(nextPoints)) {
+      return;
+    }
+    const nextSmoothPoints = remapSmoothPointsAfterDelete(layout.smoothPoints, vertexIndex, nextPoints.length);
+    const nextLayout = layoutFromPoints(nextPoints, nextSmoothPoints);
+    setLayoutDraftByRoomId((current) => {
+      const nextState = {
+        ...current,
+        [roomId]: nextLayout
+      };
+      layoutDraftByRoomIdRef.current = nextState;
+      return nextState;
+    });
+    persistRoomLayout(roomId, nextLayout);
+    setVertexPopover(null);
+  }
+
+  function toggleVertexCurves(roomId: string, vertexIndex: number) {
+    const layout = layoutDraftByRoomIdRef.current[roomId];
+    if (!layout || layout.points.length < 3) {
+      return;
+    }
+    const pointCount = layout.points.length;
+    const normalizedIndex = ((vertexIndex % pointCount) + pointCount) % pointCount;
+    const hasSmooth = layout.smoothPoints.includes(normalizedIndex);
+    const nextSmoothPoints = hasSmooth
+      ? layout.smoothPoints.filter((index) => index !== normalizedIndex)
+      : normalizeSmoothPoints([...layout.smoothPoints, normalizedIndex], pointCount);
+    const nextLayout = layoutFromPoints(layout.points, nextSmoothPoints);
+    setLayoutDraftByRoomId((current) => {
+      const nextState = {
+        ...current,
+        [roomId]: nextLayout
+      };
+      layoutDraftByRoomIdRef.current = nextState;
+      return nextState;
+    });
+    persistRoomLayout(roomId, nextLayout);
+  }
+
+  function closeEditor() {
+    setSpaceEditorDraft(null);
+    setSpaceEditorInitialDraft(null);
+    setEditorError(null);
+  }
+
+  function handleEditorSave() {
+    if (!activeEditorDraft || isMutating) {
+      return;
+    }
+    const saved = submitNodeEditor();
+    if (saved) {
+      closeEditor();
+    }
+  }
 
   return (
     <>
@@ -1017,10 +1404,9 @@ export function FacilityStructurePanel({
                 addButtonAriaLabel="Add space"
                 addButtonDisabled={!canWrite}
                 autoFitKey={
-                  roomFitBounds
-                    ? `${roomFitBounds.left},${roomFitBounds.top},${roomFitBounds.width},${roomFitBounds.height}`
-                    : `rooms:${rooms.length}`
+                  autoFitSignature || `rooms:${rooms.length}`
                 }
+                autoFitOnOpen
                 canvasRef={structureCanvasRef}
                 dragInProgress={Boolean(dragState)}
                 editContent={
@@ -1029,210 +1415,426 @@ export function FacilityStructurePanel({
                       const layout = roundLayout(layoutDraftByRoomId[room.id] ?? getRoomLayout(room, 0));
                       const isActive = activeRoomId === room.id;
                       const isSelected = selectedRoomIdSet.has(room.id);
-                      const dragMode = dragState?.mode;
-                      const dragEdge = dragState?.edge;
                       const isDraggingThisRoom = Boolean(
                         dragState &&
                           (dragState.mode === "move" ? dragState.roomIds.includes(room.id) : dragState.roomId === room.id)
                       );
-                      const showControls = mapCanEdit && (isActive || hoveredRoomId === room.id);
+                      const isHovered = hoveredRoomId === room.id;
+                      const showControls = mapCanEdit && isActive;
                       const elementType = resolveElementType(room);
                       const isStructuralElement = elementType === "structure";
+                      const localPolygonPoints = layout.points.map((point) => ({
+                        x: point.x - layout.x,
+                        y: point.y - layout.y
+                      }));
+                      const localCentroid = getPolygonCentroid(localPolygonPoints);
+                      const roundedCornerRadius = 12;
+                      const roundedPath = buildRoundedPolygonPath(localPolygonPoints, roundedCornerRadius, layout.smoothPoints);
+                      const centerX = layout.x + layout.width / 2;
+                      const centerY = layout.y + layout.height / 2;
+                      const getWorldPointFromMouse = (event: React.MouseEvent<HTMLDivElement>) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const localX = event.clientX - rect.left;
+                        const localY = event.clientY - rect.top;
+                        return {
+                          x: layout.x + (localX / Math.max(1, rect.width)) * layout.width,
+                          y: layout.y + (localY / Math.max(1, rect.height)) * layout.height
+                        };
+                      };
                       const spaceStatusChip = resolveFacilitySpaceStatusChip(room.status);
                       const nodeStateChip = resolveFacilityNodeStateChip(elementType, room.isBookable);
+                      const outlineStroke = isActive
+                        ? "hsl(var(--accent))"
+                        : isSelected
+                          ? "hsl(var(--accent) / 0.65)"
+                          : "hsl(var(--border))";
+                      const fillColor = isStructuralElement
+                        ? "hsl(var(--surface) / 0.7)"
+                        : isSelected && !isActive
+                          ? "hsl(var(--accent) / 0.08)"
+                          : "hsl(var(--surface))";
+                      const outlineFilter = isDraggingThisRoom
+                        ? "drop-shadow(0 6px 12px hsl(var(--foreground) / 0.14))"
+                        : isHovered || isActive
+                          ? "drop-shadow(0 4px 10px hsl(var(--foreground) / 0.11))"
+                          : "drop-shadow(0 1px 2px hsl(var(--foreground) / 0.08))";
 
                       return (
                         <StructureNode
-                          className={`absolute ${isDraggingThisRoom ? "transition-none shadow-lg" : ""} ${isSelected && !isActive ? "border-accent/60 bg-accent/5" : ""}`}
-                          chips={
-                            <>
-                              <Chip className="normal-case tracking-normal" color={spaceStatusChip.color} size="compact" variant="flat">
-                                {spaceStatusChip.label}
-                              </Chip>
-                              <Chip className="normal-case tracking-normal" color={nodeStateChip.color} size="compact" variant="flat">
-                                {nodeStateChip.label}
-                              </Chip>
-                            </>
-                          }
+                          chromeless
+                          centerContent
+                          chipsAboveTitle
+                          centerContentPosition={{
+                            left: `${(localCentroid.x / Math.max(1, layout.width)) * 100}%`,
+                            top: `${(localCentroid.y / Math.max(1, layout.height)) * 100}%`
+                          }}
+                          className={`group ${showControls ? "pointer-events-auto" : "pointer-events-none"} absolute ${isDraggingThisRoom ? "transition-none" : ""}`}
+                          chips={null}
                           conflicted={false}
-                          focused={isActive}
+                          focused={false}
                           movementLocked={!mapCanEdit}
                           nodeId={room.id}
                           key={room.id}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (event.shiftKey) {
-                              return;
-                            }
-
-                            setActiveRoomId(room.id);
-                            setSelectedRoomIds([room.id]);
-                          }}
-                          onDoubleClick={(event) => {
-                            if (!mapCanEdit) {
-                              return;
-                            }
-                            event.preventDefault();
-                            event.stopPropagation();
-                            openEditRoomPanel(room);
-                          }}
-                          onPointerEnter={() => setHoveredRoomId(room.id)}
-                          onPointerLeave={() => {
-                            setHoveredRoomId((current) => (current === room.id ? null : current));
-                            setHoverResizeEdgeByRoomId((current) => ({ ...current, [room.id]: null }));
-                          }}
-                          onPointerMove={(event) => {
-                            if (!mapCanEdit) {
-                              return;
-                            }
-
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            const localX = event.clientX - rect.left;
-                            const localY = event.clientY - rect.top;
-                            const edge = getResizeEdgeFromPoint(localX, localY, rect.width, rect.height);
-                            setHoverResizeEdgeByRoomId((current) => {
-                              if (current[room.id] === edge) {
-                                return current;
-                              }
-                              return { ...current, [room.id]: edge };
-                            });
-                          }}
-                          onPointerDown={(event) => {
-                            if (!mapCanEdit) {
-                              return;
-                            }
-
-                            event.preventDefault();
-                            event.stopPropagation();
-                            if (event.button !== 0) {
-                              return;
-                            }
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            const localX = event.clientX - rect.left;
-                            const localY = event.clientY - rect.top;
-                            const edge = getResizeEdgeFromPoint(localX, localY, rect.width, rect.height);
-                            setActiveRoomId(room.id);
-                            const shiftSelection = event.shiftKey
-                              ? selectedRoomIdSet.has(room.id)
-                                ? selectedRoomIds
-                                : [...selectedRoomIds, room.id]
-                              : null;
-                            const moveRoomIds =
-                              shiftSelection && shiftSelection.length > 1
-                                ? shiftSelection
-                                : selectedRoomIdSet.has(room.id) && selectedRoomIds.length > 0
-                                  ? selectedRoomIds
-                                  : [room.id];
-                            const originsByRoomId: Record<string, RoomLayout> = {};
-                            for (const moveRoomId of moveRoomIds) {
-                              const originLayout = layoutDraftByRoomIdRef.current[moveRoomId];
-                              if (originLayout) {
-                                originsByRoomId[moveRoomId] = originLayout;
-                              }
-                            }
-                            if (shiftSelection) {
-                              setSelectedRoomIds(shiftSelection);
-                            } else if (!selectedRoomIdSet.has(room.id)) {
-                              setSelectedRoomIds([room.id]);
-                            }
-                            if (edge) {
-                              setDragState({
-                                mode: "resize",
-                                roomId: room.id,
-                                roomIds: [room.id],
-                                startX: event.clientX,
-                                startY: event.clientY,
-                                origin: layout,
-                                edge,
-                                hasCrossedThreshold: true
-                              });
-                              return;
-                            }
-                            setDragState({
-                              mode: "move",
-                              roomId: room.id,
-                              roomIds: moveRoomIds,
-                              startX: event.clientX,
-                              startY: event.clientY,
-                              origin: layout,
-                              originsByRoomId,
-                              hasCrossedThreshold: false
-                            });
-                          }}
-                          quickActions={
-                            mapCanEdit
-                              ? {
-                                  onEdit: () => openEditRoomPanel(room),
-                                  onDuplicate: () => duplicateRoom(room),
-                                  onDelete: () => {
-                                    void deleteRoom(room.id);
-                                  },
-                                  canEdit: true,
-                                  canDuplicate: true,
-                                  canDelete: true
-                                }
-                              : undefined
-                          }
                           style={{
                             left: `${layout.x}px`,
                             top: `${layout.y}px`,
                             width: `${layout.width}px`,
                             height: `${layout.height}px`,
                             zIndex: isActive ? 20 : 1,
-                            transform: isDraggingThisRoom ? "scale(1.006)" : "scale(1)",
-                            cursor: isDraggingThisRoom
-                              ? dragMode === "resize"
-                                ? edgeToCursor(dragEdge ?? "se")
-                                : "grabbing"
-                              : hoverResizeEdgeByRoomId[room.id]
-                                ? edgeToCursor(hoverResizeEdgeByRoomId[room.id] as ResizeEdge)
-                                : mapCanEdit
-                                  ? "grab"
-                                  : "default"
+                            cursor: isDraggingThisRoom ? "grabbing" : mapCanEdit ? "grab" : "default"
                           }}
                           structural={isStructuralElement}
                           title={room.name}
                         >
+                          <div className="pointer-events-none absolute inset-0 z-[0]" aria-hidden="true">
+                            <svg
+                              className="h-full w-full"
+                              style={{ overflow: "visible" }}
+                              viewBox={`0 0 ${Math.max(1, layout.width)} ${Math.max(1, layout.height)}`}
+                            >
+                              <path
+                                className="pointer-events-auto"
+                                d={roundedPath}
+                                fill="transparent"
+                                onClick={(event) => {
+                                  if (!mapCanEdit) {
+                                    return;
+                                  }
+                                  event.stopPropagation();
+                                  setVertexPopover(null);
+                                  if (event.shiftKey) {
+                                    return;
+                                  }
+                                  setActiveRoomId(room.id);
+                                  setSelectedRoomIds([room.id]);
+                                }}
+                                onDoubleClick={(event) => {
+                                  if (!mapCanEdit) {
+                                    return;
+                                  }
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  openRoomActionMenu({
+                                    roomId: room.id,
+                                    x: event.clientX + 10,
+                                    y: event.clientY + 10
+                                  });
+                                }}
+                                onPointerDown={(event) => {
+                                  if (!mapCanEdit || event.button !== 0) {
+                                    return;
+                                  }
+                                  event.stopPropagation();
+                                  const rect = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                                  if (!rect) {
+                                    return;
+                                  }
+                                  const localX = event.clientX - rect.left;
+                                  const localY = event.clientY - rect.top;
+                                  const worldPoint = {
+                                    x: layout.x + (localX / Math.max(1, rect.width)) * layout.width,
+                                    y: layout.y + (localY / Math.max(1, rect.height)) * layout.height
+                                  };
+                                  const insertCandidate = showControls ? getEdgeInsertCandidate(worldPoint, layout.points) : null;
+                                  if (insertCandidate) {
+                                    const insertIndex = insertCandidate.edgeIndex + 1;
+                                    const insertedPoints = [
+                                      ...layout.points.slice(0, insertIndex),
+                                      { x: snapToGrid(insertCandidate.x), y: snapToGrid(insertCandidate.y) },
+                                      ...layout.points.slice(insertIndex)
+                                    ];
+                                    if (isEditablePolygon(insertedPoints)) {
+                                      const insertedSmoothPoints = remapSmoothPointsAfterInsert(layout.smoothPoints, insertCandidate.edgeIndex);
+                                      const insertedLayout = layoutFromPoints(insertedPoints, insertedSmoothPoints);
+                                      setLayoutDraftByRoomId((current) => {
+                                        const nextState = {
+                                          ...current,
+                                          [room.id]: insertedLayout
+                                        };
+                                        layoutDraftByRoomIdRef.current = nextState;
+                                        return nextState;
+                                      });
+                                      persistRoomLayout(room.id, insertedLayout);
+                                      setEdgeInsertHover({
+                                        roomId: room.id,
+                                        edgeIndex: insertCandidate.edgeIndex,
+                                        x: insertedPoints[insertIndex].x,
+                                        y: insertedPoints[insertIndex].y
+                                      });
+                                    }
+                                    return;
+                                  }
+                                  setActiveRoomId(room.id);
+                                  const shiftSelection = event.shiftKey
+                                    ? selectedRoomIdSet.has(room.id)
+                                      ? selectedRoomIds
+                                      : [...selectedRoomIds, room.id]
+                                    : null;
+                                  const moveRoomIds =
+                                    shiftSelection && shiftSelection.length > 1
+                                      ? shiftSelection
+                                      : selectedRoomIdSet.has(room.id) && selectedRoomIds.length > 0
+                                        ? selectedRoomIds
+                                        : [room.id];
+                                  const originsByRoomId: Record<string, RoomLayout> = {};
+                                  for (const moveRoomId of moveRoomIds) {
+                                    const originLayout = layoutDraftByRoomIdRef.current[moveRoomId];
+                                    if (originLayout) {
+                                      originsByRoomId[moveRoomId] = originLayout;
+                                    }
+                                  }
+                                  if (shiftSelection) {
+                                    setSelectedRoomIds(shiftSelection);
+                                  } else if (!selectedRoomIdSet.has(room.id)) {
+                                    setSelectedRoomIds([room.id]);
+                                  }
+                                  setDragState({
+                                    mode: "move",
+                                    roomId: room.id,
+                                    roomIds: moveRoomIds,
+                                    startX: event.clientX,
+                                    startY: event.clientY,
+                                    origin: layout,
+                                    originsByRoomId,
+                                    originLeft: layout.x,
+                                    originTop: layout.y,
+                                    snappedDeltaX: 0,
+                                    snappedDeltaY: 0,
+                                    hasCrossedThreshold: false
+                                  });
+                                }}
+                                onPointerEnter={() => setHoveredRoomId(room.id)}
+                                onPointerLeave={() => {
+                                  setHoveredRoomId((current) => (current === room.id ? null : current));
+                                  setEdgeInsertHover((current) => (current?.roomId === room.id ? null : current));
+                                }}
+                                onPointerMove={(event) => {
+                                  if (!showControls || dragState) {
+                                    setEdgeInsertHover((current) => (current?.roomId === room.id ? null : current));
+                                    return;
+                                  }
+                                  const rect = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                                  if (!rect) {
+                                    return;
+                                  }
+                                  const localX = event.clientX - rect.left;
+                                  const localY = event.clientY - rect.top;
+                                  const worldPoint = {
+                                    x: layout.x + (localX / Math.max(1, rect.width)) * layout.width,
+                                    y: layout.y + (localY / Math.max(1, rect.height)) * layout.height
+                                  };
+                                  const candidate = getEdgeInsertCandidate(worldPoint, layout.points);
+                                  if (!candidate) {
+                                    setEdgeInsertHover((current) => (current?.roomId === room.id ? null : current));
+                                    return;
+                                  }
+                                  setEdgeInsertHover({
+                                    roomId: room.id,
+                                    edgeIndex: candidate.edgeIndex,
+                                    x: candidate.x,
+                                    y: candidate.y
+                                  });
+                                }}
+                              />
+                              <path
+                                className="transition-[filter,fill] duration-100 ease-out"
+                                d={roundedPath}
+                                fill={fillColor}
+                                style={{ filter: outlineFilter }}
+                              />
+                              <path
+                                className="transition-colors duration-100 ease-out"
+                                d={roundedPath}
+                                fill="transparent"
+                                stroke={outlineStroke}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            </svg>
+                          </div>
                           {showControls ? (
                             <>
-                              {(
-                                [
-                                  ["n", "absolute -top-1 left-1/2 h-2 w-10 -translate-x-1/2 cursor-n-resize"],
-                                  ["s", "absolute -bottom-1 left-1/2 h-2 w-10 -translate-x-1/2 cursor-s-resize"],
-                                  ["e", "absolute right-0 top-1/2 h-10 w-2 -translate-y-1/2 cursor-e-resize"],
-                                  ["w", "absolute left-0 top-1/2 h-10 w-2 -translate-y-1/2 cursor-w-resize"],
-                                  ["ne", "absolute -right-1 -top-1 h-3 w-3 cursor-ne-resize"],
-                                  ["nw", "absolute -left-1 -top-1 h-3 w-3 cursor-nw-resize"],
-                                  ["se", "absolute -bottom-1 -right-1 h-3 w-3 cursor-se-resize"],
-                                  ["sw", "absolute -bottom-1 -left-1 h-3 w-3 cursor-sw-resize"]
-                                ] as Array<[ResizeEdge, string]>
-                              ).map(([edge, className]) => (
+                              {edgeInsertHover && edgeInsertHover.roomId === room.id ? (
+                                <span
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute z-30 inline-flex h-5 w-5 items-center justify-center rounded-full border border-accent/60 bg-surface text-xs font-semibold text-accent shadow-sm"
+                                  style={{
+                                    left: `${((edgeInsertHover.x - layout.x) / Math.max(1, layout.width)) * 100}%`,
+                                    top: `${((edgeInsertHover.y - layout.y) / Math.max(1, layout.height)) * 100}%`,
+                                    transform: `translate(calc(-50% + ${EDGE_INSERT_ICON_OFFSET}px), calc(-50% + ${EDGE_INSERT_ICON_OFFSET}px))`
+                                  }}
+                                >
+                                  +
+                                </span>
+                              ) : null}
+                              {layout.points.map((point, pointIndex) => (
                                 <button
-                                  aria-label={`Resize ${edge}`}
-                                  className={`${className} rounded-sm border border-border bg-surface/95`}
-                                  key={edge}
-                                  onPointerDown={(event) => {
+                                  aria-label="Drag point"
+                                  className="absolute z-30 rounded-full border-2 border-accent bg-surface shadow-sm transition-[transform,background-color] duration-150 ease-out hover:scale-110 hover:bg-accent/25"
+                                  key={`vertex:${pointIndex}`}
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                  }}
+                                  onDoubleClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
                                     if (!mapCanEdit) {
                                       return;
                                     }
-
-                                    event.preventDefault();
+                                    toggleVertexCurves(room.id, pointIndex);
+                                  }}
+                                  onPointerDown={(event) => {
                                     event.stopPropagation();
+                                    if (Date.now() - recentHandleDragAtRef.current < 180) {
+                                      return;
+                                    }
                                     setActiveRoomId(room.id);
                                     setDragState({
-                                      mode: "resize",
+                                      mode: "vertex",
                                       roomId: room.id,
-                                      roomIds: [room.id],
                                       startX: event.clientX,
                                       startY: event.clientY,
-                                      origin: layout,
-                                      edge,
-                                      hasCrossedThreshold: true
+                                      vertexIndex: pointIndex,
+                                      originPoints: layout.points,
+                                      smoothPoints: layout.smoothPoints,
+                                      hasCrossedThreshold: false
                                     });
+                                  }}
+                                  style={{
+                                    left: `${((point.x - layout.x) / Math.max(1, layout.width)) * 100}%`,
+                                    top: `${((point.y - layout.y) / Math.max(1, layout.height)) * 100}%`,
+                                    width: `${HANDLE_SIZE}px`,
+                                    height: `${HANDLE_SIZE}px`,
+                                    transform: "translate(-50%, -50%)"
                                   }}
                                   type="button"
                                 />
                               ))}
+                              <button
+                                aria-label="Rotate shape"
+                                className="absolute z-30 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-accent bg-surface shadow-sm"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                onPointerDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  setActiveRoomId(room.id);
+                                  const nodeRect = event.currentTarget
+                                    .closest("[data-structure-node-id]")
+                                    ?.getBoundingClientRect();
+                                  const centerClientX = nodeRect ? nodeRect.left + nodeRect.width / 2 : event.clientX;
+                                  const centerClientY = nodeRect ? nodeRect.top + nodeRect.height / 2 : event.clientY;
+                                  setDragState({
+                                    mode: "rotate",
+                                    roomId: room.id,
+                                    startX: event.clientX,
+                                    startY: event.clientY,
+                                    originPoints: layout.points,
+                                    smoothPoints: layout.smoothPoints,
+                                    center: { x: centerX, y: centerY },
+                                    centerClientX,
+                                    centerClientY,
+                                    startAngle: Math.atan2(event.clientY - centerClientY, event.clientX - centerClientX),
+                                    hasCrossedThreshold: false
+                                  });
+                                }}
+                                style={{
+                                  left: "50%",
+                                  top: `-${ROTATE_HANDLE_OFFSET}px`,
+                                  transform: "translate(-50%, -50%)"
+                                }}
+                                type="button"
+                              >
+                                <RotateCw className="h-3.5 w-3.5" />
+                              </button>
+                              {vertexPopover && vertexPopover.roomId === room.id ? (
+                                <Popover
+                                  anchorPoint={{ x: vertexPopover.x, y: vertexPopover.y }}
+                                  className="w-auto rounded-full border border-border/70 bg-surface/95 p-1 shadow-floating backdrop-blur"
+                                  onClose={() => setVertexPopover(null)}
+                                  open
+                                  placement="bottom-start"
+                                >
+                                  <Button
+                                    aria-label="Delete point"
+                                    disabled={layout.points.length <= 3}
+                                    onPointerDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      deleteVertexPoint(room.id, vertexPopover.vertexIndex);
+                                    }}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      deleteVertexPoint(room.id, vertexPopover.vertexIndex);
+                                    }}
+                                    size="sm"
+                                    type="button"
+                                    variant="ghost"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </Popover>
+                              ) : null}
+                              {roomActionPopover && roomActionPopover.roomId === room.id ? (
+                                <Popover
+                                  anchorPoint={{ x: roomActionPopover.x, y: roomActionPopover.y }}
+                                  className="w-auto rounded-[999px] border border-border/70 bg-surface/95 p-1 shadow-floating backdrop-blur"
+                                  onClose={() => setRoomActionPopover(null)}
+                                  open
+                                  placement="bottom-start"
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      aria-label="Edit node"
+                                      className="h-8 w-8 rounded-full p-0"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setRoomActionPopover(null);
+                                        openEditRoomPanel(room);
+                                      }}
+                                      size="sm"
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      <Settings2 className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      aria-label="Duplicate node"
+                                      className="h-8 w-8 rounded-full p-0"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setRoomActionPopover(null);
+                                        duplicateRoom(room);
+                                      }}
+                                      size="sm"
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      <Copy className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      aria-label="Delete node"
+                                      className="h-8 w-8 rounded-full p-0 text-danger"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setRoomActionPopover(null);
+                                        void deleteRoom(room.id);
+                                      }}
+                                      size="sm"
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </Popover>
+                              ) : null}
                             </>
                           ) : null}
                         </StructureNode>
@@ -1274,7 +1876,6 @@ export function FacilityStructurePanel({
                   kindLabel: resolveElementType(room)
                 }))}
                 storageKey={`facility-floorplan-canvas:${orgSlug}:${mappingRoot.id}`}
-                autoFitOnOpen
                 canvasLayoutMode="free"
                 canvasContentClassName="p-0"
                 canvasGridSize={CANVAS_GRID_SIZE}
@@ -1285,181 +1886,243 @@ export function FacilityStructurePanel({
                 zoomPercent={structureZoomPercent}
               />
             </div>
-          <Panel
+          <Popup
+            closeOnBackdrop
+            contentClassName="p-0"
             footer={
               <>
-                <Button onClick={() => setIsEditOpen(false)} size="sm" type="button" variant="ghost">
-                  Cancel
-                </Button>
-                <Button disabled={!canWrite || !nodeEditorDraft || nodeEditorDraft.name.trim().length < 2} onClick={submitNodeEditor} size="sm" type="button" variant="secondary">
+                {activeEditorDraft?.mode === "edit" && activeEditorDraft.spaceId && canWrite ? (
+                  <Button
+                    className="mr-auto"
+                    disabled={isMutating}
+                    onClick={() => {
+                      void deleteRoom(activeEditorDraft.spaceId as string);
+                    }}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Delete
+                  </Button>
+                ) : null}
+                <Button
+                  disabled={!canWrite || activeNameInvalid || isMutating}
+                  loading={isMutating}
+                  onClick={handleEditorSave}
+                  type="button"
+                  variant="secondary"
+                >
                   Save
                 </Button>
               </>
             }
-            onClose={() => setIsEditOpen(false)}
-            open={isEditOpen}
-            panelClassName="ml-auto max-w-[340px]"
-            subtitle="Modify this space and apply updates."
-            title="Edit space"
-          >
-            {nodeEditorDraft ? (
-              <div className="w-full space-y-3">
-                <FormField label="Name">
-                <Input
-                  onChange={(event) => setNodeEditorDraft((current) => (current ? { ...current, name: event.target.value } : current))}
-                  value={nodeEditorDraft.name}
-                />
-                </FormField>
-                <FormField label="Type">
-                <Select
-                  onChange={(event) =>
-                    setNodeEditorDraft((current) => {
-                      if (!current) {
-                        return current;
-                      }
-                      const elementType = event.target.value as StructureElementType;
-                      return {
-                        ...current,
-                        elementType,
-                        isBookable: isNonBookableElementType(elementType) ? false : current.isBookable
-                      };
-                    })
-                  }
-                  options={[
-                    { value: "room", label: "Room" },
-                    { value: "court", label: "Court" },
-                    { value: "field", label: "Field" },
-                    { value: "custom", label: "Custom" },
-                    { value: "structure", label: "Structure (non-bookable)" }
-                  ]}
-                  value={nodeEditorDraft.elementType}
-                />
-                </FormField>
-                <FormField label="Status">
-                <Select
-                  onChange={(event) =>
-                    setNodeEditorDraft((current) => (current ? { ...current, status: event.target.value as FacilitySpace["status"] } : current))
-                  }
-                  options={[
-                    { value: "open", label: "Open" },
-                    { value: "closed", label: "Closed" },
-                    { value: "archived", label: "Archived" }
-                  ]}
-                  value={nodeEditorDraft.status}
-                />
-                </FormField>
-                <label className="ui-inline-toggle">
-                  <Checkbox
-                    checked={isNonBookableElementType(nodeEditorDraft.elementType) ? false : nodeEditorDraft.isBookable}
-                    disabled={isNonBookableElementType(nodeEditorDraft.elementType)}
-                    onChange={(event) =>
-                      setNodeEditorDraft((current) => (current ? { ...current, isBookable: event.target.checked } : current))
-                    }
-                  />
-                  Bookable
-                </label>
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    disabled={!canWrite}
-                    onClick={() => {
-                      archiveSpaceOptimistically(nodeEditorDraft.spaceId);
-                      setIsEditOpen(false);
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    Archive
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </Panel>
-          <Popup
             onClose={() => {
-              setIsCreateOpen(false);
-              setInlineCreateDraft(null);
-              setInlineCreateLayout(null);
+              closeEditor();
             }}
-            open={isCreateOpen && Boolean(inlineCreateDraft)}
-            size="sm"
-            subtitle="Create a new space and place it on the map instantly."
-            title="Create space"
+            open={isEditorOpen}
+            popupClassName="w-[min(1100px,calc(100vw-1.5rem))] max-w-none sm:w-[min(1100px,calc(100vw-3rem))] max-h-[90vh]"
+            size="xl"
+            subtitle={
+              activeEditorDraft
+                ? `Facility: ${mappingRoot.name} • ${activeEditorDraft.elementType} • ${activeEditorDraft.status}`
+                : undefined
+            }
+            title={
+              <div className="flex items-center gap-2">
+                <span>{activeEditorDraft?.name || "Edit Space Node"}</span>
+                {activeEditorDraft ? (
+                  <Chip
+                    className="normal-case tracking-normal"
+                    color={resolveFacilitySpaceStatusChip(activeEditorDraft.status).color}
+                    size="compact"
+                    variant="flat"
+                  >
+                    {resolveFacilitySpaceStatusChip(activeEditorDraft.status).label}
+                  </Chip>
+                ) : null}
+              </div>
+            }
           >
-            {inlineCreateDraft ? (
-              <div className="space-y-3">
-                <FormField label="Name">
-                  <Input
-                    autoFocus
-                    onChange={(event) => setInlineCreateDraft((current) => (current ? { ...current, name: event.target.value } : current))}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        submitInlineCreate();
-                      }
-                    }}
-                    placeholder="Space name"
-                    value={inlineCreateDraft.name}
-                  />
-                </FormField>
-                <FormField label="Type">
-                  <Select
-                    onChange={(event) =>
-                      setInlineCreateDraft((current) => {
-                        if (!current) {
-                          return current;
-                        }
-                        const elementType = event.target.value as StructureElementType;
-                        return {
-                          ...current,
-                          elementType,
-                          isBookable: isNonBookableElementType(elementType) ? false : current.isBookable
-                        };
-                      })
-                    }
-                    options={[
-                      { value: "room", label: "Room" },
-                      { value: "court", label: "Court" },
-                      { value: "field", label: "Field" },
-                      { value: "custom", label: "Custom" },
-                      { value: "structure", label: "Structure" }
-                    ]}
-                    value={inlineCreateDraft.elementType}
-                  />
-                </FormField>
-                <label className="ui-inline-toggle">
-                  <Checkbox
-                    checked={isNonBookableElementType(inlineCreateDraft.elementType) ? false : inlineCreateDraft.isBookable}
-                    disabled={isNonBookableElementType(inlineCreateDraft.elementType)}
-                    onChange={(event) =>
-                      setInlineCreateDraft((current) => (current ? { ...current, isBookable: event.target.checked } : current))
-                    }
-                  />
-                  Bookable
-                </label>
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    onClick={() => {
-                      setIsCreateOpen(false);
-                      setInlineCreateDraft(null);
-                      setInlineCreateLayout(null);
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    disabled={inlineCreateDraft.name.trim().length < 2}
-                    onClick={submitInlineCreate}
-                    size="sm"
-                    type="button"
-                    variant="secondary"
-                  >
-                    Save
-                  </Button>
+            {activeEditorDraft ? (
+              <div className="flex min-h-0 h-full flex-col">
+                <div className="sticky top-0 z-10 border-b bg-surface px-5 py-3 md:px-6">
+                  <div className="flex flex-wrap gap-2">
+                    {editorTabs.map((tab) => {
+                      const active = editorTab === tab.key;
+                      const hasError = Boolean(tabHasError[tab.key]);
+                      return (
+                        <button
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            active ? "border-accent bg-accent/10 text-text" : "border-border bg-surface hover:bg-surface-muted"
+                          } ${hasError ? "border-destructive/70 text-destructive" : ""}`}
+                          key={tab.key}
+                          onClick={() => setEditorTab(tab.key)}
+                          type="button"
+                        >
+                          <span>{tab.label}</span>
+                          {hasError ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-4 px-5 py-4 md:px-6">
+                  <p className="text-xs text-text-muted">{editorTabs.find((tab) => tab.key === editorTab)?.description}</p>
+                  {editorError ? <Alert variant="destructive">{editorError}</Alert> : null}
+
+                  {editorTab === "general" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FormField label="Name">
+                        <Input
+                          autoFocus
+                          onChange={(event) =>
+                            updateEditorDraft((current) => ({
+                              ...current,
+                              name: event.target.value
+                            }))
+                          }
+                          placeholder="Space name"
+                          value={activeEditorDraft.name}
+                        />
+                      </FormField>
+                      <FormField label="Type">
+                        <Select
+                          onChange={(event) =>
+                            updateEditorDraft((current) => {
+                              const elementType = event.target.value as StructureElementType;
+                              return {
+                                ...current,
+                                elementType,
+                                isBookable: isNonBookableElementType(elementType) ? false : current.isBookable
+                              };
+                            })
+                          }
+                          options={[
+                            { value: "room", label: "Room" },
+                            { value: "court", label: "Court" },
+                            { value: "field", label: "Field" },
+                            { value: "custom", label: "Custom" },
+                            { value: "structure", label: "Structure (non-bookable)" }
+                          ]}
+                          value={activeEditorDraft.elementType}
+                        />
+                      </FormField>
+                      <FormField label="Label">
+                        <Input disabled value={activeEditorDraft.name.trim() || "Set a name to generate a label"} />
+                      </FormField>
+                      <FormField label="Description">
+                        <Input disabled placeholder="No description field in current data model." value="" />
+                      </FormField>
+                    </div>
+                  ) : null}
+
+                  {editorTab === "scheduling" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FormField label="Timezone">
+                        <Input
+                          onChange={(event) => updateEditorDraft((current) => ({ ...current, timezone: event.target.value }))}
+                          placeholder="America/Detroit"
+                          value={activeEditorDraft.timezone}
+                        />
+                      </FormField>
+                      <FormField label="Booking rules">
+                        <Input disabled placeholder="No booking rule fields are currently modeled here." value="" />
+                      </FormField>
+                    </div>
+                  ) : null}
+
+                  {editorTab === "access" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FormField label="Status">
+                        <Select
+                          onChange={(event) =>
+                            updateEditorDraft((current) => ({ ...current, status: event.target.value as FacilitySpace["status"] }))
+                          }
+                          options={[
+                            { value: "open", label: "Open" },
+                            { value: "closed", label: "Closed" },
+                            { value: "archived", label: "Archived" }
+                          ]}
+                          value={activeEditorDraft.status}
+                        />
+                      </FormField>
+                      <div className="flex items-end">
+                        <label className="ui-inline-toggle">
+                          <Checkbox
+                            checked={isNonBookableElementType(activeEditorDraft.elementType) ? false : activeEditorDraft.isBookable}
+                            disabled={isNonBookableElementType(activeEditorDraft.elementType)}
+                            onChange={(event) => updateEditorDraft((current) => ({ ...current, isBookable: event.target.checked }))}
+                          />
+                          Bookable
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {editorTab === "attributes" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FormField label="Capacity">
+                        <Input
+                          inputMode="numeric"
+                          onChange={(event) =>
+                            updateEditorDraft((current) => ({ ...current, capacity: event.target.value.replace(/[^0-9]/g, "") }))
+                          }
+                          placeholder="Optional"
+                          value={activeEditorDraft.capacity}
+                        />
+                      </FormField>
+                      <FormField label="Custom settings">
+                        <Input disabled placeholder="No custom setting fields in current map editor model." value="" />
+                      </FormField>
+                    </div>
+                  ) : null}
+
+                  {editorTab === "relationships" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FormField label="Facility context">
+                        <Input disabled value={mappingRoot.name} />
+                      </FormField>
+                      <FormField label="Parent">
+                        <Input disabled value={activeSpaceForEditor?.parentSpaceId ?? mappingRoot.id} />
+                      </FormField>
+                    </div>
+                  ) : null}
+
+                  {editorTab === "advanced" ? (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <FormField label="Slug">
+                          <Input
+                            onChange={(event) => updateEditorDraft((current) => ({ ...current, slug: slugify(event.target.value) }))}
+                            value={activeEditorDraft.slug}
+                          />
+                        </FormField>
+                        <FormField label="Space ID">
+                          <Input disabled value={activeEditorDraft.spaceId ?? "Will be assigned on save"} />
+                        </FormField>
+                      </div>
+                      {activeEditorDraft.spaceId && canWrite ? (
+                        <div className="rounded-control border bg-surface-muted/40 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Destructive</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <Button
+                              disabled={isMutating}
+                              onClick={() => {
+                                archiveSpaceOptimistically(activeEditorDraft.spaceId as string);
+                                setSpaceEditorDraft(null);
+                                setSpaceEditorInitialDraft(null);
+                              }}
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              Archive
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}

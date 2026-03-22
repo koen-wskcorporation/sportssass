@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@orgframe/ui/ui/button";
 import { cn } from "@/lib/utils";
 import { useUploader } from "@/modules/uploads/useUploader";
+import type { FileManagerDefaultFolder, FileManagerEntityContext } from "@/modules/file-manager/types";
 import type { OpenUploadOptions, UploadedAsset, UploadConstraints, UploadKind, UploadPurpose } from "@/modules/uploads/types";
 
 type AssetTileFitMode = "contain" | "cover";
@@ -15,6 +16,8 @@ type AssetTileProps = {
   kind: UploadKind;
   purpose: UploadPurpose;
   orgSlug?: string;
+  defaultFolder?: FileManagerDefaultFolder;
+  entityContext?: FileManagerEntityContext;
   constraints?: UploadConstraints;
   initialPath?: string | null;
   initialUrl?: string | null;
@@ -52,6 +55,8 @@ export function AssetTile({
   kind,
   purpose,
   orgSlug,
+  defaultFolder,
+  entityContext,
   constraints,
   initialPath,
   initialUrl,
@@ -91,6 +96,8 @@ export function AssetTile({
         kind,
         purpose,
         orgSlug,
+        defaultFolder,
+        entityContext,
         constraints,
         initialCrop: currentCrop
       });

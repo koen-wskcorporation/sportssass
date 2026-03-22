@@ -34,6 +34,8 @@ export type NavItemProps = {
   icon?: React.ReactNode;
   iconOnly?: boolean;
   onClick?: React.MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>;
+  onMouseDown?: React.MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>;
+  prefetch?: boolean;
   rel?: React.AnchorHTMLAttributes<HTMLAnchorElement>["rel"];
   rightSlot?: React.ReactNode;
   role?: React.AriaRole;
@@ -88,6 +90,8 @@ export function NavItem({
   icon,
   iconOnly = false,
   onClick,
+  onMouseDown,
+  prefetch,
   rel,
   rightSlot,
   role,
@@ -128,6 +132,8 @@ export function NavItem({
         className={classes}
         href={href}
         onClick={onClick}
+        onMouseDown={onMouseDown}
+        prefetch={prefetch}
         rel={rel}
         role={role}
         target={target}
@@ -166,6 +172,7 @@ export function NavItem({
       className={classes}
       disabled={disabled}
       onClick={onClick}
+      onMouseDown={onMouseDown}
       role={role}
       title={title}
       type={type}

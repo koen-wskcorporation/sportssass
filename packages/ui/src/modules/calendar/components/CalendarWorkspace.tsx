@@ -1,20 +1,10 @@
 "use client";
 
 import { FacilityCalendarWorkspace } from "@orgframe/ui/modules/calendar/components/FacilityCalendarWorkspace";
-import { OrgCalendarWorkspace } from "@orgframe/ui/modules/calendar/components/OrgCalendarWorkspace";
 import { PublicCalendarWorkspace } from "@orgframe/ui/modules/calendar/components/PublicCalendarWorkspace";
 import { TeamCalendarWorkspace } from "@orgframe/ui/modules/calendar/components/TeamCalendarWorkspace";
 import type { CalendarPublicCatalogItem, CalendarReadModel } from "@/modules/calendar/types";
 import type { FacilityReservationReadModel } from "@/modules/facilities/types";
-
-type OrgCalendarWorkspaceModeProps = {
-  mode: "org";
-  orgSlug: string;
-  canWrite: boolean;
-  initialReadModel: CalendarReadModel;
-  initialFacilityReadModel?: FacilityReservationReadModel;
-  activeTeams: Array<{ id: string; label: string }>;
-};
 
 type TeamCalendarWorkspaceModeProps = {
   mode: "team";
@@ -46,24 +36,11 @@ type PublicCalendarWorkspaceModeProps = {
 };
 
 export type CalendarWorkspaceProps =
-  | OrgCalendarWorkspaceModeProps
   | TeamCalendarWorkspaceModeProps
   | FacilityCalendarWorkspaceModeProps
   | PublicCalendarWorkspaceModeProps;
 
 export function CalendarWorkspace(props: CalendarWorkspaceProps) {
-  if (props.mode === "org") {
-    return (
-      <OrgCalendarWorkspace
-        activeTeams={props.activeTeams}
-        canWrite={props.canWrite}
-        initialFacilityReadModel={props.initialFacilityReadModel}
-        initialReadModel={props.initialReadModel}
-        orgSlug={props.orgSlug}
-      />
-    );
-  }
-
   if (props.mode === "team") {
     return (
       <TeamCalendarWorkspace

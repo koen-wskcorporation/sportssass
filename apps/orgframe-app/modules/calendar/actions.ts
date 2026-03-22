@@ -404,6 +404,124 @@ async function canManageEntry(orgId: string, userId: string, entry: CalendarEntr
   return isTeamStaffAdmin(orgId, userId, entry.hostTeamId);
 }
 
+async function listActorTeamAccess(orgId: string, userId: string): Promise<{ teamIds: Set<string>; programIds: Set<string> }> {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase
+    .from("program_team_staff")
+    .select("team_id, program_id")
+    .eq("org_id", orgId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(`Failed to load actor team access: ${error.message}`);
+  }
+
+  const teamIds = new Set<string>();
+  const programIds = new Set<string>();
+  for (const row of data ?? []) {
+    if (row.team_id) {
+      teamIds.add(row.team_id);
+    }
+    if (row.program_id) {
+      programIds.add(row.program_id);
+    }
+  }
+
+  return { teamIds, programIds };
+}
+
+function filterReadModelByActorVisibility(input: {
+  readModel: CalendarReadModel;
+  hasOrgWrite: boolean;
+  actorTeamIds: Set<string>;
+  actorProgramIds: Set<string>;
+}) {
+  const { readModel, hasOrgWrite, actorTeamIds, actorProgramIds } = input;
+  if (hasOrgWrite) {
+    return readModel;
+  }
+
+  const sourceById = new Map(readModel.sources.map((source) => [source.id, source]));
+  const allowedSourceIds = new Set<string>();
+
+  for (const source of readModel.sources) {
+    if (source.scopeType === "organization") {
+      allowedSourceIds.add(source.id);
+      continue;
+    }
+
+    if (source.scopeType === "custom") {
+      const syntheticKind = typeof source.displayJson.kind === "string" ? source.displayJson.kind : "";
+      if (!syntheticKind.startsWith("group_")) {
+        allowedSourceIds.add(source.id);
+      }
+      continue;
+    }
+
+    if (source.scopeType === "program") {
+      if (source.scopeId && actorProgramIds.has(source.scopeId)) {
+        allowedSourceIds.add(source.id);
+      }
+      continue;
+    }
+
+    if (source.scopeType === "division") {
+      const sourceProgramId = typeof source.displayJson.programId === "string" ? source.displayJson.programId : null;
+      if (sourceProgramId && actorProgramIds.has(sourceProgramId)) {
+        allowedSourceIds.add(source.id);
+      }
+      continue;
+    }
+
+    const visibilityRaw = source.displayJson.teamCalendarVisibility;
+    const visibility =
+      visibilityRaw === "org_members" || visibilityRaw === "program_members" || visibilityRaw === "team_members"
+        ? visibilityRaw
+        : "team_members";
+
+    const sourceProgramId = typeof source.displayJson.programId === "string" ? source.displayJson.programId : null;
+
+    if (visibility === "org_members") {
+      allowedSourceIds.add(source.id);
+      continue;
+    }
+    if (visibility === "program_members" && sourceProgramId && actorProgramIds.has(sourceProgramId)) {
+      allowedSourceIds.add(source.id);
+      continue;
+    }
+    if (source.scopeId && actorTeamIds.has(source.scopeId)) {
+      allowedSourceIds.add(source.id);
+    }
+  }
+
+  for (const sourceId of Array.from(allowedSourceIds)) {
+    let cursor = sourceById.get(sourceId);
+    while (cursor?.parentSourceId) {
+      allowedSourceIds.add(cursor.parentSourceId);
+      cursor = sourceById.get(cursor.parentSourceId);
+    }
+  }
+
+  const entries = readModel.entries.filter((entry) => !entry.sourceId || allowedSourceIds.has(entry.sourceId));
+  const entryIds = new Set(entries.map((entry) => entry.id));
+  const occurrences = readModel.occurrences.filter((occurrence) => entryIds.has(occurrence.entryId));
+  const occurrenceIds = new Set(occurrences.map((occurrence) => occurrence.id));
+  const rules = readModel.rules.filter((rule) => entryIds.has(rule.entryId));
+  const ruleIds = new Set(rules.map((rule) => rule.id));
+
+  return {
+    ...readModel,
+    sources: readModel.sources.filter((source) => allowedSourceIds.has(source.id)),
+    entries,
+    occurrences,
+    rules,
+    exceptions: readModel.exceptions.filter((exception) => ruleIds.has(exception.ruleId)),
+    allocations: readModel.allocations.filter((allocation) => occurrenceIds.has(allocation.occurrenceId)),
+    ruleAllocations: readModel.ruleAllocations.filter((allocation) => ruleIds.has(allocation.ruleId)),
+    invites: readModel.invites.filter((invite) => occurrenceIds.has(invite.occurrenceId))
+  };
+}
+
 function revalidateCalendarRoutes(orgSlug: string) {
   revalidatePath(`/${orgSlug}/manage/calendar`);
   revalidatePath(`/${orgSlug}/manage/facilities`);
@@ -701,11 +819,18 @@ export async function getCalendarWorkspaceDataAction(input: {
       return asError("You do not have access to calendar data.");
     }
 
-    const [readModel, activeTeams, facilityReadModel] = await Promise.all([
+    const [readModelRaw, activeTeams, facilityReadModel, actorAccess] = await Promise.all([
       listCalendarReadModel(actor.orgId),
       listOrgActiveTeams(actor.orgId),
-      listFacilityReservationReadModel(actor.orgId)
+      listFacilityReservationReadModel(actor.orgId),
+      listActorTeamAccess(actor.orgId, actor.userId)
     ]);
+    const readModel = filterReadModelByActorVisibility({
+      readModel: readModelRaw,
+      hasOrgWrite: actor.hasCalendarWrite,
+      actorTeamIds: actorAccess.teamIds,
+      actorProgramIds: actorAccess.programIds
+    });
 
     return {
       ok: true,
@@ -771,14 +896,21 @@ export async function getCalendarExplorerDataAction(
           }
         : lensState;
 
-    const [readModel, savedViews] = await Promise.all([
+    const [readModelRaw, savedViews, actorAccess] = await Promise.all([
       listCalendarReadModel(actor.orgId),
       listCalendarLensSavedViews({
         orgId: actor.orgId,
         userId: actor.userId,
         contextType: context.contextType
-      })
+      }),
+      listActorTeamAccess(actor.orgId, actor.userId)
     ]);
+    const readModel = filterReadModelByActorVisibility({
+      readModel: readModelRaw,
+      hasOrgWrite: actor.hasCalendarWrite,
+      actorTeamIds: actorAccess.teamIds,
+      actorProgramIds: actorAccess.programIds
+    });
 
     const filtered = filterCalendarReadModelByLens({
       readModel,
@@ -824,7 +956,16 @@ export async function getCalendarOccurrenceWhyShownAction(
       orgSlug: actor.orgSlug
     };
     const lensState = normalizeLensState(parsed.data.lensState, context.contextType === "org" ? "mine" : "this_page");
-    const readModel = await listCalendarReadModel(actor.orgId);
+    const [readModelRaw, actorAccess] = await Promise.all([
+      listCalendarReadModel(actor.orgId),
+      listActorTeamAccess(actor.orgId, actor.userId)
+    ]);
+    const readModel = filterReadModelByActorVisibility({
+      readModel: readModelRaw,
+      hasOrgWrite: actor.hasCalendarWrite,
+      actorTeamIds: actorAccess.teamIds,
+      actorProgramIds: actorAccess.programIds
+    });
     const filtered = filterCalendarReadModelByLens({
       readModel,
       sources: readModel.sources,

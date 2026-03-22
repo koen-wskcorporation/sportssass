@@ -2,15 +2,14 @@ import type { Metadata } from "next";
 import { Alert } from "@orgframe/ui/ui/alert";
 import { Button } from "@orgframe/ui/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
-import { FormField } from "@orgframe/ui/ui/form-field";
-import { Input } from "@orgframe/ui/ui/input";
 import { PageStack } from "@orgframe/ui/ui/layout";
 import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { SubmitButton } from "@orgframe/ui/ui/submit-button";
 import { getPlatformHost } from "@/lib/domains/customDomains";
+import { buildGoDaddyQuickConnect, type GoDaddyQuickConnect } from "@/lib/domains/domainConnect";
 import { can } from "@/lib/permissions/can";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { DomainSetupModal } from "./DomainSetupModal";
 import { removeOrgCustomDomainAction, saveOrgCustomDomainAction, verifyOrgCustomDomainAction } from "./actions";
 
 export const metadata: Metadata = {
@@ -22,6 +21,8 @@ const errorMessageByCode: Record<string, string> = {
   domain_taken: "That domain is already connected to another organization.",
   missing_domain: "Save a domain before requesting verification.",
   verification_failed: "DNS verification failed. Check your DNS records and try again.",
+  vercel_not_configured: "Automatic Vercel domain connection is not configured on the server yet.",
+  vercel_attach_failed: "We could not automatically connect this domain in Vercel.",
   remove_failed: "Unable to remove the custom domain right now.",
   save_failed: "Unable to save the custom domain right now."
 };
@@ -40,12 +41,19 @@ type DomainRecord = {
   last_error: string | null;
 };
 
+const defaultQuickConnect: GoDaddyQuickConnect = {
+  available: false,
+  reason: null,
+  applyUrl: null,
+  providerLabel: "GoDaddy"
+};
+
 export default async function OrgManageDomainsPage({
   params,
   searchParams
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ saved?: string; removed?: string; verified?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; removed?: string; verified?: string; error?: string; detail?: string; setup?: string; step?: string; method?: string }>;
 }) {
   const { orgSlug } = await params;
   const [orgContext, query] = await Promise.all([requireOrgPermission(orgSlug, "org.manage.read"), searchParams]);
@@ -60,14 +68,28 @@ export default async function OrgManageDomainsPage({
 
   const customDomain = domainData as DomainRecord | null;
   const platformHost = getPlatformHost();
-  const verificationHost = customDomain ? `_sports-saas-verification.${customDomain.domain}` : null;
   const errorMessage = query.error ? errorMessageByCode[query.error] : null;
+  const errorDetail = query.detail?.trim() ? query.detail.trim() : null;
   const statusMessage = customDomain ? statusMessageByCode[customDomain.status] ?? "Pending verification" : null;
+  const setupStep = Math.min(Math.max(Number.parseInt(query.step ?? "1", 10) || 1, 1), 3);
+  const setupOpen = query.setup === "1";
+  const setupMethod = query.method ?? null;
+  const openSetupHref = `/${orgSlug}/manage/domains?setup=1&step=${customDomain ? "2" : "1"}`;
+  const quickConnect =
+    customDomain && canManage
+      ? await buildGoDaddyQuickConnect({
+          domain: customDomain.domain,
+          orgSlug,
+          platformHost,
+          verificationHost: `_orgframe-verification.${customDomain.domain}`,
+          verificationToken: customDomain.verification_token
+        })
+      : defaultQuickConnect;
 
   return (
     <PageStack>
       <PageHeader
-        description="Connect a domain you own to this organization and publish the DNS records needed for routing."
+        description="Connect your domain in a guided flow designed for non-technical users."
         showBorder={false}
         title="Custom Domains"
       />
@@ -75,108 +97,78 @@ export default async function OrgManageDomainsPage({
       {query.saved === "1" ? <Alert variant="success">Custom domain settings saved.</Alert> : null}
       {query.removed === "1" ? <Alert variant="success">Custom domain removed.</Alert> : null}
       {query.verified === "1" ? <Alert variant="success">Domain verified successfully. Host-based routing is now active.</Alert> : null}
-      {errorMessage ? <Alert variant="destructive">{errorMessage}</Alert> : null}
+      {errorMessage ? (
+        <Alert variant="destructive">
+          {errorMessage}
+          {errorDetail ? <span className="block mt-1 text-xs">{errorDetail}</span> : null}
+        </Alert>
+      ) : null}
       {domainError ? <Alert variant="destructive">Unable to load custom domain settings right now.</Alert> : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Domain Connection</CardTitle>
-            <CardDescription>Set the hostname you want to use for this org site.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <form action={saveOrgCustomDomainAction.bind(null, orgSlug)} className="space-y-4">
-              <fieldset className="space-y-4" disabled={!canManage}>
-                <FormField hint="Example: example.com or www.example.com" htmlFor="custom-domain-input" label="Custom domain">
-                  <Input
-                    defaultValue={customDomain?.domain ?? ""}
-                    id="custom-domain-input"
-                    name="domain"
-                    placeholder="www.example.com"
-                    required
-                  />
-                </FormField>
-              </fieldset>
+      <Card>
+        <CardHeader>
+          <CardTitle>Domain Status</CardTitle>
+          <CardDescription>Use the guided setup wizard to connect through your registrar first, with manual DNS as backup.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {customDomain ? (
+            <div className="rounded-card border bg-surface-muted p-3">
+              <p className="text-sm font-semibold text-text">{customDomain.domain}</p>
+              <p className="text-xs text-text-muted">
+                Status: <span className="font-semibold text-text">{statusMessage}</span>
+              </p>
+              {customDomain.verified_at ? <p className="mt-1 text-xs text-text-muted">Verified: {new Date(customDomain.verified_at).toLocaleString()}</p> : null}
+              {customDomain.last_error ? <p className="mt-1 text-xs text-warning">Latest verification note: {customDomain.last_error}</p> : null}
+            </div>
+          ) : (
+            <Alert variant="info">No custom domain connected yet.</Alert>
+          )}
 
-              {customDomain ? (
-                <p className="text-xs text-text-muted">
-                  Status: <span className="font-semibold text-text">{statusMessage}</span>
-                </p>
-              ) : (
-                <p className="text-xs text-text-muted">No custom domain is connected yet.</p>
-              )}
+          {!canManage ? <Alert variant="warning">You have read-only access to custom domain settings.</Alert> : null}
 
-              {!canManage ? <Alert variant="warning">You have read-only access to custom domain settings.</Alert> : null}
-              <SubmitButton disabled={!canManage} variant="secondary">
-                {customDomain ? "Update domain" : "Connect domain"}
-              </SubmitButton>
-            </form>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={!canManage} href={openSetupHref} variant="secondary">
+              {customDomain ? "Open setup wizard" : "Connect domain"}
+            </Button>
+            <Button href={`/${orgSlug}/manage/domains/diagnostics`} variant="ghost">
+              Quick-connect diagnostics
+            </Button>
 
             {customDomain && canManage ? (
-              <div className="flex flex-wrap gap-2">
-                <form action={verifyOrgCustomDomainAction.bind(null, orgSlug)}>
-                  <Button type="submit" variant="secondary">
-                    Verify DNS now
-                  </Button>
-                </form>
-                <form action={removeOrgCustomDomainAction.bind(null, orgSlug)}>
-                  <Button className="ui-button-danger" type="submit" variant="secondary">
-                    Remove domain
-                  </Button>
-                </form>
-              </div>
+              <form action={verifyOrgCustomDomainAction.bind(null, orgSlug)}>
+                <Button type="submit" variant="secondary">
+                  Verify now
+                </Button>
+              </form>
             ) : null}
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>DNS Setup</CardTitle>
-            <CardDescription>Add these records at your DNS provider, then allow time for propagation.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1">
-              <p className="ui-kv-label">CNAME Target</p>
-              <p className="ui-kv-value break-all">{platformHost}</p>
-            </div>
+            {customDomain && canManage ? (
+              <form action={removeOrgCustomDomainAction.bind(null, orgSlug)}>
+                <Button className="ui-button-danger" type="submit" variant="secondary">
+                  Remove domain
+                </Button>
+              </form>
+            ) : null}
+          </div>
 
-            {customDomain ? (
-              <>
-                <div className="space-y-1">
-                  <p className="ui-kv-label">Recommended CNAME Host</p>
-                  <p className="ui-kv-value break-all">{customDomain.domain}</p>
-                </div>
+          <Alert variant="info">
+            If your registrar cannot place a CNAME on the root domain, connect <span className="font-semibold">www</span> and forward the apex/root domain.
+          </Alert>
+        </CardContent>
+      </Card>
 
-                <div className="space-y-1">
-                  <p className="ui-kv-label">Verification TXT Host</p>
-                  <p className="ui-kv-value break-all">{verificationHost}</p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="ui-kv-label">Verification TXT Value</p>
-                  <p className="ui-kv-value break-all">{customDomain.verification_token}</p>
-                </div>
-
-                {customDomain.verified_at ? (
-                  <div className="space-y-1">
-                    <p className="ui-kv-label">Verified At</p>
-                    <p className="ui-kv-value break-all">{new Date(customDomain.verified_at).toLocaleString()}</p>
-                  </div>
-                ) : null}
-
-                {customDomain.last_error ? <Alert variant="warning">Latest verification note: {customDomain.last_error}</Alert> : null}
-              </>
-            ) : (
-              <Alert variant="info">Save a domain first to generate verification values.</Alert>
-            )}
-
-            <Alert variant="info">
-              Some DNS providers do not support CNAME at apex/root domains. If needed, point <span className="font-semibold">www</span> and forward your root
-              domain.
-            </Alert>
-          </CardContent>
-        </Card>
-      </div>
+      <DomainSetupModal
+        canManage={canManage}
+        customDomain={customDomain}
+        initialMethod={setupMethod}
+        initialOpen={setupOpen}
+        initialStep={setupStep}
+        quickConnect={quickConnect}
+        orgSlug={orgSlug}
+        platformHost={platformHost}
+        saveAction={saveOrgCustomDomainAction.bind(null, orgSlug)}
+        verifyAction={verifyOrgCustomDomainAction.bind(null, orgSlug)}
+      />
     </PageStack>
   );
 }

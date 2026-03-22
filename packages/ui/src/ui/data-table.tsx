@@ -1,6 +1,17 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode
+} from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -94,12 +105,6 @@ type DataTableProps<TItem> = {
 type CellPoint = {
   rowIndex: number;
   columnIndex: number;
-};
-
-type LastCellClick = {
-  rowKey: string;
-  columnKey: string;
-  at: number;
 };
 
 function isLockedSelectionColumn(columnKey: string) {
@@ -223,7 +228,9 @@ function isInteractiveTarget(target: EventTarget | null) {
     return false;
   }
 
-  return Boolean(target.closest("button, a, input, select, textarea, [role='button'], [data-row-action='true'], [data-inline-editor='true']"));
+  return Boolean(
+    target.closest("button, a, input, select, textarea, [role='button']:not(tr), [data-row-action='true'], [data-inline-editor='true']")
+  );
 }
 
 function hasActiveTextSelection() {
@@ -454,7 +461,6 @@ export function DataTable<TItem>({
   const headerCellRefByKey = useRef<Record<string, HTMLTableCellElement | null>>({});
   const resizeObserverByKey = useRef<Record<string, ResizeObserver | null>>({});
   const [columnWidthVersion, setColumnWidthVersion] = useState(0);
-  const lastCellClickRef = useRef<LastCellClick | null>(null);
   const appliedViewConfigSignatureRef = useRef<string | null>(null);
   const loadedStorageKeyRef = useRef<string | null>(null);
   const activeResizeRef = useRef<{
@@ -866,6 +872,64 @@ export function DataTable<TItem>({
     return rowIndex >= bounds.minRow && rowIndex <= bounds.maxRow && columnIndex >= bounds.minColumn && columnIndex <= bounds.maxColumn;
   }
 
+  const selectionBounds = useMemo(() => {
+    if (!enableCellSelection || !selectionAnchor || !selectionFocus) {
+      return null;
+    }
+    return getSelectionBounds(selectionAnchor, selectionFocus);
+  }, [enableCellSelection, selectionAnchor, selectionFocus]);
+
+  function getCellSelectionOverlayStyle(rowIndex: number, columnIndex: number): CSSProperties | undefined {
+    if (!selectionBounds) {
+      return undefined;
+    }
+
+    const inSelection =
+      rowIndex >= selectionBounds.minRow &&
+      rowIndex <= selectionBounds.maxRow &&
+      columnIndex >= selectionBounds.minColumn &&
+      columnIndex <= selectionBounds.maxColumn;
+    if (!inSelection) {
+      return undefined;
+    }
+
+    const isTop = rowIndex === selectionBounds.minRow;
+    const isBottom = rowIndex === selectionBounds.maxRow;
+    const isLeft = columnIndex === selectionBounds.minColumn;
+    const isRight = columnIndex === selectionBounds.maxColumn;
+    const hasEdge = isTop || isBottom || isLeft || isRight;
+    if (!hasEdge) {
+      return undefined;
+    }
+
+    const dashedHorizontal = "repeating-linear-gradient(90deg, hsl(var(--accent) / 0.95) 0 7px, transparent 7px 12px)";
+    const dashedVertical = "repeating-linear-gradient(180deg, hsl(var(--accent) / 0.95) 0 7px, transparent 7px 12px)";
+    const transparent = "linear-gradient(transparent, transparent)";
+
+    return {
+      backgroundImage: [isTop ? dashedHorizontal : transparent, isBottom ? dashedHorizontal : transparent, isLeft ? dashedVertical : transparent, isRight ? dashedVertical : transparent].join(", "),
+      backgroundSize: "100% 2px, 100% 2px, 2px 100%, 2px 100%",
+      backgroundPosition: "0 0, 0 100%, 0 0, 100% 0",
+      backgroundRepeat: "repeat-x, repeat-x, repeat-y, repeat-y",
+      animation: "datatable-marching-ants 0.7s linear infinite"
+    };
+  }
+
+  function getCellStyle(rowIndex: number, columnIndex: number, columnKey: string): CSSProperties | undefined {
+    const pinnedStyle = getPinnedColumnCellStyle(columnKey);
+    const selectionOverlayStyle = getCellSelectionOverlayStyle(rowIndex, columnIndex);
+    if (!pinnedStyle) {
+      return selectionOverlayStyle;
+    }
+    if (!selectionOverlayStyle) {
+      return pinnedStyle;
+    }
+    return {
+      ...pinnedStyle,
+      ...selectionOverlayStyle
+    };
+  }
+
   function copySelectionToClipboard() {
     if (!enableCellSelection || !selectionAnchor || !selectionFocus) {
       return;
@@ -923,31 +987,30 @@ export function DataTable<TItem>({
     key: string,
     columnKey: string
   ) {
+    if (enableCellSelection && !isInteractiveTarget(event.target)) {
+      event.stopPropagation();
+    }
+
     const nextPoint: CellPoint = { rowIndex, columnIndex };
-    const now = Date.now();
-    const previousClick = lastCellClickRef.current;
     const isAlreadyActiveCell =
-      Boolean(previousClick) &&
-      previousClick?.rowKey === key &&
-      previousClick?.columnKey === columnKey &&
-      now - previousClick.at < 1500;
+      Boolean(selectionFocus) &&
+      selectionFocus?.rowIndex === rowIndex &&
+      selectionFocus?.columnIndex === columnIndex &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey;
 
     if (enableCellSelection) {
       tableShellRef.current?.focus();
 
-      if ((event.shiftKey || event.ctrlKey || event.metaKey) && selectionAnchor) {
+      if (event.shiftKey && selectionAnchor) {
         setSelectionFocus(nextPoint);
-      } else if (!isAlreadyActiveCell) {
+      } else {
         setSelectionAnchor(nextPoint);
         setSelectionFocus(nextPoint);
       }
     }
-
-    lastCellClickRef.current = {
-      rowKey: key,
-      columnKey,
-      at: now
-    };
 
     onCellClick?.({
       item,
@@ -957,6 +1020,13 @@ export function DataTable<TItem>({
       columnKey,
       isActiveCell: isAlreadyActiveCell
     });
+  }
+
+  function suppressNativeTextSelection(event: MouseEvent<HTMLTableElement>) {
+    if (!enableCellSelection || isInteractiveTarget(event.target)) {
+      return;
+    }
+    event.preventDefault();
   }
 
   function handleColumnToggle(columnKey: string, nextChecked: boolean) {
@@ -1263,6 +1333,13 @@ export function DataTable<TItem>({
 
   return (
     <>
+      <style>{`
+        @keyframes datatable-marching-ants {
+          to {
+            background-position: 12px 0, -12px 100%, 0 -12px, 100% 12px;
+          }
+        }
+      `}</style>
       <div
         className="overflow-hidden rounded-control border border-border/80 bg-surface"
         onKeyDown={(event) => {
@@ -1336,11 +1413,13 @@ export function DataTable<TItem>({
             <Table
               aria-label={ariaLabel}
               className={cn(
-                "w-max table-auto border-separate border-spacing-0 [&_th]:w-auto [&_th]:whitespace-nowrap [&_th]:select-text [&_td]:w-auto [&_td]:whitespace-nowrap [&_td]:select-text [&_td]:bg-surface",
+                "w-max table-auto border-separate border-spacing-0 [&_th]:w-auto [&_th]:whitespace-nowrap [&_th]:select-text [&_td]:w-auto [&_td]:whitespace-nowrap [&_td]:bg-surface",
+                enableCellSelection ? "[&_td]:select-none" : "[&_td]:select-text",
                 showCellGrid
                   ? "[&_th]:border-b [&_th]:border-r [&_th]:border-border [&_th:first-child]:border-l [&_td]:border-b [&_td]:border-r [&_td]:border-border [&_td:first-child]:border-l"
                   : undefined
               )}
+              onMouseDownCapture={suppressNativeTextSelection}
             >
               <TableHeader className="sticky top-0 z-10 bg-surface-muted/90 backdrop-blur supports-[backdrop-filter]:bg-surface-muted/75">
                 <SortableContext
@@ -1402,14 +1481,14 @@ export function DataTable<TItem>({
                         )}
                         key={key}
                         onClick={(event) => {
-                          if (!onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
+                          if (enableCellSelection || !onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
                             return;
                           }
 
                           onRowClick(item);
                         }}
                         onKeyDown={(event) => {
-                          if (!onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
+                          if (enableCellSelection || !onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
                             return;
                           }
 
@@ -1429,12 +1508,18 @@ export function DataTable<TItem>({
                               "overflow-hidden",
                               getPinnedColumnCellClass(column.key),
                               enableCellSelection ? "cursor-cell" : undefined,
-                              isCellInSelection(rowIndex, columnIndex) ? "bg-accent/20" : undefined,
-                              selectionFocus?.rowIndex === rowIndex && selectionFocus?.columnIndex === columnIndex ? "ring-1 ring-inset ring-accent" : undefined
+                              isCellInSelection(rowIndex, columnIndex) ? "relative bg-accent/20" : undefined,
+                              selectionFocus?.rowIndex === rowIndex && selectionFocus?.columnIndex === columnIndex ? "ring-2 ring-inset ring-accent" : undefined
                             )}
                             key={column.key}
-                            onClick={(event) => handleCellClick(event, rowIndex, columnIndex, item, key, column.key)}
-                            style={getPinnedColumnCellStyle(column.key)}
+                            onMouseDown={(event) => {
+                              if (!enableCellSelection || isInteractiveTarget(event.target)) {
+                                return;
+                              }
+                              event.preventDefault();
+                              handleCellClick(event, rowIndex, columnIndex, item, key, column.key);
+                            }}
+                            style={getCellStyle(rowIndex, columnIndex, column.key)}
                           >
                             {column.renderCell(item, {
                               rowIndex,
@@ -1461,11 +1546,13 @@ export function DataTable<TItem>({
           <Table
             aria-label={ariaLabel}
             className={cn(
-              "w-max table-auto border-separate border-spacing-0 [&_th]:w-auto [&_th]:whitespace-nowrap [&_th]:select-text [&_td]:w-auto [&_td]:whitespace-nowrap [&_td]:select-text [&_td]:bg-surface",
+              "w-max table-auto border-separate border-spacing-0 [&_th]:w-auto [&_th]:whitespace-nowrap [&_th]:select-text [&_td]:w-auto [&_td]:whitespace-nowrap [&_td]:bg-surface",
+              enableCellSelection ? "[&_td]:select-none" : "[&_td]:select-text",
               showCellGrid
                 ? "[&_th]:border-b [&_th]:border-r [&_th]:border-border [&_th:first-child]:border-l [&_td]:border-b [&_td]:border-r [&_td]:border-border [&_td:first-child]:border-l"
                 : undefined
             )}
+            onMouseDownCapture={suppressNativeTextSelection}
           >
             <TableHeader className="sticky top-0 z-10 bg-surface-muted/90 backdrop-blur supports-[backdrop-filter]:bg-surface-muted/75">
               <TableRow>
@@ -1588,14 +1675,14 @@ export function DataTable<TItem>({
                       )}
                       key={key}
                       onClick={(event) => {
-                        if (!onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
+                        if (enableCellSelection || !onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
                           return;
                         }
 
                         onRowClick(item);
                       }}
                       onKeyDown={(event) => {
-                        if (!onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
+                        if (enableCellSelection || !onRowClick || isInteractiveTarget(event.target) || hasActiveTextSelection()) {
                           return;
                         }
 
@@ -1615,12 +1702,18 @@ export function DataTable<TItem>({
                             "overflow-hidden",
                             getPinnedColumnCellClass(column.key),
                             enableCellSelection ? "cursor-cell" : undefined,
-                            isCellInSelection(rowIndex, columnIndex) ? "bg-accent/20" : undefined,
-                            selectionFocus?.rowIndex === rowIndex && selectionFocus?.columnIndex === columnIndex ? "ring-1 ring-inset ring-accent" : undefined
+                            isCellInSelection(rowIndex, columnIndex) ? "relative bg-accent/20" : undefined,
+                            selectionFocus?.rowIndex === rowIndex && selectionFocus?.columnIndex === columnIndex ? "ring-2 ring-inset ring-accent" : undefined
                           )}
                           key={column.key}
-                          onClick={(event) => handleCellClick(event, rowIndex, columnIndex, item, key, column.key)}
-                          style={getPinnedColumnCellStyle(column.key)}
+                          onMouseDown={(event) => {
+                            if (!enableCellSelection || isInteractiveTarget(event.target)) {
+                              return;
+                            }
+                            event.preventDefault();
+                            handleCellClick(event, rowIndex, columnIndex, item, key, column.key);
+                          }}
+                          style={getCellStyle(rowIndex, columnIndex, column.key)}
                         >
                           {column.renderCell(item, {
                             rowIndex,

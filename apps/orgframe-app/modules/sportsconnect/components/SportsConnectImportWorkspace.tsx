@@ -7,10 +7,10 @@ import { type CanvasViewportHandle, CanvasViewport } from "@orgframe/ui/ui/canva
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
 import { Chip } from "@orgframe/ui/ui/chip";
 import { FormField } from "@orgframe/ui/ui/form-field";
-import { Input } from "@orgframe/ui/ui/input";
 import { Popup } from "@orgframe/ui/ui/popup";
 import { Select } from "@orgframe/ui/ui/select";
 import { useToast } from "@orgframe/ui/ui/toast";
+import { useFileManager } from "@/modules/file-manager";
 import { commitRun, createDryRun, getRunProjection, listRunHistory, resolveMappings } from "@/modules/sportsconnect/actions";
 import { useOrderPanel } from "@/modules/orders";
 import type {
@@ -220,6 +220,7 @@ function OrganizationProjectionCanvas({ projection }: { projection: SportsConnec
 export function SportsConnectImportWorkspace({ orgSlug, initialRuns }: SportsConnectImportWorkspaceProps) {
   const { toast } = useToast();
   const { openOrderPanel } = useOrderPanel();
+  const { openFileManager } = useFileManager();
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState<WizardStep>("upload");
@@ -291,17 +292,61 @@ export function SportsConnectImportWorkspace({ orgSlug, initialRuns }: SportsCon
     setHistory(next.runs);
   }
 
-  async function handleFileSelected(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
+  async function handleSelectCsv() {
+    const selected = await openFileManager({
+      mode: "select",
+      selectionType: "single",
+      orgSlug,
+      title: "Select SportsConnect CSV",
+      subtitle: "Choose an existing CSV or upload one into Imports.",
+      allowedScopes: ["organization"],
+      defaultFolder: {
+        kind: "system",
+        key: "imports"
+      },
+      fileTypes: ".csv,text/csv",
+      allowUpload: true,
+      canManage: true,
+      uploadDefaults: {
+        bucket: "org-private-files",
+        accessTag: "manage",
+        visibility: "private"
+      }
+    });
+
+    const file = selected?.[0] ?? null;
     if (!file) {
-      setFileName("");
-      setCsvContent("");
       return;
     }
 
-    const text = await file.text();
-    setFileName(file.name);
-    setCsvContent(text);
+    if (!file.url) {
+      toast({
+        title: "Unable to read file",
+        description: "The selected file URL could not be resolved.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(file.url, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error("File download failed.");
+      }
+
+      const text = await response.text();
+      setFileName(file.name);
+      setCsvContent(text);
+    } catch (error) {
+      toast({
+        title: "Unable to read CSV",
+        description: error instanceof Error ? error.message : "Try selecting the file again.",
+        variant: "destructive"
+      });
+    }
   }
 
   function handleCreateDryRun() {
@@ -574,13 +619,15 @@ export function SportsConnectImportWorkspace({ orgSlug, initialRuns }: SportsCon
             <Card>
               <CardHeader>
                 <CardTitle>Upload SportsConnect CSV</CardTitle>
-                <CardDescription>Choose the file and run analysis.</CardDescription>
+                <CardDescription>Select or upload the CSV and run analysis.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <FormField label="Enrollment report CSV">
-                  <Input accept=".csv,text/csv" onChange={handleFileSelected} type="file" />
+                  <Button onClick={handleSelectCsv} type="button" variant="secondary">
+                    Select CSV from File Manager
+                  </Button>
                 </FormField>
-                {fileName ? <p className="text-xs text-text-muted">Selected file: {fileName}</p> : null}
+                {fileName ? <p className="text-xs text-text-muted">Selected file: {fileName}</p> : <p className="text-xs text-text-muted">No CSV selected yet.</p>}
               </CardContent>
             </Card>
           ) : null}

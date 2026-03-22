@@ -5,6 +5,10 @@ const nextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: "50mb"
+    },
+    staleTimes: {
+      dynamic: 300,
+      static: 1800
     }
   },
   images: {

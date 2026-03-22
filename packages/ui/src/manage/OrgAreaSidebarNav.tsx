@@ -1,10 +1,10 @@
 "use client";
 
-import { ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, type LucideIcon } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { ChevronDown, Menu, type LucideIcon } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Chip } from "@orgframe/ui/ui/chip";
-import { IconButton } from "@orgframe/ui/ui/icon-button";
+import { OrgAreaSidebarHeader, OrgAreaSidebarShell } from "@orgframe/ui/manage/OrgAreaSidebarShell";
 import { NavItem } from "@orgframe/ui/ui/nav-item";
 import { cn } from "@/lib/utils";
 
@@ -146,9 +146,12 @@ function SoonBadge() {
 
 export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }: OrgAreaSidebarNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [optimisticPathname, setOptimisticPathname] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const canCollapse = !mobile;
   const collapseStorageKey = config.collapseStorageKey ?? "org-area-sidebar:collapsed";
+  const activePathname = optimisticPathname ?? pathname;
 
   const parentNodes = useMemo(
     () => config.items.filter((node): node is OrgAreaSidebarParentItem => isParentNode(node)),
@@ -161,6 +164,10 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
       return draft;
     }, {});
   });
+
+  useEffect(() => {
+    setOptimisticPathname(null);
+  }, [pathname]);
 
   useEffect(() => {
     if (!canCollapse) {
@@ -226,8 +233,48 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
     }));
   }
 
+  function markOptimisticActive(href?: string) {
+    if (!href || !href.startsWith("/")) {
+      return;
+    }
+
+    setOptimisticPathname(normalizePath(href));
+  }
+
+  function prefetchRoute(href?: string) {
+    if (!href || !href.startsWith("/")) {
+      return;
+    }
+
+    router.prefetch(href);
+  }
+
+  useEffect(() => {
+    const hrefs = new Set<string>();
+
+    for (const item of config.items) {
+      if (item.href?.startsWith("/")) {
+        hrefs.add(item.href);
+      }
+
+      if (!isParentNode(item)) {
+        continue;
+      }
+
+      for (const child of item.children) {
+        if (child.href?.startsWith("/")) {
+          hrefs.add(child.href);
+        }
+      }
+    }
+
+    for (const href of hrefs) {
+      router.prefetch(href);
+    }
+  }, [config.items, router]);
+
   function renderLeafItem(item: OrgAreaSidebarLeafItem) {
-    const isActive = item.href ? matchesPath(pathname, item.href, item.match ?? "prefix") : false;
+    const isActive = item.href ? matchesPath(activePathname, item.href, item.match ?? "prefix") : false;
     const Icon = item.icon;
 
     return (
@@ -245,6 +292,12 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
         size="md"
         title={item.label}
         variant="sidebar"
+        prefetch
+        onMouseDown={() => {
+          markOptimisticActive(item.href);
+          prefetchRoute(item.href);
+        }}
+        onClick={() => markOptimisticActive(item.href)}
       >
         {item.label}
       </NavItem>
@@ -252,7 +305,7 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
   }
 
   function renderChildItem(item: OrgAreaSidebarChildItem) {
-    const isActive = item.href ? matchesPath(pathname, item.href, item.match ?? "prefix") : false;
+    const isActive = item.href ? matchesPath(activePathname, item.href, item.match ?? "prefix") : false;
     const Icon = item.icon;
 
     return (
@@ -265,6 +318,12 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
         rightSlot={item.soon ? <SoonBadge /> : null}
         size="sm"
         variant="sidebar"
+        prefetch
+        onMouseDown={() => {
+          markOptimisticActive(item.href);
+          prefetchRoute(item.href);
+        }}
+        onClick={() => markOptimisticActive(item.href)}
       >
         {item.label}
       </NavItem>
@@ -272,37 +331,16 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
   }
 
   return (
-    <aside
-      className={cn(
-        "border border-border bg-surface transition-[width,padding,border-radius] duration-200",
-        mobile ? "rounded-card p-4 shadow-card" : collapsed ? "w-20 rounded-card p-4 shadow-card" : "w-[280px] rounded-card p-4 shadow-card"
-      )}
-    >
-      {showHeader && !collapsed ? (
-        <>
-          <header className="flex min-h-[44px] items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold leading-tight tracking-tight text-text">{config.title}</h2>
-              <p className="mt-1 text-xs text-text-muted">{config.subtitle}</p>
-            </div>
-            {canCollapse ? (
-              <IconButton icon={<PanelLeftClose />} label="Collapse sidebar" onClick={() => setCollapsed(true)} />
-            ) : null}
-          </header>
-
-          <div className="my-3 border-t border-border" />
-        </>
-      ) : null}
-
-      {showHeader && collapsed && canCollapse ? (
-        <>
-          <header className="flex min-h-[44px] items-center justify-center">
-            <IconButton icon={<PanelLeftOpen />} label="Expand sidebar" onClick={() => setCollapsed(false)} />
-          </header>
-
-          <div className="my-3 border-t border-border" />
-        </>
-      ) : null}
+    <OrgAreaSidebarShell collapsed={collapsed} mobile={mobile}>
+      <OrgAreaSidebarHeader
+        canCollapse={canCollapse}
+        collapsed={collapsed}
+        onCollapse={() => setCollapsed(true)}
+        onExpand={() => setCollapsed(false)}
+        show={showHeader}
+        subtitle={config.subtitle}
+        title={config.title}
+      />
 
       <nav aria-label={config.ariaLabel} className={cn(collapsed ? "flex flex-col items-center gap-2" : "space-y-1")}>
         {config.items.map((node) => {
@@ -312,7 +350,7 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
 
           const Icon = node.icon;
           const expanded = !collapsed && Boolean(expandedByKey[node.key]);
-          const parentActive = isParentActive(pathname, node);
+          const parentActive = isParentActive(activePathname, node);
           const parentDisabled = node.disabled || (!node.href && node.children.length === 0);
 
           return (
@@ -330,7 +368,19 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
                 disabled={!node.href && collapsed}
                 href={node.href}
                 icon={<Icon className="h-[17px] w-[17px]" />}
-                onClick={!collapsed ? () => toggleParent(node.key) : undefined}
+                prefetch
+                onMouseDown={() => {
+                  markOptimisticActive(node.href);
+                  prefetchRoute(node.href);
+                }}
+                onClick={
+                  !collapsed
+                    ? () => {
+                        markOptimisticActive(node.href);
+                        toggleParent(node.key);
+                      }
+                    : undefined
+                }
                 rightSlot={
                   !collapsed ? (
                     <span className="flex items-center gap-2 text-text-muted">
@@ -352,7 +402,7 @@ export function OrgAreaSidebarNav({ config, mobile = false, showHeader = true }:
           );
         })}
       </nav>
-    </aside>
+    </OrgAreaSidebarShell>
   );
 }
 

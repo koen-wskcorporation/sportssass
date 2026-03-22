@@ -7,9 +7,9 @@ import { Input } from "@orgframe/ui/ui/input";
 import { Panel } from "@orgframe/ui/ui/panel";
 import { cn } from "@/lib/utils";
 
-export type UnifiedCalendarView = "month" | "week" | "day";
+export type CalendarView = "month" | "week" | "day";
 
-export type UnifiedCalendarItem = {
+export type CalendarItem = {
   id: string;
   title: string;
   entryType: "event" | "practice" | "game";
@@ -21,15 +21,15 @@ export type UnifiedCalendarItem = {
   teamChips?: string[];
 };
 
-export type UnifiedCalendarQuickAddDraft = {
+export type CalendarQuickAddDraft = {
   title: string;
   startsAtUtc: string;
   endsAtUtc: string;
 };
 
-type UnifiedCalendarProps = {
-  items: UnifiedCalendarItem[];
-  initialView?: UnifiedCalendarView;
+type CalendarProps = {
+  items: CalendarItem[];
+  initialView?: CalendarView;
   referenceTimezone?: string;
   canEdit?: boolean;
   quickAddUx?: "internal" | "external";
@@ -40,10 +40,11 @@ type UnifiedCalendarProps = {
   onCreateRange?: (input: { startsAtUtc: string; endsAtUtc: string }) => void;
   onMoveItem?: (input: { itemId: string; startsAtUtc: string; endsAtUtc: string }) => void;
   onResizeItem?: (input: { itemId: string; endsAtUtc: string }) => void;
-  onQuickAdd?: (draft: UnifiedCalendarQuickAddDraft) => void;
-  onQuickAddIntent?: (draft: UnifiedCalendarQuickAddDraft) => void;
-  onQuickAddDraftChange?: (draft: UnifiedCalendarQuickAddDraft & { open: boolean }) => void;
-  getConflictMessage?: (draft: UnifiedCalendarQuickAddDraft) => string | null;
+  onQuickAdd?: (draft: CalendarQuickAddDraft) => void;
+  onQuickAddIntent?: (draft: CalendarQuickAddDraft) => void;
+  onQuickAddDraftChange?: (draft: CalendarQuickAddDraft & { open: boolean }) => void;
+  onCancelCreate?: () => void;
+  getConflictMessage?: (draft: CalendarQuickAddDraft) => string | null;
   renderQuickAddFields?: (context: {
     title: string;
     startsAtUtc: string;
@@ -133,7 +134,7 @@ function intersectsDay(startsAtUtc: string, endsAtUtc: string, day: Date) {
   return startsAt.getTime() < dayEnd.getTime() && endsAt.getTime() > dayStart.getTime();
 }
 
-function formatHeading(anchorDate: Date, view: UnifiedCalendarView) {
+function formatHeading(anchorDate: Date, view: CalendarView) {
   if (view === "month") {
     return anchorDate.toLocaleDateString(undefined, {
       month: "long",
@@ -142,9 +143,10 @@ function formatHeading(anchorDate: Date, view: UnifiedCalendarView) {
   }
 
   if (view === "week") {
-    const weekStart = startOfWeek(anchorDate);
-    const weekEnd = addDays(weekStart, 6);
-    return `${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`;
+    const monthName = anchorDate.toLocaleDateString(undefined, { month: "long" });
+    const currentWeekStart = startOfWeek(anchorDate);
+    const currentWeekEnd = addDays(currentWeekStart, 6);
+    return `${monthName} Week (${currentWeekStart.getDate()}-${currentWeekEnd.getDate()})`;
   }
 
   return anchorDate.toLocaleDateString(undefined, {
@@ -155,20 +157,16 @@ function formatHeading(anchorDate: Date, view: UnifiedCalendarView) {
   });
 }
 
-function itemDurationMs(item: UnifiedCalendarItem) {
+function itemDurationMs(item: CalendarItem) {
   return new Date(item.endsAtUtc).getTime() - new Date(item.startsAtUtc).getTime();
 }
 
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 const WEEK_TIME_GUTTER_WIDTH_PX = 80;
-const WEEK_DAY_WIDTH_PX = 180;
 const WEEK_HEADER_HEIGHT_PX = 40;
 const WEEK_HOUR_HEIGHT_PX = 56;
 const WEEK_VISIBLE_HOURS = 8;
-const WEEK_CENTER_HOUR = 12;
-const WEEK_WINDOW_DAYS = 21;
-const WEEK_WINDOW_CENTER_OFFSET = 7;
-const WEEK_SCROLL_BUFFER_DAYS = 2;
+const WEEK_VISIBLE_DAYS = 7;
 const DRAFT_ITEM_ID = "__calendar_draft__";
 
 function toLocalInputValue(isoUtc: string) {
@@ -196,7 +194,7 @@ function formatResizeBoundaryLabel(timestampMs: number) {
   });
 }
 
-export function UnifiedCalendar({
+export function Calendar({
   items,
   initialView = "week",
   referenceTimezone,
@@ -212,27 +210,23 @@ export function UnifiedCalendar({
   onQuickAdd,
   onQuickAddIntent,
   onQuickAddDraftChange,
+  onCancelCreate,
   getConflictMessage,
   renderQuickAddFields,
   headerSlot,
   filterSlot,
   controlsSlot
-}: UnifiedCalendarProps) {
-  const [view, setView] = useState<UnifiedCalendarView>(initialView);
-  const [anchorDate, setAnchorDate] = useState<Date>(() => {
-    const today = todayInTimezone(referenceTimezone);
-    return initialView === "week" ? startOfWeek(today) : today;
-  });
+}: CalendarProps) {
+  const [view, setView] = useState<CalendarView>(initialView);
+  const [anchorDate, setAnchorDate] = useState<Date>(() => todayInTimezone(referenceTimezone));
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
-  const [weekWindowStart, setWeekWindowStart] = useState<Date>(() => addDays(startOfWeek(new Date()), -WEEK_WINDOW_CENTER_OFFSET));
-  const [dragCreateStart, setDragCreateStart] = useState<string | null>(null);
-  const [dragCreateHover, setDragCreateHover] = useState<string | null>(null);
   const [dragMoveItemId, setDragMoveItemId] = useState<string | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTitle, setQuickAddTitle] = useState("");
-  const [quickAddStartsAtUtc, setQuickAddStartsAtUtc] = useState(() => startOfDay(new Date()).toISOString());
-  const [quickAddEndsAtUtc, setQuickAddEndsAtUtc] = useState(() => endOfDay(new Date()).toISOString());
+  const [quickAddStartsAtUtc, setQuickAddStartsAtUtc] = useState(() => startOfDay(todayInTimezone(referenceTimezone)).toISOString());
+  const [quickAddEndsAtUtc, setQuickAddEndsAtUtc] = useState(() => endOfDay(todayInTimezone(referenceTimezone)).toISOString());
   const [hoverSlot, setHoverSlot] = useState<{ dayIndex: number; startMinutes: number } | null>(null);
+  const [monthHoverDayKey, setMonthHoverDayKey] = useState<string | null>(null);
   const [resizeDrag, setResizeDrag] = useState<{
     itemId: string;
     edge: "top" | "bottom";
@@ -246,11 +240,30 @@ export function UnifiedCalendar({
     endsAtUtc: string;
   } | null>(null);
   const [resizeSnap, setResizeSnap] = useState<{ label: string; x: number; y: number } | null>(null);
+  const [weekEnterZoomState, setWeekEnterZoomState] = useState<"idle" | "preparing" | "animating">("idle");
+  const [dayEnterZoomState, setDayEnterZoomState] = useState<"idle" | "preparing" | "animating">("idle");
   const weekScrollRef = useRef<HTMLDivElement | null>(null);
-  const weekScrollShiftRef = useRef(false);
-  const weekScrollResetRef = useRef(false);
-  const previousViewRef = useRef<UnifiedCalendarView>(initialView);
   const suppressHoverSlot = quickAddOpen || Boolean(resizeDrag) || Boolean(dragMoveItemId) || disableHoverGhost;
+
+  function focusWeekFromMonth(day: Date) {
+    if (quickAddOpen) {
+      setQuickAddOpen(false);
+    }
+    onCancelCreate?.();
+    setAnchorDate(day);
+    setView("week");
+    setWeekEnterZoomState("preparing");
+  }
+
+  function focusDayFromWeek(day: Date) {
+    if (quickAddOpen) {
+      setQuickAddOpen(false);
+    }
+    onCancelCreate?.();
+    setAnchorDate(day);
+    setView("day");
+    setDayEnterZoomState("preparing");
+  }
 
   function buildDefaultQuickAddDraft(anchor: Date) {
     const start = startOfDay(anchor);
@@ -265,7 +278,7 @@ export function UnifiedCalendar({
   const monthAnchor = startOfMonth(anchorDate);
   const monthGridStart = startOfWeek(monthAnchor);
   const monthDays = useMemo(() => Array.from({ length: 42 }, (_, index) => addDays(monthGridStart, index)), [monthGridStart]);
-  const draftItem = useMemo<UnifiedCalendarItem | null>(() => {
+  const draftItem = useMemo<CalendarItem | null>(() => {
     if (quickAddUx !== "internal" || !quickAddOpen) {
       return null;
     }
@@ -301,7 +314,7 @@ export function UnifiedCalendar({
   }
 
   const itemsByDay = useMemo(() => {
-    const map = new Map<string, UnifiedCalendarItem[]>();
+    const map = new Map<string, CalendarItem[]>();
 
     for (const day of monthDays) {
       const key = dateKey(day);
@@ -315,13 +328,6 @@ export function UnifiedCalendar({
 
     return map;
   }, [displayItems, monthDays]);
-
-  const dayItems = useMemo(() => {
-    const selectedDay = startOfDay(anchorDate);
-    return displayItems
-      .filter((item) => intersectsDay(item.startsAtUtc, item.endsAtUtc, selectedDay))
-      .sort((left, right) => left.startsAtUtc.localeCompare(right.startsAtUtc));
-  }, [anchorDate, displayItems]);
 
   const quickAddConflict =
     getConflictMessage && quickAddOpen
@@ -391,64 +397,67 @@ export function UnifiedCalendar({
   }, []);
 
   useEffect(() => {
-    const previousView = previousViewRef.current;
-    previousViewRef.current = view;
-    if (view === "week" && previousView !== "week") {
-      setAnchorDate(startOfWeek(todayInTimezone(referenceTimezone)));
-    }
-  }, [referenceTimezone, view]);
-
-  useEffect(() => {
-    if (view !== "week") {
+    if (view !== "week" && view !== "day") {
       return;
     }
     const container = weekScrollRef.current;
     if (!container) {
       return;
     }
-    const targetTop = Math.max(0, (WEEK_CENTER_HOUR - WEEK_VISIBLE_HOURS / 2) * WEEK_HOUR_HEIGHT_PX);
     requestAnimationFrame(() => {
+      const weekGridBody = container.querySelector<HTMLElement>("[data-week-grid-body='true']");
+      if (!weekGridBody) {
+        return;
+      }
+      const now = new Date();
+      const minutesIntoDay = now.getHours() * 60 + now.getMinutes();
+      const relevantOffsetPx = (minutesIntoDay / 60) * WEEK_HOUR_HEIGHT_PX;
+      const gridStartOffsetPx = weekGridBody.offsetTop;
+      const targetTop = Math.max(0, gridStartOffsetPx + relevantOffsetPx - container.clientHeight / 2);
       container.scrollTop = targetTop;
     });
   }, [view]);
 
   useEffect(() => {
-    if (view !== "week") {
+    if (view !== "week" || weekEnterZoomState !== "preparing") {
       return;
     }
-    const nextStart = addDays(startOfWeek(anchorDate), -WEEK_WINDOW_CENTER_OFFSET);
-    setWeekWindowStart(nextStart);
-    const container = weekScrollRef.current;
-    if (!container) {
-      return;
-    }
-    const targetLeft = WEEK_DAY_WIDTH_PX * WEEK_WINDOW_CENTER_OFFSET;
-    requestAnimationFrame(() => {
-      if (weekScrollResetRef.current) {
-        weekScrollResetRef.current = false;
-        return;
-      }
-      container.scrollLeft = targetLeft;
-    });
-  }, [anchorDate, view]);
 
-  function shiftWeekWindow(daysDelta: number) {
-    const container = weekScrollRef.current;
-    weekScrollShiftRef.current = true;
-    weekScrollResetRef.current = true;
-    setWeekWindowStart((current) => addDays(current, daysDelta));
-    setAnchorDate((current) => addDays(current, daysDelta));
-    if (container) {
-      container.scrollLeft -= WEEK_DAY_WIDTH_PX * daysDelta;
-    }
-    requestAnimationFrame(() => {
-      weekScrollShiftRef.current = false;
+    const animationFrame = window.requestAnimationFrame(() => {
+      setWeekEnterZoomState("animating");
     });
-  }
+    const timeout = window.setTimeout(() => {
+      setWeekEnterZoomState("idle");
+    }, 240);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeout);
+    };
+  }, [view, weekEnterZoomState]);
+
+  useEffect(() => {
+    if (view !== "day" || dayEnterZoomState !== "preparing") {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      setDayEnterZoomState("animating");
+    });
+    const timeout = window.setTimeout(() => {
+      setDayEnterZoomState("idle");
+    }, 240);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeout);
+    };
+  }, [dayEnterZoomState, view]);
 
   useEffect(() => {
     if (suppressHoverSlot) {
       setHoverSlot(null);
+      setMonthHoverDayKey(null);
     }
   }, [suppressHoverSlot]);
 
@@ -543,27 +552,6 @@ export function UnifiedCalendar({
     };
   }, [moveCalendarItem, resizeCalendarItem, resizeDrag]);
 
-  function createFromDrag() {
-    if (!dragCreateStart || !dragCreateHover || !onCreateRange) {
-      setDragCreateStart(null);
-      setDragCreateHover(null);
-      return;
-    }
-
-    const start = parseDateKey(dragCreateStart);
-    const end = parseDateKey(dragCreateHover);
-    const min = start.getTime() <= end.getTime() ? start : end;
-    const max = start.getTime() <= end.getTime() ? end : start;
-
-    onCreateRange({
-      startsAtUtc: startOfDay(min).toISOString(),
-      endsAtUtc: endOfDay(max).toISOString()
-    });
-
-    setDragCreateStart(null);
-    setDragCreateHover(null);
-  }
-
   function shiftAnchor(direction: "previous" | "next") {
     const multiplier = direction === "previous" ? -1 : 1;
 
@@ -588,7 +576,7 @@ export function UnifiedCalendar({
     onSelectItem?.(itemId);
   }
 
-  const rootClasses = framed ? "flex h-full flex-col gap-4 rounded-card border bg-surface p-4 shadow-card" : "flex h-full flex-col gap-4";
+  const rootClasses = framed ? "flex h-full min-h-0 flex-col gap-4 rounded-card border bg-surface p-4 shadow-card" : "flex h-full min-h-0 flex-col gap-4";
 
   return (
     <div className={cn(rootClasses, className)}>
@@ -653,44 +641,35 @@ export function UnifiedCalendar({
       <h2 className="text-base font-semibold text-text">{formatHeading(anchorDate, view)}</h2>
 
       {view === "month" ? (
-        <div className="space-y-1">
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+        <div className="min-h-0 flex-1 overflow-auto rounded-control border border-border bg-surface">
+          <div className="sticky top-0 z-10 grid grid-cols-7 border-b bg-surface">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((weekday) => (
-              <p key={weekday}>{weekday}</p>
+              <p className="border-r border-border px-2 py-2 text-left text-xs font-semibold text-text last:border-r-0" key={weekday}>
+                {weekday}
+              </p>
             ))}
           </div>
-          <div
-            className="grid grid-cols-7 gap-1"
-            onMouseUp={createFromDrag}
-            onMouseLeave={() => {
-              setDragCreateHover(null);
-            }}
-          >
-            {monthDays.map((day) => {
+          <div className="grid grid-cols-7 bg-surface" onMouseLeave={() => setMonthHoverDayKey(null)}>
+            {monthDays.map((day, dayIndex) => {
               const key = dateKey(day);
               const inMonth = day.getMonth() === monthAnchor.getMonth();
               const dayItemList = itemsByDay.get(key) ?? [];
-              const selectedRange =
-                dragCreateStart && dragCreateHover
-                  ? (() => {
-                      const start = parseDateKey(dragCreateStart).getTime();
-                      const end = parseDateKey(dragCreateHover).getTime();
-                      const min = Math.min(start, end);
-                      const max = Math.max(start, end);
-                      const current = parseDateKey(key).getTime();
-                      return current >= min && current <= max;
-                    })()
-                  : false;
+              const showHoverGhost = monthHoverDayKey === key && canEdit && !suppressHoverSlot;
 
               return (
                 <button
                   className={cn(
-                    "relative min-h-[96px] rounded-control border p-1.5 text-left transition-colors",
-                    inMonth ? "border-border bg-surface" : "border-transparent bg-surface-muted/40 text-text-muted",
-                    selectedRange && "border-accent bg-accent/10"
+                    "relative min-h-[96px] border-b border-r border-border p-1.5 text-left transition-colors",
+                    dayIndex % 7 === 6 && "border-r-0",
+                    inMonth ? "bg-surface" : "bg-surface-muted/40 text-text-muted"
                   )}
                   key={key}
-                  onClick={() => setAnchorDate(day)}
+                  onClick={() => focusWeekFromMonth(day)}
+                  onMouseEnter={() => {
+                    if (!suppressHoverSlot && canEdit) {
+                      setMonthHoverDayKey(key);
+                    }
+                  }}
                   onDragOver={(event) => {
                     event.preventDefault();
                   }}
@@ -716,26 +695,19 @@ export function UnifiedCalendar({
                     });
                     setDragMoveItemId(null);
                   }}
-                  onMouseDown={(event) => {
-                    if (!canEdit || !onCreateRange || event.button !== 0) {
-                      return;
-                    }
-                    setDragCreateStart(key);
-                    setDragCreateHover(key);
-                  }}
-                  onMouseEnter={() => {
-                    if (dragCreateStart) {
-                      setDragCreateHover(key);
-                    }
-                  }}
                   type="button"
                 >
                   <p className="absolute left-1.5 top-1.5 text-xs font-semibold text-text">{day.getDate()}</p>
-                  <div className="mt-5 space-y-1">
+                  <div className="mt-5 overflow-hidden">
+                    {showHoverGhost ? (
+                      <div className="mb-0 border-t border-dashed border-border/70 bg-surface/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                        Add event
+                      </div>
+                    ) : null}
                     {dayItemList.slice(0, 2).map((item) => (
                       <div
                         className={cn(
-                          "rounded-control border border-border/80 bg-surface/95 px-2 py-1 text-[10px] font-medium text-text shadow-sm transition-[box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:shadow-card",
+                          "border-t border-border/80 bg-surface px-2 py-1 text-[10px] font-medium text-text first:border-t-0",
                           item.status === "cancelled" && "line-through opacity-60"
                         )}
                         draggable={Boolean(canEdit && (onMoveItem || (hasInteractiveDraft && item.id === DRAFT_ITEM_ID)))}
@@ -759,7 +731,7 @@ export function UnifiedCalendar({
                           <div className="mt-1 flex flex-wrap gap-1">
                             {item.teamChips.map((teamChip, index) => (
                               <span
-                                className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-muted/70 px-1 py-0.5 text-[9px] font-semibold text-text"
+                                className="inline-flex max-w-full items-center border border-border/70 bg-surface-muted/70 px-1 py-0.5 text-[9px] font-semibold text-text"
                                 key={`${item.id}-team-chip-month-${index}-${teamChip}`}
                               >
                                 <span className="truncate">{teamChip}</span>
@@ -780,26 +752,15 @@ export function UnifiedCalendar({
 
       {view === "week" ? (
         <div
-          className="min-h-0 flex-1 overflow-auto rounded-control border bg-surface scroll-smooth"
+          className={cn(
+            "min-h-0 flex-1 overflow-auto rounded-control border bg-surface transition-[transform,opacity] duration-200 ease-out will-change-transform",
+            weekEnterZoomState === "preparing" ? "scale-[0.965] opacity-70" : "scale-100 opacity-100"
+          )}
           ref={weekScrollRef}
-          onScroll={(event) => {
-            if (weekScrollShiftRef.current) {
-              return;
-            }
-            const container = event.currentTarget;
-            const leftThreshold = WEEK_DAY_WIDTH_PX * WEEK_SCROLL_BUFFER_DAYS;
-            const rightThreshold = WEEK_DAY_WIDTH_PX * (WEEK_WINDOW_DAYS - WEEK_WINDOW_CENTER_OFFSET - WEEK_SCROLL_BUFFER_DAYS);
-            if (container.scrollLeft < leftThreshold) {
-              shiftWeekWindow(-WEEK_WINDOW_CENTER_OFFSET);
-            } else if (container.scrollLeft > rightThreshold) {
-              shiftWeekWindow(WEEK_WINDOW_CENTER_OFFSET);
-            }
-          }}
           style={{ height: "100%" }}
         >
           {(() => {
-            const weekDays = Array.from({ length: WEEK_WINDOW_DAYS }, (_, index) => addDays(weekWindowStart, index));
-            const gridWidth = weekDays.length * WEEK_DAY_WIDTH_PX;
+            const weekDays = Array.from({ length: WEEK_VISIBLE_DAYS }, (_, index) => addDays(startOfWeek(anchorDate), index));
             const gridHeight = HOURS.length * WEEK_HOUR_HEIGHT_PX;
             const nowKey = dateKey(currentTime);
             const currentDayIndex = weekDays.findIndex((day) => dateKey(day) === nowKey);
@@ -807,22 +768,13 @@ export function UnifiedCalendar({
             const nowTop = (nowMinutes / 60) * WEEK_HOUR_HEIGHT_PX + 1;
             const showNow = currentDayIndex >= 0 && nowTop >= 0 && nowTop <= gridHeight;
             const nowTopWithHeader = nowTop + WEEK_HEADER_HEIGHT_PX;
-
-            const fullWidth = WEEK_TIME_GUTTER_WIDTH_PX + gridWidth;
+            const dayWidthPercent = 100 / WEEK_VISIBLE_DAYS;
 
             return (
-              <div className="relative flex w-fit">
+              <div className="relative flex min-w-0">
                 {showNow ? (
-                  <div className="pointer-events-none absolute left-0 z-40" style={{ top: `${nowTopWithHeader}px`, width: `${fullWidth}px` }}>
+                  <div className="pointer-events-none absolute left-0 right-0 z-40" style={{ top: `${nowTopWithHeader}px` }}>
                     <div className="absolute left-0 right-0 h-[2px]" style={{ backgroundColor: "hsl(var(--accent) / 0.18)" }} />
-                    <div
-                      className="absolute h-[2px]"
-                      style={{
-                        backgroundColor: "hsl(var(--accent) / 1)",
-                        left: `${WEEK_TIME_GUTTER_WIDTH_PX + currentDayIndex * WEEK_DAY_WIDTH_PX}px`,
-                        width: `${WEEK_DAY_WIDTH_PX}px`
-                      }}
-                    />
                     <div
                       className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-border/40 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
                       style={{ backgroundColor: "hsl(var(--accent) / 0.9)" }}
@@ -846,26 +798,32 @@ export function UnifiedCalendar({
                   </div>
                 </div>
 
-                <div className="shrink-0">
-                  <div className="border-b bg-surface px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                    {anchorDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
-                  </div>
-                  <div className="sticky top-0 z-10 flex border-b bg-surface">
+                <div className="min-w-0 flex-1">
+                  <div className="sticky top-0 z-10 grid grid-cols-7 border-b bg-surface">
                     {weekDays.map((day) => (
                       <button
-                        className="border-r px-2 py-2 text-left text-xs font-semibold text-text hover:bg-surface-muted"
+                        className="flex items-center justify-between border-r px-2 py-2 text-left text-xs font-semibold text-text hover:bg-surface-muted last:border-r-0"
                         key={dateKey(day)}
-                        onClick={() => setAnchorDate(day)}
-                        style={{ width: `${WEEK_DAY_WIDTH_PX}px`, height: "40px" }}
+                        onClick={() => focusDayFromWeek(day)}
+                        style={{ height: "40px" }}
                         type="button"
                       >
-                        {day.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
+                        <span>{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
+                        <span
+                          className={cn(
+                            "inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold",
+                            dateKey(day) === nowKey ? "bg-accent text-accent-foreground" : "bg-surface-muted text-text"
+                          )}
+                        >
+                          {day.getDate()}
+                        </span>
                       </button>
                     ))}
                   </div>
 
                   <div
                     className="relative"
+                    data-week-grid-body="true"
                     onDoubleClick={(event) => {
                       if (!canEdit || (quickAddUx === "internal" ? !onQuickAdd : !onQuickAddIntent)) {
                         return;
@@ -873,7 +831,7 @@ export function UnifiedCalendar({
                       const rect = event.currentTarget.getBoundingClientRect();
                       const x = event.clientX - rect.left;
                       const y = event.clientY - rect.top;
-                      const dayIndex = Math.max(0, Math.min(weekDays.length - 1, Math.floor(x / WEEK_DAY_WIDTH_PX)));
+                      const dayIndex = Math.max(0, Math.min(weekDays.length - 1, Math.floor((x / rect.width) * weekDays.length)));
                       const day = weekDays[dayIndex];
                       if (!day) {
                         return;
@@ -904,7 +862,7 @@ export function UnifiedCalendar({
                       const rect = event.currentTarget.getBoundingClientRect();
                       const x = event.clientX - rect.left;
                       const y = event.clientY - rect.top;
-                      const dayIndex = Math.max(0, Math.min(weekDays.length - 1, Math.floor(x / WEEK_DAY_WIDTH_PX)));
+                      const dayIndex = Math.max(0, Math.min(weekDays.length - 1, Math.floor((x / rect.width) * weekDays.length)));
                       const minutes = Math.floor((Math.max(0, Math.min(y, gridHeight - 1)) / WEEK_HOUR_HEIGHT_PX) * 60);
                       const snappedStartMinutes = Math.floor(minutes / 30) * 30;
                       setHoverSlot((current) => {
@@ -914,7 +872,7 @@ export function UnifiedCalendar({
                         return { dayIndex, startMinutes: snappedStartMinutes };
                       });
                     }}
-                    style={{ width: `${gridWidth}px`, height: `${gridHeight}px` }}
+                    style={{ height: `${gridHeight}px` }}
                   >
                     <div className="pointer-events-none absolute inset-0">
                       {HOURS.map((hour) => (
@@ -924,9 +882,9 @@ export function UnifiedCalendar({
                           style={{ top: `${hour * WEEK_HOUR_HEIGHT_PX}px`, height: `${WEEK_HOUR_HEIGHT_PX}px` }}
                         />
                       ))}
-                      <div className="absolute inset-y-0 left-0 flex">
+                      <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-7">
                         {weekDays.map((day) => (
-                          <div className="h-full border-r" key={`d-${dateKey(day)}`} style={{ width: `${WEEK_DAY_WIDTH_PX}px` }} />
+                          <div className="h-full border-r last:border-r-0" key={`d-${dateKey(day)}`} />
                         ))}
                       </div>
                     </div>
@@ -936,8 +894,8 @@ export function UnifiedCalendar({
                         className="pointer-events-none absolute rounded-control border border-dashed border-border/70 bg-surface/70 shadow-sm"
                         style={{
                           top: `${(hoverSlot.startMinutes / 60) * WEEK_HOUR_HEIGHT_PX + 1}px`,
-                          left: `${hoverSlot.dayIndex * WEEK_DAY_WIDTH_PX + 2}px`,
-                          width: `${WEEK_DAY_WIDTH_PX - 4}px`,
+                          left: `calc(${hoverSlot.dayIndex * dayWidthPercent}% + 2px)`,
+                          width: `calc(${dayWidthPercent}% - 4px)`,
                           height: `${WEEK_HOUR_HEIGHT_PX - 2}px`
                         }}
                       >
@@ -965,8 +923,8 @@ export function UnifiedCalendar({
                         const endMinutes = (clampedEndMs - dayStart.getTime()) / (60 * 1000);
                         const top = (startMinutes / 60) * WEEK_HOUR_HEIGHT_PX + 1;
                         const height = Math.max(((endMinutes - startMinutes) / 60) * WEEK_HOUR_HEIGHT_PX - 2, 18);
-                        const left = dayIndex * WEEK_DAY_WIDTH_PX + 2;
-                        const width = WEEK_DAY_WIDTH_PX - 4;
+                        const left = `calc(${dayIndex * dayWidthPercent}% + 2px)`;
+                        const width = `calc(${dayWidthPercent}% - 4px)`;
 
                         const showDraftHandles = hasInteractiveDraft && item.id === DRAFT_ITEM_ID;
 
@@ -1063,80 +1021,232 @@ export function UnifiedCalendar({
       ) : null}
 
       {view === "day" ? (
-        <div className="min-h-0 flex-1 space-y-2 overflow-auto">
-          {dayItems.length === 0 ? <p className="text-sm text-text-muted">No items scheduled for this day.</p> : null}
-          {dayItems.map((item) => (
-            <article
-              className="rounded-control border bg-surface px-3 py-2 transition-[box-shadow,transform] duration-150 ease-out hover:shadow-card hover:-translate-y-0.5"
-              key={item.id}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <button className="text-left" onClick={() => selectCalendarItem(item.id)} type="button">
-                  <p className="text-xs text-text-muted">
-                    {new Date(item.startsAtUtc).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} •{" "}
-                    {new Date(item.startsAtUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} -{" "}
-                    {new Date(item.endsAtUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <span
-                      className={cn(
-                        "h-2 w-2 rounded-full",
-                        item.entryType === "practice" ? "bg-emerald-400" : item.entryType === "game" ? "bg-sky-400" : "bg-amber-400"
-                      )}
-                    />
-                    <p className="font-semibold text-text">{item.title}</p>
-                    <span
-                      className={cn(
-                        "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                        item.entryType === "practice"
-                          ? "border-emerald-200 bg-emerald-100 text-emerald-800"
-                          : item.entryType === "game"
-                            ? "border-sky-200 bg-sky-100 text-sky-800"
-                            : "border-amber-200 bg-amber-100 text-amber-800"
-                      )}
-                    >
-                      {item.entryType}
-                    </span>
-                    {item.teamChips && item.teamChips.length > 0
-                      ? item.teamChips.map((teamChip, index) => (
-                          <span
-                            className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-muted/70 px-1.5 py-0.5 text-[10px] font-semibold text-text"
-                            key={`${item.id}-team-chip-day-${index}-${teamChip}`}
-                          >
-                            <span className="truncate">{teamChip}</span>
-                          </span>
-                        ))
-                      : null}
-                  </div>
-                </button>
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-auto rounded-control border bg-surface transition-[transform,opacity] duration-200 ease-out will-change-transform",
+            dayEnterZoomState === "preparing" ? "scale-[0.975] opacity-70" : "scale-100 opacity-100"
+          )}
+          ref={weekScrollRef}
+          style={{ height: "100%" }}
+        >
+          {(() => {
+            const day = startOfDay(anchorDate);
+            const dayKey = dateKey(day);
+            const gridHeight = HOURS.length * WEEK_HOUR_HEIGHT_PX;
+            const nowKey = dateKey(currentTime);
+            const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+            const nowTop = (nowMinutes / 60) * WEEK_HOUR_HEIGHT_PX + 1;
+            const showNow = dayKey === nowKey && nowTop >= 0 && nowTop <= gridHeight;
+            const nowTopWithHeader = nowTop + WEEK_HEADER_HEIGHT_PX;
+            const dayItemList = displayItems.filter((item) => intersectsDay(item.startsAtUtc, item.endsAtUtc, day));
 
-                {canEdit && onResizeItem ? (
-                  <div className="inline-flex items-center gap-1 rounded-control border bg-surface p-1">
-                    <button
-                      className="rounded-control px-2 py-1 text-xs text-text-muted hover:bg-surface-muted"
-                      onClick={() => {
-                        const nextEnd = new Date(new Date(item.endsAtUtc).getTime() - 30 * 60 * 1000).toISOString();
-                        onResizeItem({ itemId: item.id, endsAtUtc: nextEnd });
-                      }}
-                      type="button"
+            return (
+              <div className="relative flex min-w-0">
+                {showNow ? (
+                  <div className="pointer-events-none absolute left-0 right-0 z-40" style={{ top: `${nowTopWithHeader}px` }}>
+                    <div className="absolute left-0 right-0 h-[2px]" style={{ backgroundColor: "hsl(var(--accent) / 0.18)" }} />
+                    <div
+                      className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-border/40 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+                      style={{ backgroundColor: "hsl(var(--accent) / 0.9)" }}
                     >
-                      -15m
-                    </button>
-                    <button
-                      className="rounded-control px-2 py-1 text-xs text-text-muted hover:bg-surface-muted"
-                      onClick={() => {
-                        const nextEnd = new Date(new Date(item.endsAtUtc).getTime() + 30 * 60 * 1000).toISOString();
-                        onResizeItem({ itemId: item.id, endsAtUtc: nextEnd });
-                      }}
-                      type="button"
-                    >
-                      +15m
-                    </button>
+                      {currentTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    </div>
                   </div>
                 ) : null}
+
+                <div className="sticky left-0 z-20 shrink-0 border-r bg-surface" style={{ width: `${WEEK_TIME_GUTTER_WIDTH_PX}px` }}>
+                  <div className="h-10 border-b px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Time</div>
+                  <div className="relative" style={{ height: `${gridHeight}px` }}>
+                    {HOURS.map((hour) => (
+                      <div className="border-b px-2 py-1 text-[11px] font-medium text-text-muted" key={hour} style={{ height: `${WEEK_HOUR_HEIGHT_PX}px` }}>
+                        {new Date(2000, 0, 1, hour).toLocaleTimeString([], { hour: "numeric" })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="sticky top-0 z-10 grid grid-cols-1 border-b bg-surface">
+                    <button
+                      className="flex items-center justify-between px-2 py-2 text-left text-xs font-semibold text-text hover:bg-surface-muted"
+                      onClick={() => setAnchorDate(day)}
+                      style={{ height: "40px" }}
+                      type="button"
+                    >
+                      <span>{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
+                      <span
+                        className={cn(
+                          "inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold",
+                          dayKey === nowKey ? "bg-accent text-accent-foreground" : "bg-surface-muted text-text"
+                        )}
+                      >
+                        {day.getDate()}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div
+                    className="relative"
+                    data-week-grid-body="true"
+                    onDoubleClick={(event) => {
+                      if (!canEdit || (quickAddUx === "internal" ? !onQuickAdd : !onQuickAddIntent)) {
+                        return;
+                      }
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const y = event.clientY - rect.top;
+                      const minutes = Math.floor((Math.max(0, Math.min(y, gridHeight - 1)) / WEEK_HOUR_HEIGHT_PX) * 60);
+                      const snappedStartMinutes = Math.floor(minutes / 30) * 30;
+                      const start = new Date(startOfDay(day).getTime() + snappedStartMinutes * 60 * 1000);
+                      const end = new Date(start.getTime() + 60 * 60 * 1000);
+                      setQuickAddStartsAtUtc(start.toISOString());
+                      setQuickAddEndsAtUtc(end.toISOString());
+                      setQuickAddTitle("New event");
+                      if (quickAddUx === "external") {
+                        onQuickAddIntent?.({ title: "New event", startsAtUtc: start.toISOString(), endsAtUtc: end.toISOString() });
+                      } else {
+                        setQuickAddOpen(true);
+                      }
+                    }}
+                    onMouseLeave={() => setHoverSlot(null)}
+                    onMouseMove={(event) => {
+                      if (!canEdit || suppressHoverSlot) {
+                        return;
+                      }
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const y = event.clientY - rect.top;
+                      const minutes = Math.floor((Math.max(0, Math.min(y, gridHeight - 1)) / WEEK_HOUR_HEIGHT_PX) * 60);
+                      const snappedStartMinutes = Math.floor(minutes / 30) * 30;
+                      setHoverSlot((current) => {
+                        if (current && current.dayIndex === 0 && current.startMinutes === snappedStartMinutes) {
+                          return current;
+                        }
+                        return { dayIndex: 0, startMinutes: snappedStartMinutes };
+                      });
+                    }}
+                    style={{ height: `${gridHeight}px` }}
+                  >
+                    <div className="pointer-events-none absolute inset-0">
+                      {HOURS.map((hour) => (
+                        <div className="absolute left-0 right-0 border-b" key={`day-h-${hour}`} style={{ top: `${hour * WEEK_HOUR_HEIGHT_PX}px`, height: `${WEEK_HOUR_HEIGHT_PX}px` }} />
+                      ))}
+                    </div>
+
+                    {hoverSlot && canEdit && !suppressHoverSlot ? (
+                      <div
+                        className="pointer-events-none absolute rounded-control border border-dashed border-border/70 bg-surface/70 shadow-sm"
+                        style={{ top: `${(hoverSlot.startMinutes / 60) * WEEK_HOUR_HEIGHT_PX + 1}px`, left: "2px", width: "calc(100% - 4px)", height: `${WEEK_HOUR_HEIGHT_PX - 2}px` }}
+                      >
+                        <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                          Add event
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {dayItemList.map((item) => {
+                      const renderedItem =
+                        resizePreview && resizePreview.itemId === item.id
+                          ? { ...item, startsAtUtc: resizePreview.startsAtUtc, endsAtUtc: resizePreview.endsAtUtc }
+                          : item;
+                      const dayStart = startOfDay(day);
+                      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+                      const itemStart = new Date(renderedItem.startsAtUtc);
+                      const itemEnd = new Date(renderedItem.endsAtUtc);
+                      const clampedStartMs = Math.max(itemStart.getTime(), dayStart.getTime());
+                      const clampedEndMs = Math.min(itemEnd.getTime(), dayEnd.getTime());
+                      const startMinutes = (clampedStartMs - dayStart.getTime()) / (60 * 1000);
+                      const endMinutes = (clampedEndMs - dayStart.getTime()) / (60 * 1000);
+                      const top = (startMinutes / 60) * WEEK_HOUR_HEIGHT_PX + 1;
+                      const height = Math.max(((endMinutes - startMinutes) / 60) * WEEK_HOUR_HEIGHT_PX - 2, 18);
+                      const showDraftHandles = hasInteractiveDraft && item.id === DRAFT_ITEM_ID;
+
+                      return (
+                        <button
+                          className={cn(
+                            "group absolute overflow-hidden rounded-control border border-border/70 bg-surface/95 px-2 py-1 text-left text-[11px] text-text shadow-sm transition-[left,top,height,box-shadow,transform] duration-150 ease-out motion-reduce:transition-none hover:shadow-floating active:scale-[0.98]",
+                            item.status === "cancelled" && "line-through opacity-60"
+                          )}
+                          key={`day-grid-${item.id}`}
+                          onClick={() => selectCalendarItem(item.id)}
+                          onDoubleClick={(event) => event.stopPropagation()}
+                          style={{ top: `${top}px`, left: "2px", width: "calc(100% - 4px)", height: `${height}px` }}
+                          type="button"
+                        >
+                          {canEdit && (onMoveItem || showDraftHandles) ? (
+                            <span
+                              className={cn(
+                                "absolute left-1/2 top-0 h-2 w-10 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize rounded-full border border-border/60 bg-surface/95 shadow-sm transition-opacity duration-150 ease-out",
+                                showDraftHandles ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                              )}
+                              onMouseDown={(event) => {
+                                event.stopPropagation();
+                                setHoverSlot(null);
+                                setResizeDrag({
+                                  itemId: item.id,
+                                  edge: "top",
+                                  originY: event.clientY,
+                                  startsAtUtc: renderedItem.startsAtUtc,
+                                  endsAtUtc: renderedItem.endsAtUtc
+                                });
+                              }}
+                            />
+                          ) : null}
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="truncate font-semibold">{item.title}</p>
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                                item.entryType === "practice"
+                                  ? "border-emerald-200 bg-emerald-100 text-emerald-800"
+                                  : item.entryType === "game"
+                                    ? "border-sky-200 bg-sky-100 text-sky-800"
+                                    : "border-amber-200 bg-amber-100 text-amber-800"
+                              )}
+                            >
+                              {item.entryType}
+                            </span>
+                          </div>
+                          {item.teamChips && item.teamChips.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {item.teamChips.map((teamChip, index) => (
+                                <span
+                                  className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-muted/70 px-1.5 py-0.5 text-[9px] font-semibold text-text"
+                                  key={`${item.id}-team-chip-day-grid-${index}-${teamChip}`}
+                                >
+                                  <span className="truncate">{teamChip}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          <p className="truncate text-[10px] text-text-muted">
+                            {new Date(renderedItem.startsAtUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                          {canEdit && (onResizeItem || showDraftHandles) ? (
+                            <span
+                              className={cn(
+                                "absolute left-1/2 bottom-0 h-2 w-10 -translate-x-1/2 translate-y-1/2 cursor-ns-resize rounded-full border border-border/60 bg-surface/95 shadow-sm transition-opacity duration-150 ease-out",
+                                showDraftHandles ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                              )}
+                              onMouseDown={(event) => {
+                                event.stopPropagation();
+                                setHoverSlot(null);
+                                setResizeDrag({
+                                  itemId: item.id,
+                                  edge: "bottom",
+                                  originY: event.clientY,
+                                  startsAtUtc: renderedItem.startsAtUtc,
+                                  endsAtUtc: renderedItem.endsAtUtc
+                                });
+                              }}
+                            />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </article>
-          ))}
+            );
+          })()}
         </div>
       ) : null}
 

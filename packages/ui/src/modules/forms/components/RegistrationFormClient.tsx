@@ -327,7 +327,7 @@ export function RegistrationFormClient({ orgSlug, formSlug, form, players, progr
   const [newPlayerGenderMode, setNewPlayerGenderMode] = useState("");
   const [hasHydratedProgress, setHasHydratedProgress] = useState(false);
 
-  const progressStorageKey = useMemo(() => `sports-saas:form-progress:${orgSlug}:${formSlug}`, [formSlug, orgSlug]);
+  const progressStorageKey = useMemo(() => `orgframe:form-progress:${orgSlug}:${formSlug}`, [formSlug, orgSlug]);
 
   const currentPage = flowPages[currentPageIndex];
   const isLastPage = currentPageIndex === flowPages.length - 1;

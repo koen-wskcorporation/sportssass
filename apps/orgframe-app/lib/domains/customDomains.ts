@@ -23,7 +23,8 @@ export function getPlatformHost() {
     return "localhost";
   }
 
-  return normalizeHost(parseHostFromUrl(siteUrl));
+  const host = normalizeHost(parseHostFromUrl(siteUrl));
+  return host || "localhost";
 }
 
 function readOptionalHost(value: string | undefined) {

@@ -8,7 +8,7 @@ export function AppFooter() {
       <div className="app-container overflow-x-auto py-4">
         <div className="flex min-w-max items-center gap-5">
           <Link className="inline-flex min-w-0 items-center pr-1" href="/">
-            <span className="sr-only">Sports SaaS home</span>
+            <span className="sr-only">OrgFrame home</span>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               alt=""

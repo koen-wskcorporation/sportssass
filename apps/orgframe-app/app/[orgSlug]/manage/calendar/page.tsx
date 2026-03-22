@@ -1,2 +1,57 @@
-export { metadata } from "@/app/[orgSlug]/tools/calendar/page";
-export { default } from "@/app/[orgSlug]/tools/calendar/page";
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { Alert } from "@orgframe/ui/ui/alert";
+import { PageStack } from "@orgframe/ui/ui/layout";
+import { PageHeader } from "@orgframe/ui/ui/page-header";
+import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
+import { getOrgAuthContext } from "@/lib/org/getOrgAuthContext";
+import { can } from "@/lib/permissions/can";
+import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
+
+export const metadata: Metadata = {
+  title: "Calendar"
+};
+
+export default async function ManageCalendarPage({
+  params
+}: {
+  params: Promise<{ orgSlug: string }>;
+}) {
+  const { orgSlug } = await params;
+  const orgContext = await getOrgAuthContext(orgSlug);
+  const canRead =
+    can(orgContext.membershipPermissions, "calendar.read") ||
+    can(orgContext.membershipPermissions, "calendar.write") ||
+    can(orgContext.membershipPermissions, "programs.read") ||
+    can(orgContext.membershipPermissions, "programs.write");
+  const canWrite =
+    can(orgContext.membershipPermissions, "calendar.write") ||
+    can(orgContext.membershipPermissions, "programs.write") ||
+    can(orgContext.membershipPermissions, "org.manage.read");
+
+  if (!canRead) {
+    redirect("/forbidden");
+  }
+
+  const workspaceData = await getCalendarWorkspaceDataAction({ orgSlug: orgContext.orgSlug });
+  if (!workspaceData.ok) {
+    redirect("/forbidden");
+  }
+  const { readModel, activeTeams, facilityReadModel } = workspaceData.data;
+
+  return (
+    <PageStack className="app-page-stack--fill min-h-0 h-[calc(100dvh-var(--org-header-height,0px)-var(--layout-gap))]">
+      <PageHeader description="Organization calendar for events, practices, games, and shared facility scheduling." showBorder={false} title="Calendar" />
+      {!canWrite ? <Alert variant="info">You have read-only access to calendar data.</Alert> : null}
+      <section aria-label="Editable calendar" className="min-h-0 flex-1 overflow-hidden">
+        <ManageCalendarSection
+          activeTeams={activeTeams}
+          canWrite={canWrite}
+          initialFacilityReadModel={facilityReadModel}
+          initialReadModel={readModel}
+          orgSlug={orgContext.orgSlug}
+        />
+      </section>
+    </PageStack>
+  );
+}

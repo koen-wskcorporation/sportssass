@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
-import { UnifiedCalendar } from "@orgframe/ui/calendar/UnifiedCalendar";
+import { Calendar } from "@orgframe/ui/calendar/Calendar";
 import type { CalendarPublicCatalogItem } from "@/modules/calendar/types";
 
 type PublicCalendarWorkspaceProps = {
@@ -12,7 +12,7 @@ type PublicCalendarWorkspaceProps = {
 };
 
 export function PublicCalendarWorkspace({ orgSlug, items, title = "Calendar" }: PublicCalendarWorkspaceProps) {
-  const unifiedItems = items.map((item) => ({
+  const calendarItems = items.map((item) => ({
     id: item.occurrenceId,
     title: item.title,
     entryType: item.entryType,
@@ -29,7 +29,7 @@ export function PublicCalendarWorkspace({ orgSlug, items, title = "Calendar" }: 
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <UnifiedCalendar canEdit={false} items={unifiedItems} onSelectItem={() => {}} />
+        <Calendar canEdit={false} items={calendarItems} onSelectItem={() => {}} />
         <div className="space-y-2">
           {items.slice(0, 20).map((item) => (
             <article className="rounded-control border bg-surface px-3 py-2" key={item.occurrenceId}>

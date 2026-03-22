@@ -152,6 +152,7 @@ export async function updateTeamProfileAction(input: {
   colorSecondary?: string | null;
   homeFacilityId?: string | null;
   notes?: string | null;
+  calendarTeamVisibility?: "team_members" | "program_members" | "org_members" | null;
 }): Promise<TeamsActionResult<{ team: ProgramTeamDetail["team"] }>> {
   const parsed = z
     .object({
@@ -165,7 +166,8 @@ export async function updateTeamProfileAction(input: {
       colorPrimary: textSchema.max(40).optional().nullable(),
       colorSecondary: textSchema.max(40).optional().nullable(),
       homeFacilityId: z.string().uuid().optional().nullable(),
-      notes: textSchema.max(2000).optional().nullable()
+      notes: textSchema.max(2000).optional().nullable(),
+      calendarTeamVisibility: z.enum(["team_members", "program_members", "org_members"]).optional().nullable()
     })
     .safeParse(input);
 
@@ -186,7 +188,8 @@ export async function updateTeamProfileAction(input: {
       colorPrimary: payload.colorPrimary ?? null,
       colorSecondary: payload.colorSecondary ?? null,
       homeFacilityId: payload.homeFacilityId ?? null,
-      notes: payload.notes ?? null
+      notes: payload.notes ?? null,
+      calendarTeamVisibility: payload.calendarTeamVisibility ?? null
     });
 
     revalidatePath(`/${org.orgSlug}/manage/programs/${team.programId}/structure`);

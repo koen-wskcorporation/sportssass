@@ -268,8 +268,10 @@ export function SiteStructureEditorPopup({ open, onClose, orgSlug, pages, nodes,
       return;
     }
     setDraft(buildDraft(full));
-    setPanelMode("edit");
-    setCreateStep("details");
+    if (panelMode === "create") {
+      setPanelMode("none");
+      setCreateStep("type");
+    }
   }
 
   function handleStartCreate() {
@@ -596,7 +598,7 @@ export function SiteStructureEditorPopup({ open, onClose, orgSlug, pages, nodes,
             dragInProgress={Boolean(dragState)}
             embeddedEditMode
             editContent={
-              <div className="relative min-h-[900px] min-w-[1200px] p-6">
+              <>
                 {resolvedSearchRows.map(({ node, depth }, index) => {
                   const isGenerated = node.isGenerated || node.nodeKind === "system_generated";
                   const canDrag = !isGenerated;
@@ -674,11 +676,35 @@ export function SiteStructureEditorPopup({ open, onClose, orgSlug, pages, nodes,
                     </div>
                   );
                 })}
-              </div>
+              </>
             }
             onAdd={handleStartCreate}
             onEditOpenChange={() => {
               // Popup is already open; no-op.
+            }}
+            onFit={(options) => {
+              if (resolvedSearchRows.length === 0) {
+                canvasRef.current?.fitToView(options);
+                return;
+              }
+
+              const rowsCount = resolvedSearchRows.length;
+              const maxDepth = Math.max(...resolvedSearchRows.map((row) => row.depth));
+              const minX = 50;
+              const minY = 50;
+              const maxX = 50 + maxDepth * 25 + 460;
+              const maxY = 50 + (rowsCount - 1) * 107 + 82;
+              const padding = 24;
+
+              canvasRef.current?.fitToBounds(
+                {
+                  x: minX - padding,
+                  y: minY - padding,
+                  width: maxX - minX + padding * 2,
+                  height: maxY - minY + padding * 2
+                },
+                options
+              );
             }}
             onSearchQueryChange={setSearch}
             onSearchSubmit={() => {

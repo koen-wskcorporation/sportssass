@@ -76,7 +76,9 @@ const createProgramSchema = z.object({
 });
 
 const updateProgramSchema = createProgramSchema.extend({
-  programId: z.string().uuid()
+  programId: z.string().uuid(),
+  calendarTeamVisibilityDefault: z.enum(["team_members", "program_members", "org_members"]).optional(),
+  calendarTeamVisibilityForced: z.enum(["team_members", "program_members", "org_members"]).nullable().optional()
 });
 
 const duplicateProgramSchema = z.object({
@@ -108,7 +110,9 @@ const saveHierarchySchema = z.object({
       })
     )
     .optional(),
-  isPublished: z.boolean().optional()
+  isPublished: z.boolean().optional(),
+  calendarTeamVisibilityDefault: z.enum(["team_members", "program_members", "org_members"]).nullable().optional(),
+  calendarTeamVisibilityForced: z.enum(["team_members", "program_members", "org_members"]).nullable().optional()
 });
 
 const saveScheduleSchema = z.object({
@@ -298,6 +302,19 @@ export async function updateProgramAction(input: z.input<typeof updateProgramSch
   try {
     const payload = parsed.data;
     const org = await requireOrgPermission(payload.orgSlug, "programs.write");
+    const existingProgram = await getProgramById(org.orgId, payload.programId);
+    if (!existingProgram) {
+      return asError("Program not found.");
+    }
+
+    const nextSettings: Record<string, unknown> = { ...existingProgram.settingsJson };
+    if (payload.calendarTeamVisibilityDefault !== undefined) {
+      nextSettings.calendarTeamVisibilityDefault = payload.calendarTeamVisibilityDefault;
+    }
+    if (payload.calendarTeamVisibilityForced !== undefined) {
+      nextSettings.calendarTeamVisibilityForced = payload.calendarTeamVisibilityForced;
+    }
+
     const updated = await updateProgramRecord({
       orgId: org.orgId,
       programId: payload.programId,
@@ -312,7 +329,7 @@ export async function updateProgramAction(input: z.input<typeof updateProgramSch
       coverImagePath: normalizeOptional(payload.coverImagePath),
       registrationOpenAt: payload.registrationOpenAt,
       registrationCloseAt: payload.registrationCloseAt,
-      settingsJson: {}
+      settingsJson: nextSettings
     });
 
     revalidatePath(`/${org.orgSlug}/manage/programs`);
@@ -626,14 +643,28 @@ export async function saveProgramHierarchyAction(input: z.input<typeof saveHiera
         waitlistEnabled: payload.waitlistEnabled ?? targetNode.waitlistEnabled
       });
 
+      const nextSettings: Record<string, unknown> = { ...targetNode.settingsJson };
+      let shouldUpdateSettings = false;
+
       if (typeof payload.isPublished === "boolean") {
+        nextSettings.published = payload.isPublished;
+        shouldUpdateSettings = true;
+      }
+
+      if (targetNode.nodeKind === "division") {
+        if (payload.calendarTeamVisibilityDefault) {
+          nextSettings.calendarTeamVisibilityDefault = payload.calendarTeamVisibilityDefault;
+          shouldUpdateSettings = true;
+        }
+        nextSettings.calendarTeamVisibilityForced = payload.calendarTeamVisibilityForced ?? null;
+        shouldUpdateSettings = true;
+      }
+
+      if (shouldUpdateSettings) {
         await updateProgramNodeSettingsRecord({
           programId: payload.programId,
           nodeId: payload.nodeId,
-          settingsJson: {
-            ...targetNode.settingsJson,
-            published: payload.isPublished
-          }
+          settingsJson: nextSettings
         });
       }
     }

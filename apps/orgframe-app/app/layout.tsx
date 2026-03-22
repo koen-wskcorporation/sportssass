@@ -8,14 +8,15 @@ import { ThemeModeProvider } from "@orgframe/ui/ui/theme-mode";
 import { ToastProvider } from "@orgframe/ui/ui/toast";
 import { shouldShowBranchHeaders } from "@/lib/env/branchVisibility";
 import { getTenantBaseHosts, normalizeHost, resolveOrgSubdomain } from "@/lib/domains/customDomains";
+import { FileManagerProvider } from "@/modules/file-manager";
 import { UploadProvider } from "@/modules/uploads";
 import { OrderPanelProvider } from "@/modules/orders";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: {
-    default: "Sports SaaS",
-    template: "%s | Sports SaaS"
+    default: "OrgFrame",
+    template: "%s | OrgFrame"
   },
   description: "Multi-tenant sports operations suite"
 };
@@ -69,17 +70,19 @@ export default async function RootLayout({
           <ToastProvider>
             <ConfirmDialogProvider>
               <OrderPanelProvider>
-                <UploadProvider>
-                  <div className="app-frame">
-                    <div className="app-root flex min-h-screen min-w-0 flex-col">
-                      {showHeaders ? (
-                        <PrimaryHeader currentOrgSlug={headerRouting.currentOrgSlug} homeHref={headerRouting.homeHref} tenantBaseOrigin={headerRouting.tenantBaseOrigin} />
-                      ) : null}
-                      <div className={showHeaders ? "flex-1 min-w-0 pt-[var(--layout-gap)]" : "flex-1 min-w-0"}>{children}</div>
+                <FileManagerProvider>
+                  <UploadProvider>
+                    <div className="app-frame">
+                      <div className="app-root flex min-h-screen min-w-0 flex-col">
+                        {showHeaders ? (
+                          <PrimaryHeader currentOrgSlug={headerRouting.currentOrgSlug} homeHref={headerRouting.homeHref} tenantBaseOrigin={headerRouting.tenantBaseOrigin} />
+                        ) : null}
+                        <div className={showHeaders ? "flex-1 min-w-0 pt-[var(--layout-gap)]" : "flex-1 min-w-0"}>{children}</div>
+                      </div>
+                      <div className="panel-dock" id="panel-dock" />
                     </div>
-                    <div className="panel-dock" id="panel-dock" />
-                  </div>
-                </UploadProvider>
+                  </UploadProvider>
+                </FileManagerProvider>
               </OrderPanelProvider>
             </ConfirmDialogProvider>
           </ToastProvider>

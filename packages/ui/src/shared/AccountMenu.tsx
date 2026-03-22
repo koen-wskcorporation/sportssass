@@ -80,6 +80,86 @@ function getCurrentProtocol() {
   return window.location.protocol;
 }
 
+function normalizePathname(pathname: string) {
+  if (!pathname) {
+    return "/";
+  }
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.slice(0, -1);
+  }
+  return pathname;
+}
+
+function toOrgPathSuffix(pathname: string, currentOrgSlug: string, hasTenantBaseHost: boolean) {
+  const normalizedPath = normalizePathname(pathname);
+
+  if (normalizedPath === "/") {
+    return "/";
+  }
+
+  const segments = normalizedPath.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return "/";
+  }
+
+  if (currentOrgSlug && segments[0] === currentOrgSlug) {
+    return segments.length === 1 ? "/" : `/${segments.slice(1).join("/")}`;
+  }
+
+  if (!hasTenantBaseHost) {
+    return "/";
+  }
+
+  const first = segments[0]?.toLowerCase() ?? "";
+  if (first === "account" || first === "auth" || first === "api") {
+    return "/";
+  }
+
+  return `/${segments.join("/")}`;
+}
+
+function collapseToClosestOrgPath(pathSuffix: string) {
+  const normalizedSuffix = normalizePathname(pathSuffix);
+  if (normalizedSuffix === "/") {
+    return "/";
+  }
+
+  const segments = normalizedSuffix.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return "/";
+  }
+
+  const first = segments[0]?.toLowerCase();
+  const second = segments[1]?.toLowerCase();
+
+  const collectionTools = new Set(["facility", "facilities", "forms", "programs"]);
+  if ((first === "tools" || first === "manage") && second && collectionTools.has(second) && segments.length >= 3) {
+    return `/${segments.slice(0, 2).join("/")}`;
+  }
+
+  const publicCollections = new Set(["calendar", "events", "programs", "register"]);
+  if (first && publicCollections.has(first) && segments.length >= 2) {
+    return `/${first}`;
+  }
+
+  return normalizedSuffix;
+}
+
+function buildOrgSwitchHref(targetOrgSlug: string, pathname: string, currentOrgSlug: string, tenantBaseHost: string, tenantBaseProtocol: string) {
+  const protocol = tenantBaseProtocol || getCurrentProtocol();
+  const pathSuffix = collapseToClosestOrgPath(toOrgPathSuffix(pathname, currentOrgSlug, Boolean(tenantBaseHost)));
+
+  if (tenantBaseHost) {
+    return `${protocol}//${targetOrgSlug}.${tenantBaseHost}${pathSuffix}`;
+  }
+
+  if (pathSuffix === "/") {
+    return `/${targetOrgSlug}`;
+  }
+
+  return `/${targetOrgSlug}${pathSuffix}`;
+}
+
 export function AccountMenu({
   email,
   firstName,
@@ -108,14 +188,6 @@ export function AccountMenu({
   const initials = initialsFromName(firstName, lastName, email);
   const tenantBaseHost = useMemo(() => getTenantBaseHost(tenantBaseOrigin), [tenantBaseOrigin]);
   const tenantBaseProtocol = useMemo(() => getTenantBaseProtocol(tenantBaseOrigin), [tenantBaseOrigin]);
-  const orgLinks = useMemo(() => {
-    if (!tenantBaseHost) {
-      return new Map(organizations.map((organization) => [organization.orgSlug, `/${organization.orgSlug}`]));
-    }
-
-    const protocol = tenantBaseProtocol || getCurrentProtocol();
-    return new Map(organizations.map((organization) => [organization.orgSlug, `${protocol}//${organization.orgSlug}.${tenantBaseHost}/`]));
-  }, [organizations, tenantBaseHost, tenantBaseProtocol]);
   const currentOrgSlug = useMemo(() => {
     if (currentOrgSlugProp) {
       return currentOrgSlugProp;
@@ -129,6 +201,14 @@ export function AccountMenu({
     const [_, slug] = pathname.split("/");
     return slug ?? "";
   }, [currentOrgSlugProp, pathname, tenantBaseHost]);
+  const orgLinks = useMemo(() => {
+    return new Map(
+      organizations.map((organization) => [
+        organization.orgSlug,
+        buildOrgSwitchHref(organization.orgSlug, pathname, currentOrgSlug, tenantBaseHost, tenantBaseProtocol)
+      ])
+    );
+  }, [organizations, pathname, currentOrgSlug, tenantBaseHost, tenantBaseProtocol]);
   const orderedOrganizations = useMemo(() => {
     return [...organizations].sort((a, b) => {
       if (a.orgSlug === currentOrgSlug) {

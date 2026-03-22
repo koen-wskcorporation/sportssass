@@ -3,7 +3,11 @@ import { Alert } from "@orgframe/ui/ui/alert";
 import { Button } from "@orgframe/ui/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
 import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
+import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
+import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
+import { can } from "@/lib/permissions/can";
+import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
+import { scopeCalendarReadModelByContext } from "@/modules/calendar/read-model-scope";
 import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
 import { listProgramScheduleTimelineWithFallback } from "@/modules/programs/schedule/db/queries";
 
@@ -43,8 +47,8 @@ export default async function ProgramDivisionPage({ params, searchParams }: Divi
   const { orgSlug, programSlug, divisionSlug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const tab = resolveTab(resolvedSearchParams);
-  const org = await getOrgPublicContext(orgSlug);
-  const details = await getProgramDetailsBySlug(org.orgId, programSlug, { includeDraft: false });
+  const orgRequest = await getOrgRequestContext(orgSlug);
+  const details = await getProgramDetailsBySlug(orgRequest.org.orgId, programSlug, { includeDraft: false });
 
   if (!details) {
     notFound();
@@ -56,6 +60,29 @@ export default async function ProgramDivisionPage({ params, searchParams }: Divi
   }
 
   const teams = details.nodes.filter((node) => node.nodeKind === "team" && node.parentId === division.id);
+  const canReadPrograms = Boolean(
+    orgRequest.membership &&
+      (can(orgRequest.membership.permissions, "programs.read") ||
+        can(orgRequest.membership.permissions, "programs.write") ||
+        can(orgRequest.membership.permissions, "calendar.read") ||
+        can(orgRequest.membership.permissions, "calendar.write"))
+  );
+  const canWritePrograms = Boolean(
+    orgRequest.membership &&
+      (can(orgRequest.membership.permissions, "programs.write") ||
+        can(orgRequest.membership.permissions, "calendar.write") ||
+        can(orgRequest.membership.permissions, "org.manage.read"))
+  );
+
+  const workspaceData = tab === "calendar" && canReadPrograms ? await getCalendarWorkspaceDataAction({ orgSlug }) : null;
+  const scopedReadModel =
+    workspaceData?.ok
+      ? scopeCalendarReadModelByContext({
+          readModel: workspaceData.data.readModel,
+          divisionId: division.id
+        })
+      : null;
+
   const scheduleTimeline =
     tab === "calendar" || tab === "home" ? await listProgramScheduleTimelineWithFallback({ programId: details.program.id, legacyDetails: details }) : null;
   const calendarNodes = new Set([division.id, ...teams.map((team) => team.id)]);
@@ -128,21 +155,18 @@ export default async function ProgramDivisionPage({ params, searchParams }: Divi
         ) : null}
 
         {tab === "calendar" ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Calendar</CardTitle>
-              <CardDescription>Upcoming sessions for this division and its teams.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {filteredOccurrences.length === 0 ? <Alert variant="info">No scheduled sessions yet.</Alert> : null}
-              {filteredOccurrences.slice(0, 20).map((occurrence) => (
-                <div className="rounded-control border bg-surface px-3 py-2 text-sm" key={occurrence.id}>
-                  <p className="font-medium text-text">{occurrence.title ?? "Division session"}</p>
-                  <p className="text-xs text-text-muted">{formatOccurrenceLine(occurrence)}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <div className="space-y-2">
+            {!canReadPrograms ? <Alert variant="info">Division calendar visibility is limited to authorized members.</Alert> : null}
+            {canReadPrograms && workspaceData?.ok && scopedReadModel ? (
+              <ManageCalendarSection
+                activeTeams={workspaceData.data.activeTeams}
+                canWrite={canWritePrograms}
+                initialFacilityReadModel={workspaceData.data.facilityReadModel}
+                initialReadModel={scopedReadModel}
+                orgSlug={orgSlug}
+              />
+            ) : null}
+          </div>
         ) : null}
 
         {tab === "standings" ? (

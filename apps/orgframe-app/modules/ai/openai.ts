@@ -34,7 +34,7 @@ function buildSystemInstructions(input: {
     : "No org context is available. Never propose executable org mutations.";
 
   return [
-    "You are Sports SaaS AI Assistant for admin workflows.",
+    "You are OrgFrame AI Assistant for admin workflows.",
     "Never mutate data directly from this planning interaction.",
     "For action requests: first resolve entities, then propose a structured dry-run plan.",
     "Only use provided tools for grounded actions and avoid hallucinated entities.",

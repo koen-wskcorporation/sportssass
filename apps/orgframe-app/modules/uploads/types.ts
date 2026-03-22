@@ -1,3 +1,5 @@
+import type { FileManagerDefaultFolder, FileManagerEntityContext } from "@/modules/file-manager/types";
+
 export type UploadAspectMode = "wide" | "square" | "free" | number;
 
 export type UploadCrop = {
@@ -33,6 +35,8 @@ export type OpenUploadOptions = {
   kind: UploadKind;
   purpose: UploadPurpose;
   orgSlug?: string;
+  defaultFolder?: FileManagerDefaultFolder;
+  entityContext?: FileManagerEntityContext;
   constraints?: UploadConstraints;
   initialCrop?: UploadCrop;
   title?: string;

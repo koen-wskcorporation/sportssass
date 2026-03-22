@@ -459,7 +459,7 @@ async function ensureSpreadsheetStructure(
   const submissionsSheetId = submissionsSheet.properties.sheetId;
   const entriesSheetId = entriesSheet.properties.sheetId;
 
-  const managedProtectionPrefix = "sports-saas:";
+  const managedProtectionPrefix = "orgframe:";
   const requests: Array<Record<string, unknown>> = [];
 
   [submissionsSheet, entriesSheet].forEach((sheet) => {

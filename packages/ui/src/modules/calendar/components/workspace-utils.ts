@@ -1,5 +1,5 @@
 import type { CalendarOccurrence, CalendarReadModel, CalendarSource, CalendarVisibility, CalendarEntryType } from "@/modules/calendar/types";
-import type { UnifiedCalendarItem } from "@orgframe/ui/calendar/UnifiedCalendar";
+import type { CalendarItem } from "@orgframe/ui/calendar/Calendar";
 
 export function findOccurrence(readModel: CalendarReadModel, occurrenceId: string) {
   return readModel.occurrences.find((item) => item.id === occurrenceId) ?? null;
@@ -79,7 +79,7 @@ export function occurrenceToCalendarItem(
   readModel: CalendarReadModel,
   occurrence: CalendarOccurrence,
   options?: { teamLabelById?: Map<string, string> }
-): UnifiedCalendarItem | null {
+): CalendarItem | null {
   const entry = findEntryForOccurrence(readModel, occurrence);
   if (!entry) {
     return null;
@@ -122,7 +122,7 @@ export function toCalendarItems(
       return true;
     })
     .map((occurrence) => occurrenceToCalendarItem(readModel, occurrence, { teamLabelById: options?.teamLabelById }))
-    .filter((item): item is UnifiedCalendarItem => Boolean(item));
+    .filter((item): item is CalendarItem => Boolean(item));
 }
 
 export function toLocalParts(isoUtc: string, timezone: string) {

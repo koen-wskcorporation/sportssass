@@ -95,7 +95,8 @@ export function TeamDetailPanel({ orgSlug, teamId, open, canWrite, nodes, onClos
     colorPrimary: "",
     colorSecondary: "",
     homeFacilityId: "",
-    notes: ""
+    notes: "",
+    calendarTeamVisibility: "team_members" as "team_members" | "program_members" | "org_members"
   });
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
@@ -170,7 +171,8 @@ export function TeamDetailPanel({ orgSlug, teamId, open, canWrite, nodes, onClos
       colorPrimary: detail.team.colorPrimary ?? "",
       colorSecondary: detail.team.colorSecondary ?? "",
       homeFacilityId: detail.team.homeFacilityId ?? "",
-      notes: detail.team.notes ?? ""
+      notes: detail.team.notes ?? "",
+      calendarTeamVisibility: detail.calendarVisibility.teamSetting ?? detail.calendarVisibility.effective
     });
   }, [detail]);
 
@@ -495,7 +497,8 @@ export function TeamDetailPanel({ orgSlug, teamId, open, canWrite, nodes, onClos
         colorPrimary: settingsDraft.colorPrimary || null,
         colorSecondary: settingsDraft.colorSecondary || null,
         homeFacilityId: settingsDraft.homeFacilityId || null,
-        notes: settingsDraft.notes || null
+        notes: settingsDraft.notes || null,
+        calendarTeamVisibility: settingsDraft.calendarTeamVisibility
       });
 
       if (!result.ok) {
@@ -848,6 +851,31 @@ export function TeamDetailPanel({ orgSlug, teamId, open, canWrite, nodes, onClos
                     }))
                   ]}
                   value={settingsDraft.homeFacilityId}
+                />
+              </FormField>
+
+              <FormField
+                hint={
+                  detail.calendarVisibility.teamSettingLocked
+                    ? `Locked by ${detail.calendarVisibility.forcedBy === "division" ? "division" : "program"} setting.`
+                    : "Control who can discover this team calendar."
+                }
+                label="Team calendar visibility"
+              >
+                <Select
+                  disabled={!canWrite || detail.calendarVisibility.teamSettingLocked}
+                  onChange={(event) =>
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      calendarTeamVisibility: event.target.value as "team_members" | "program_members" | "org_members"
+                    }))
+                  }
+                  options={[
+                    { value: "team_members", label: "Team members only" },
+                    { value: "program_members", label: "Program members" },
+                    { value: "org_members", label: "Everyone in organization" }
+                  ]}
+                  value={settingsDraft.calendarTeamVisibility}
                 />
               </FormField>
 

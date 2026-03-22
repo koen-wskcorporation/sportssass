@@ -109,6 +109,12 @@ export function StructureCanvasShell({
   viewHeightMode = "default",
   respectGlobalPanels = true
 }: StructureCanvasShellProps) {
+  const contentInteractionClass = (editable: boolean, allowContentInteraction: boolean) => {
+    if (!allowContentInteraction) {
+      return "pointer-events-none select-none";
+    }
+    return editable ? "select-none" : undefined;
+  };
   const [isEditOpen, setIsEditOpen] = useState(initialEditOpen);
   const [isAutoFitPending, setIsAutoFitPending] = useState(false);
   const [isPopupLayoutSettled, setIsPopupLayoutSettled] = useState(false);
@@ -120,6 +126,7 @@ export function StructureCanvasShell({
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const onFitRef = useRef(onFit);
   const manualFocusRef = useRef(false);
+  const wasDragInProgressRef = useRef(Boolean(dragInProgress));
   const normalizedSearch = searchQuery.trim();
   const panelAwareEditMode = embeddedEditMode || isEditOpen;
 
@@ -358,6 +365,17 @@ export function StructureCanvasShell({
       setIsAutoFitPending(false);
       return;
     }
+    const dragActive = Boolean(dragInProgress);
+    const justFinishedDrag = wasDragInProgressRef.current && !dragActive;
+    wasDragInProgressRef.current = dragActive;
+    if (dragInProgress) {
+      setIsAutoFitPending(false);
+      return;
+    }
+    if (justFinishedDrag) {
+      setIsAutoFitPending(false);
+      return;
+    }
 
     let stopped = false;
     let fitCommitInProgress = false;
@@ -513,12 +531,12 @@ export function StructureCanvasShell({
       }
       window.removeEventListener("resize", schedule);
     };
-  }, [autoFitKey, autoFitOnOpen, canvasLayoutMode, canvasRef, embeddedEditMode, isEditOpen, isPopupLayoutSettled, panelAwareEditMode, safeAreaInsets]);
+  }, [autoFitKey, autoFitOnOpen, canvasLayoutMode, canvasRef, dragInProgress, embeddedEditMode, isEditOpen, isPopupLayoutSettled, panelAwareEditMode, safeAreaInsets]);
 
   function renderShell({ editable, fullscreen }: { editable: boolean; fullscreen: boolean }) {
     const hideUntilAutoFit = autoFitOnOpen && isAutoFitPending && (embeddedEditMode ? editable : editable === isEditOpen);
     const allowContentInteraction = editable || viewContentInteractive;
-    const allowViewportInteraction = editable || viewViewportInteractive;
+    const allowViewportInteraction = editable;
     return (
       <div
         className={`relative ${hideUntilAutoFit ? "opacity-0" : "opacity-100"} ${
@@ -552,7 +570,7 @@ export function StructureCanvasShell({
         }}
       >
         <CanvasViewport
-          contentClassName={canvasContentClassName ?? "min-w-max"}
+          contentClassName={canvasContentClassName}
           dragInProgress={editable ? Boolean(dragInProgress) : false}
           interactive={allowViewportInteraction}
           onViewChange={(view) => {
@@ -560,7 +578,7 @@ export function StructureCanvasShell({
             onViewChange?.(view);
           }}
           ref={canvasRef}
-          storageKey={persistViewState ? `${storageKey}:${editable ? "edit" : "view"}` : undefined}
+          storageKey={persistViewState ? storageKey : undefined}
           viewportClassName={`${canvasViewportClassName ?? ""} ${fullscreen ? "rounded-none border-0" : ""}`.trim()}
           viewportStyle={canvasViewportStyle}
           safeAreaInsets={safeAreaInsets}
@@ -570,14 +588,14 @@ export function StructureCanvasShell({
           {(() => {
             const content = renderContent ? renderContent(editable) : children;
             if (canvasLayoutMode === "free") {
-              return <div className={allowContentInteraction ? undefined : "pointer-events-none select-none"}>{content}</div>;
+              return <div className={contentInteractionClass(editable, allowContentInteraction)}>{content}</div>;
             }
             return (
-              <div className="flex w-full min-w-[840px] flex-col items-center gap-3">
+              <>
                 {rootHeader}
                 {emptyState}
-                <div className={allowContentInteraction ? undefined : "pointer-events-none select-none"}>{content}</div>
-              </div>
+                <div className={contentInteractionClass(editable, allowContentInteraction)}>{content}</div>
+              </>
             );
           })()}
         </CanvasViewport>

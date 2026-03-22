@@ -44,4 +44,13 @@ export type ProgramTeamDetail = {
   rosterCandidates: ProgramTeamRosterCandidate[];
   staffCandidates: ProgramTeamStaffCandidate[];
   facilities: ProgramTeamFacilityOption[];
+  calendarVisibility: {
+    effective: "team_members" | "program_members" | "org_members";
+    teamSetting: "team_members" | "program_members" | "org_members" | null;
+    divisionDefault: "team_members" | "program_members" | "org_members" | null;
+    programDefault: "team_members" | "program_members" | "org_members" | null;
+    forcedValue: "team_members" | "program_members" | "org_members" | null;
+    forcedBy: "division" | "program" | null;
+    teamSettingLocked: boolean;
+  };
 };

@@ -8,7 +8,7 @@ import { Input } from "@orgframe/ui/ui/input";
 import { Panel } from "@orgframe/ui/ui/panel";
 import { Select } from "@orgframe/ui/ui/select";
 import { useToast } from "@orgframe/ui/ui/toast";
-import { UnifiedCalendar, type UnifiedCalendarQuickAddDraft } from "@orgframe/ui/calendar/UnifiedCalendar";
+import { Calendar, type CalendarQuickAddDraft } from "@orgframe/ui/calendar/Calendar";
 import {
   createCalendarEntryAction,
   createManualOccurrenceAction,
@@ -123,7 +123,7 @@ export function FacilityCalendarWorkspace({
   const [hostTeamId, setHostTeamId] = useState(activeTeams[0]?.id ?? "");
   const [configurationId, setConfigurationId] = useState<string>("");
   const [inviteTeamId, setInviteTeamId] = useState(activeTeams[0]?.id ?? "");
-  const [quickAddDraft, setQuickAddDraft] = useState<(UnifiedCalendarQuickAddDraft & { open: boolean }) | null>(null);
+  const [quickAddDraft, setQuickAddDraft] = useState<(CalendarQuickAddDraft & { open: boolean }) | null>(null);
   const [locationDraft, setLocationDraft] = useState(spaceName);
   const [locationMode, setLocationMode] = useState<"tbd" | "other" | "facility">("facility");
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>("");
@@ -372,7 +372,7 @@ export function FacilityCalendarWorkspace({
     });
   }, [readModel.sources]);
 
-  function createPracticeBooking(draft: UnifiedCalendarQuickAddDraft) {
+  function createPracticeBooking(draft: CalendarQuickAddDraft) {
     const now = new Date().toISOString();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const startParts = toLocalParts(draft.startsAtUtc, timezone);
@@ -1006,7 +1006,7 @@ export function FacilityCalendarWorkspace({
             value={inviteTeamId}
           />
         </div>
-        <UnifiedCalendar
+        <Calendar
           canEdit={canWrite}
           disableHoverGhost={Boolean(selectedOccurrenceId) || facilityDialogOpen}
           className="min-h-0 flex-1"

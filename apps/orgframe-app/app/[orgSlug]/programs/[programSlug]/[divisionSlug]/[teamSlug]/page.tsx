@@ -2,9 +2,9 @@ import { notFound } from "next/navigation";
 import { Alert } from "@orgframe/ui/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
 import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { CalendarWorkspace } from "@orgframe/ui/modules/calendar/components/CalendarWorkspace";
-import { listCalendarReadModel, listOrgActiveTeams } from "@/modules/calendar/db/queries";
-import { listFacilityReservationReadModel } from "@/modules/facilities/db/queries";
+import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
+import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
+import { scopeCalendarReadModelByContext } from "@/modules/calendar/read-model-scope";
 import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
 import { can } from "@/lib/permissions/can";
 import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
@@ -78,21 +78,24 @@ export default async function ProgramTeamPage({ params, searchParams }: TeamPage
     notFound();
   }
 
-  const [calendarReadModel, facilityReadModel, activeTeams] =
+  const workspaceData =
     (tab === "home" || tab === "calendar") && canReadPrograms
-      ? await Promise.all([
-          listCalendarReadModel(orgRequest.org.orgId).catch(() => null),
-          listFacilityReservationReadModel(orgRequest.org.orgId).catch(() => null),
-          listOrgActiveTeams(orgRequest.org.orgId).catch(() => [])
-        ])
-      : [null, null, []];
+      ? await getCalendarWorkspaceDataAction({ orgSlug })
+      : null;
+  const scopedReadModel =
+    workspaceData?.ok
+      ? scopeCalendarReadModelByContext({
+          readModel: workspaceData.data.readModel,
+          teamId: team.id
+        })
+      : null;
 
-  const teamInvites = calendarReadModel
-    ? calendarReadModel.invites.filter((invite) => invite.teamId === team.id && (invite.inviteStatus === "accepted" || invite.inviteStatus === "pending"))
+  const teamInvites = scopedReadModel
+    ? scopedReadModel.invites.filter((invite) => invite.teamId === team.id && (invite.inviteStatus === "accepted" || invite.inviteStatus === "pending"))
     : [];
   const teamOccurrenceIds = new Set(teamInvites.map((invite) => invite.occurrenceId));
   const filteredOccurrences =
-    calendarReadModel?.occurrences
+    scopedReadModel?.occurrences
       .filter((occurrence) => teamOccurrenceIds.has(occurrence.id) && occurrence.status === "scheduled")
       .sort((left, right) => left.startsAtUtc.localeCompare(right.startsAtUtc)) ?? [];
 
@@ -135,7 +138,7 @@ export default async function ProgramTeamPage({ params, searchParams }: TeamPage
                 {nextOccurrences.length === 0 ? <Alert variant="info">No scheduled sessions yet.</Alert> : null}
                 {nextOccurrences.map((occurrence) => (
                   <div className="rounded-control border bg-surface px-3 py-2 text-sm" key={occurrence.id}>
-                    <p className="font-medium text-text">{calendarReadModel?.entries.find((entry) => entry.id === occurrence.entryId)?.title ?? "Team session"}</p>
+                    <p className="font-medium text-text">{scopedReadModel?.entries.find((entry) => entry.id === occurrence.entryId)?.title ?? "Team session"}</p>
                     <p className="text-xs text-text-muted">{formatOccurrenceLine(occurrence)}</p>
                   </div>
                 ))}
@@ -172,16 +175,13 @@ export default async function ProgramTeamPage({ params, searchParams }: TeamPage
         {tab === "calendar" ? (
           <div className="space-y-2">
             {!canReadPrograms ? <Alert variant="info">Team calendar visibility is limited to team staff.</Alert> : null}
-            {canReadPrograms && calendarReadModel ? (
-              <CalendarWorkspace
-                activeTeams={activeTeams}
+            {canReadPrograms && workspaceData?.ok && scopedReadModel ? (
+              <ManageCalendarSection
+                activeTeams={workspaceData.data.activeTeams}
                 canWrite={canWritePrograms}
-                initialFacilityReadModel={facilityReadModel ?? undefined}
-                initialReadModel={calendarReadModel}
-                mode="team"
+                initialFacilityReadModel={workspaceData.data.facilityReadModel}
+                initialReadModel={scopedReadModel}
                 orgSlug={orgSlug}
-                teamId={team.id}
-                teamLabel={`${division.name}/${team.name}`}
               />
             ) : null}
           </div>

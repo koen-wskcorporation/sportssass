@@ -8,7 +8,7 @@ import { Input } from "@orgframe/ui/ui/input";
 import { Panel, PanelScreens } from "@orgframe/ui/ui/panel";
 import { Select } from "@orgframe/ui/ui/select";
 import { useToast } from "@orgframe/ui/ui/toast";
-import { UnifiedCalendar, type UnifiedCalendarQuickAddDraft } from "@orgframe/ui/calendar/UnifiedCalendar";
+import { Calendar, type CalendarQuickAddDraft } from "@orgframe/ui/calendar/Calendar";
 import {
   createCalendarEntryAction,
   createManualOccurrenceAction,
@@ -93,7 +93,7 @@ function localInputToUtcIso(value: string) {
   return date.toISOString();
 }
 
-type OrgCalendarWorkspaceProps = {
+type ManageCalendarSectionProps = {
   orgSlug: string;
   canWrite: boolean;
   initialReadModel: CalendarReadModel;
@@ -101,7 +101,7 @@ type OrgCalendarWorkspaceProps = {
   activeTeams: Array<{ id: string; label: string }>;
 };
 
-export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, initialFacilityReadModel, activeTeams }: OrgCalendarWorkspaceProps) {
+export function ManageCalendarSection({ orgSlug, canWrite, initialReadModel, initialFacilityReadModel, activeTeams }: ManageCalendarSectionProps) {
   const { toast } = useToast();
   const [readModel, setReadModel] = useState(initialReadModel);
   const [facilityReadModel, setFacilityReadModel] = useState<FacilityReservationReadModel>(
@@ -117,7 +117,7 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
   const [quickEntryType, setQuickEntryType] = useState<CalendarEntryType>("event");
   const [quickHostTeamId, setQuickHostTeamId] = useState<string>(activeTeams[0]?.id ?? "");
   const [inviteTeamId, setInviteTeamId] = useState<string>(activeTeams[0]?.id ?? "");
-  const [quickAddDraft, setQuickAddDraft] = useState<(UnifiedCalendarQuickAddDraft & { open: boolean }) | null>(null);
+  const [quickAddDraft, setQuickAddDraft] = useState<(CalendarQuickAddDraft & { open: boolean }) | null>(null);
   const [createScreen, setCreateScreen] = useState<"basics" | "location" | "schedule">("basics");
   const [locationDraft, setLocationDraft] = useState("");
   const [locationMode, setLocationMode] = useState<"tbd" | "other" | "facility">("tbd");
@@ -425,7 +425,7 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
     });
   }, [readModel.sources]);
 
-  function createFromDraft(draft: UnifiedCalendarQuickAddDraft) {
+  function createFromDraft(draft: CalendarQuickAddDraft) {
     const now = new Date().toISOString();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const optimisticEntryId = buildOptimisticId("optimistic-entry");
@@ -679,7 +679,7 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
     });
   }
 
-  function openCreateComposer(draft: UnifiedCalendarQuickAddDraft) {
+  function openCreateComposer(draft: CalendarQuickAddDraft) {
     setSelectedOccurrenceId(null);
     setQuickAddDraft({ ...draft, open: true });
     setCreateScreen("basics");
@@ -1440,13 +1440,13 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
   const editMode = Boolean(selectedOccurrence && selectedEntry);
   const inviteOnlyShare = selectedEntry?.entryType === "practice";
   const visibleShareTargets = inviteOnlyShare ? shareTargets.filter((target) => target.type === "team") : shareTargets;
-  const composerOpen = createMode || editMode;
-  const composerTitle = createMode ? "Create Event" : selectedEntry?.title ?? "Event details";
-  const composerSubtitle = createMode
-    ? "Build the event interactively: type, time, location, facility spaces, and recurrence."
-    : selectedOccurrence && selectedEntry
-      ? `${selectedEntry.entryType} · ${selectedOccurrence.status}`
-      : "Select a calendar item.";
+  const composerOpen = createMode;
+  const composerTitle = "Create Event";
+  const composerSubtitle = "Build the event interactively: type, time, location, facility spaces, and recurrence.";
+  const eventPanelSubtitle =
+    selectedOccurrence && selectedEntry
+      ? `${selectedEntry.entryType} · ${new Date(selectedOccurrence.startsAtUtc).toLocaleString()}`
+      : "Event details";
   const createScreens = [
     { key: "basics", label: "Basics" },
     { key: "location", label: "Location" },
@@ -1455,18 +1455,18 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
   const createScreenIndex = createScreens.findIndex((screen) => screen.key === createScreen);
 
   return (
-    <Card className="flex h-full flex-col">
+    <Card className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="shrink-0">
         <CardTitle>Calendar Workspace</CardTitle>
-        <CardDescription>Unified events, practices, and games with drag-create, drag-move, and resize actions.</CardDescription>
+        <CardDescription>Events, practices, and games with drag-create, drag-move, and resize actions.</CardDescription>
       </CardHeader>
-      <UnifiedCalendar
+      <Calendar
         canEdit={canWrite}
         disableHoverGhost={Boolean(selectedOccurrenceId) || Boolean(quickAddDraft?.open) || facilityDialogOpen}
         framed={false}
         quickAddUx="external"
         referenceTimezone={Intl.DateTimeFormat().resolvedOptions().timeZone}
-        className="min-h-0 flex-1 px-5 pb-5 md:px-6 md:pb-6"
+        className="min-h-0 flex-1 overflow-hidden px-5 pb-5 md:px-6 md:pb-6"
         controlsSlot={
           <CalendarSourceFilterPopover onChange={setSelectedSourceIds} selectedSourceIds={selectedSourceIds} sources={readModel.sources} />
         }
@@ -1495,6 +1495,7 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
           })
         }
         onMoveItem={(input) => moveOccurrence(input.itemId, input.startsAtUtc, input.endsAtUtc)}
+        onCancelCreate={() => setQuickAddDraft(null)}
         onQuickAddIntent={openCreateComposer}
         onResizeItem={(input) => resizeOccurrence(input.itemId, input.endsAtUtc)}
         onSelectItem={(occurrenceId) => {
@@ -1566,15 +1567,6 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
                   Create event
                 </Button>
               )}
-            </>
-          ) : editMode ? (
-            <>
-              <Button onClick={closeComposer} type="button" variant="ghost">
-                Close
-              </Button>
-              <Button disabled={!canWrite || !editTitle.trim()} onClick={submitEditComposer} type="button">
-                Save changes
-              </Button>
             </>
           ) : undefined
         }
@@ -1941,6 +1933,70 @@ export function OrgCalendarWorkspace({ orgSlug, canWrite, initialReadModel, init
               variant="ghost"
             >
               Delete occurrence
+            </Button>
+          </ScrollableSheetBody>
+        ) : null}
+      </Panel>
+      <Panel onClose={() => setSelectedOccurrenceId(null)} open={editMode} subtitle={eventPanelSubtitle} title={selectedEntry?.title ?? "Event details"}>
+        {selectedOccurrence && selectedEntry ? (
+          <ScrollableSheetBody className="space-y-3 pr-1">
+            <label className="space-y-1 text-xs text-text-muted">
+              <span>Title</span>
+              <Input disabled={!canWrite} onChange={(event) => setEditTitle(event.target.value)} value={editTitle} />
+            </label>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="space-y-1 text-xs text-text-muted">
+                <span>Starts</span>
+                <CalendarPicker includeTime onChange={setEditStartsAtLocal} value={editStartsAtLocal} />
+              </label>
+              <label className="space-y-1 text-xs text-text-muted">
+                <span>Ends</span>
+                <CalendarPicker includeTime onChange={setEditEndsAtLocal} value={editEndsAtLocal} />
+              </label>
+            </div>
+
+            <label className="space-y-1 text-xs text-text-muted">
+              <span>Location</span>
+              <UniversalAddressField disabled={!canWrite} onChange={setEditLocationDraft} value={editLocationDraft} />
+            </label>
+
+            {selectedOccurrence.sourceRuleId ? (
+              <div className="space-y-2 rounded-control border p-3">
+                <label className="space-y-1 text-xs text-text-muted">
+                  <span>Apply changes to</span>
+                  <Select
+                    disabled={!canWrite}
+                    onChange={(event) => setEditScope(event.target.value as typeof editScope)}
+                    options={[
+                      { label: "This occurrence only", value: "occurrence" },
+                      { label: "This and following", value: "following" },
+                      { label: "Entire series", value: "series" }
+                    ]}
+                    value={editScope}
+                  />
+                </label>
+                <RecurringEventEditor canWrite={canWrite} draft={ruleDraft} onChange={setRuleDraft} />
+              </div>
+            ) : null}
+
+            <div className="space-y-2 rounded-control border p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Facility booking</p>
+              {selectedAllocations.length === 0 ? <p className="text-sm text-text-muted">No facility spaces assigned.</p> : null}
+              <div className="flex flex-wrap gap-2">
+                {selectedAllocations.map((allocation) => (
+                  <span className="rounded-full border bg-surface px-2 py-1 text-xs" key={allocation.id}>
+                    {spaceById.get(allocation.spaceId)?.name ?? allocation.spaceId}
+                  </span>
+                ))}
+              </div>
+              <Button disabled={!canWrite} onClick={openEditFacilityDialog} size="sm" type="button" variant="secondary">
+                {selectedAllocations.length > 0 ? "Edit facility booking" : "Add facility booking"}
+              </Button>
+            </div>
+
+            <Button disabled={!canWrite || !editTitle.trim()} onClick={submitEditComposer} type="button">
+              Save changes
             </Button>
           </ScrollableSheetBody>
         ) : null}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { signOutAction } from "@/app/auth/actions";
 import { AuthDialogTrigger } from "@orgframe/ui/auth/AuthDialogTrigger";
 import { AccountMenu } from "@orgframe/ui/shared/AccountMenu";
@@ -34,6 +35,7 @@ type PrimaryAccountControlsProps = {
 
 export function PrimaryAccountControls({ currentOrgSlug = null, homeHref = "/", tenantBaseOrigin = null }: PrimaryAccountControlsProps) {
   const [state, setState] = useState<HeaderAccountState | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -69,7 +71,7 @@ export function PrimaryAccountControls({ currentOrgSlug = null, homeHref = "/", 
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [pathname]);
 
   if (state?.authenticated) {
     return (

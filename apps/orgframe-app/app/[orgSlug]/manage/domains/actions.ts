@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { normalizeDomain, getPlatformHost } from "@/lib/domains/customDomains";
 import { verifyCustomDomainDns } from "@/lib/domains/verification";
+import { attachDomainToVercelProject } from "@/lib/domains/vercelProjectDomains";
 import { rethrowIfNavigationError } from "@/lib/actions/rethrowIfNavigationError";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { createSupabaseServer } from "@/lib/supabase/server";
@@ -19,6 +20,24 @@ const ipV4Pattern = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 function getField(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function buildDomainsRedirect(
+  orgSlug: string,
+  params: Record<string, string | number | boolean | null | undefined>
+) {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === false || value === "") {
+      continue;
+    }
+
+    query.set(key, String(value));
+  }
+
+  const queryString = query.toString();
+  return `/${orgSlug}/manage/domains${queryString ? `?${queryString}` : ""}`;
 }
 
 function isValidCustomDomain(domain: string) {
@@ -53,12 +72,21 @@ function toSaveErrorCode(error: unknown): string {
 
 export async function saveOrgCustomDomainAction(orgSlug: string, formData: FormData) {
   try {
+    const setup = getField(formData, "setup") === "1";
+    const nextStep = getField(formData, "next_step") || "2";
+
     const parsed = domainSchema.safeParse({
       domain: getField(formData, "domain")
     });
 
     if (!parsed.success) {
-      redirect(`/${orgSlug}/manage/domains?error=invalid_domain`);
+      redirect(
+        buildDomainsRedirect(orgSlug, {
+          error: "invalid_domain",
+          setup,
+          step: setup ? "1" : null
+        })
+      );
     }
 
     const orgContext = await requireOrgPermission(orgSlug, "org.manage.read");
@@ -66,7 +94,13 @@ export async function saveOrgCustomDomainAction(orgSlug: string, formData: FormD
     const platformHost = getPlatformHost();
 
     if (!isValidCustomDomain(domain) || domain === platformHost) {
-      redirect(`/${orgSlug}/manage/domains?error=invalid_domain`);
+      redirect(
+        buildDomainsRedirect(orgSlug, {
+          error: "invalid_domain",
+          setup,
+          step: setup ? "1" : null
+        })
+      );
     }
 
     const supabase = await createSupabaseServer();
@@ -82,6 +116,20 @@ export async function saveOrgCustomDomainAction(orgSlug: string, formData: FormD
     }
 
     const domainChanged = !existing || existing.domain !== domain;
+
+    if (domainChanged) {
+      const attachResult = await attachDomainToVercelProject(domain);
+      if (!attachResult.ok) {
+        redirect(
+          buildDomainsRedirect(orgSlug, {
+            error: attachResult.reason === "not_configured" ? "vercel_not_configured" : "vercel_attach_failed",
+            detail: attachResult.message,
+            setup,
+            step: setup ? "1" : null
+          })
+        );
+      }
+    }
 
     const { error } = await supabase.from("org_custom_domains").upsert(
       {
@@ -103,15 +151,30 @@ export async function saveOrgCustomDomainAction(orgSlug: string, formData: FormD
 
     revalidatePath(`/${orgSlug}/manage/domains`);
     revalidatePath(`/${orgSlug}/manage/domains`);
-    redirect(`/${orgSlug}/manage/domains?saved=1`);
+    redirect(
+      buildDomainsRedirect(orgSlug, {
+        saved: 1,
+        setup,
+        step: setup ? nextStep : null
+      })
+    );
   } catch (error) {
     rethrowIfNavigationError(error);
-    redirect(`/${orgSlug}/manage/domains?error=${toSaveErrorCode(error)}`);
+    redirect(
+      buildDomainsRedirect(orgSlug, {
+        error: toSaveErrorCode(error),
+        setup: getField(formData, "setup") === "1",
+        step: getField(formData, "setup") === "1" ? "1" : null
+      })
+    );
   }
 }
 
-export async function verifyOrgCustomDomainAction(orgSlug: string) {
+export async function verifyOrgCustomDomainAction(orgSlug: string, formData?: FormData) {
   try {
+    const setup = formData ? getField(formData, "setup") === "1" : false;
+    const step = formData ? getField(formData, "step") || "3" : "3";
+    const method = formData ? getField(formData, "method") : "";
     const orgContext = await requireOrgPermission(orgSlug, "org.manage.read");
     const supabase = await createSupabaseServer();
 
@@ -126,7 +189,14 @@ export async function verifyOrgCustomDomainAction(orgSlug: string) {
     }
 
     if (!existing) {
-      redirect(`/${orgSlug}/manage/domains?error=missing_domain`);
+      redirect(
+        buildDomainsRedirect(orgSlug, {
+          error: "missing_domain",
+          setup,
+          step: setup ? step : null,
+          method: setup ? method : null
+        })
+      );
     }
 
     const result = await verifyCustomDomainDns(existing.domain, existing.verification_token);
@@ -148,13 +218,30 @@ export async function verifyOrgCustomDomainAction(orgSlug: string) {
     revalidatePath(`/${orgSlug}/manage/domains`);
 
     if (!result.verified) {
-      redirect(`/${orgSlug}/manage/domains?error=verification_failed`);
+      redirect(
+        buildDomainsRedirect(orgSlug, {
+          error: "verification_failed",
+          detail: result.message,
+          setup,
+          step: setup ? step : null,
+          method: setup ? method : null
+        })
+      );
     }
 
-    redirect(`/${orgSlug}/manage/domains?verified=1`);
+    redirect(buildDomainsRedirect(orgSlug, { verified: 1 }));
   } catch (error) {
     rethrowIfNavigationError(error);
-    redirect(`/${orgSlug}/manage/domains?error=verification_failed`);
+    const errorMessage = error instanceof Error && error.message.trim() ? error.message.trim() : null;
+    redirect(
+      buildDomainsRedirect(orgSlug, {
+        error: "verification_failed",
+        detail: errorMessage,
+        setup: formData ? getField(formData, "setup") === "1" : false,
+        step: formData && getField(formData, "setup") === "1" ? getField(formData, "step") || "3" : null,
+        method: formData && getField(formData, "setup") === "1" ? getField(formData, "method") || null : null
+      })
+    );
   }
 }
 

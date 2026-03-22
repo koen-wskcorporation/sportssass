@@ -7,7 +7,7 @@ type UniversalAppShellProps = {
 export function UniversalAppShell({ children, sidebar, mobileSidebar }: UniversalAppShellProps) {
   return (
     <main className="app-page-shell pb-3 pt-0 md:pb-4 md:pt-0">
-      <div className="grid min-h-0 flex-1 items-start gap-[var(--layout-gap)] lg:grid-cols-[auto_minmax(0,1fr)] lg:gap-[var(--layout-gap)]">
+      <div className="grid min-h-0 flex-1 items-stretch gap-[var(--layout-gap)] lg:grid-cols-[auto_minmax(0,1fr)] lg:gap-[var(--layout-gap)]">
         <aside className="sticky z-30 hidden lg:block" style={{ top: "calc(var(--org-header-height, 0px) + var(--org-header-sticky-offset, 0px))" }}>
           {sidebar}
         </aside>

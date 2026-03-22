@@ -1659,6 +1659,324 @@ export async function deleteCalendarLensView(input: { orgId: string; userId: str
   }
 }
 
+type TeamCalendarVisibility = "team_members" | "program_members" | "org_members";
+
+function asTeamCalendarVisibility(value: unknown): TeamCalendarVisibility | null {
+  if (value === "team_members" || value === "program_members" || value === "org_members") {
+    return value;
+  }
+  return null;
+}
+
+const calendarColorPalette = [
+  "#2563EB",
+  "#0891B2",
+  "#0D9488",
+  "#16A34A",
+  "#65A30D",
+  "#EA580C",
+  "#DC2626",
+  "#DB2777",
+  "#9333EA",
+  "#7C3AED",
+  "#4F46E5",
+  "#0284C7",
+  "#0F766E",
+  "#15803D",
+  "#4D7C0F",
+  "#C2410C",
+  "#B91C1C",
+  "#BE185D",
+  "#7E22CE",
+  "#6D28D9"
+] as const;
+
+function hasSourceColor(displayJson: Record<string, unknown>) {
+  const colorKeys = ["color", "accentColor", "calendarColor", "primaryColor", "colorPrimary", "orgColor", "brandColor"];
+  return colorKeys.some((key) => typeof displayJson[key] === "string" && (displayJson[key] as string).trim().length > 0);
+}
+
+function readSourceColor(displayJson: Record<string, unknown>) {
+  const colorKeys = ["color", "accentColor", "calendarColor", "primaryColor", "colorPrimary", "orgColor", "brandColor"];
+  for (const key of colorKeys) {
+    const value = displayJson[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim().toLowerCase();
+    }
+  }
+  return null;
+}
+
+async function buildCalendarSourceHierarchy(orgId: string, sources: CalendarSource[]): Promise<CalendarSource[]> {
+  const supabase = await createSupabaseServer();
+  const teamSources = sources.filter((source) => source.scopeType === "team");
+  const programSources = sources.filter((source) => source.scopeType === "program");
+  const divisionSources = sources.filter((source) => source.scopeType === "division");
+  const organizationAndCustomSources = sources.filter((source) => source.scopeType === "organization" || source.scopeType === "custom");
+  const programSourceIdByProgramId = new Map(
+    programSources.map((source) => [source.scopeId ?? source.id, source.id] as const).filter((entry): entry is [string, string] => Boolean(entry[0]))
+  );
+  const divisionSourceIdByDivisionId = new Map(
+    divisionSources.map((source) => [source.scopeId ?? source.id, source.id] as const).filter((entry): entry is [string, string] => Boolean(entry[0]))
+  );
+
+  const teamIds = teamSources
+    .map((source) => source.scopeId)
+    .filter((value): value is string => Boolean(value));
+
+  const { data: teamRows, error: teamError } = teamIds.length
+    ? await supabase
+        .from("program_teams")
+        .select("id, program_id, program_node_id, settings_json, program_nodes(id, name, parent_id, settings_json)")
+        .eq("org_id", orgId)
+        .in("id", teamIds)
+    : { data: [], error: null };
+
+  if (teamError) {
+    throw new Error(`Failed to build calendar source hierarchy: ${teamError.message}`);
+  }
+
+  const teamMetaByTeamId = new Map<
+    string,
+    {
+      programId: string;
+      teamNodeName: string | null;
+      divisionId: string | null;
+      teamSettings: Record<string, unknown>;
+      divisionSettings: Record<string, unknown>;
+    }
+  >();
+
+  const divisionIds = new Set<string>();
+  const programIds = new Set<string>();
+
+  for (const row of (teamRows ?? []) as any[]) {
+    const node = Array.isArray(row.program_nodes) ? row.program_nodes[0] : row.program_nodes;
+    const divisionId = typeof node?.parent_id === "string" ? node.parent_id : null;
+    const teamSettings = asObject(row.settings_json);
+    const divisionSettings = asObject(node?.settings_json);
+    teamMetaByTeamId.set(row.id, {
+      programId: row.program_id,
+      teamNodeName: typeof node?.name === "string" ? node.name : null,
+      divisionId,
+      teamSettings,
+      divisionSettings
+    });
+    if (row.program_id) {
+      programIds.add(row.program_id);
+    }
+    if (divisionId) {
+      divisionIds.add(divisionId);
+    }
+  }
+
+  for (const source of divisionSources) {
+    if (source.scopeId) {
+      divisionIds.add(source.scopeId);
+    }
+  }
+
+  const { data: divisionRows, error: divisionError } = divisionIds.size
+    ? await supabase.from("program_nodes").select("id, program_id, name, settings_json").in("id", Array.from(divisionIds))
+    : { data: [], error: null };
+  if (divisionError) {
+    throw new Error(`Failed to list division nodes for calendar hierarchy: ${divisionError.message}`);
+  }
+  const divisionById = new Map(
+    (divisionRows ?? []).map(
+      (row: any) => [row.id, { name: row.name as string, programId: row.program_id as string | null, settings: asObject(row.settings_json) }] as const
+    )
+  );
+
+  const { data: programRows, error: programError } = programIds.size
+    ? await supabase.from("programs").select("id, name, settings_json").in("id", Array.from(programIds))
+    : { data: [], error: null };
+  if (programError) {
+    throw new Error(`Failed to list program settings for calendar hierarchy: ${programError.message}`);
+  }
+  const programById = new Map(
+    (programRows ?? []).map((row: any) => [row.id, { name: row.name as string, settings: asObject(row.settings_json) }] as const)
+  );
+
+  const syntheticDivisionSources = new Map<string, CalendarSource>();
+  const enrichedSources = sources.map((source) => {
+    if (source.scopeType !== "team" || !source.scopeId) {
+      return source;
+    }
+    const meta = teamMetaByTeamId.get(source.scopeId);
+    if (!meta) {
+      return source;
+    }
+
+    const division = meta.divisionId ? divisionById.get(meta.divisionId) ?? null : null;
+    const program = programById.get(meta.programId) ?? null;
+    const programDefault = asTeamCalendarVisibility(program?.settings.calendarTeamVisibilityDefault);
+    const programForced = asTeamCalendarVisibility(program?.settings.calendarTeamVisibilityForced);
+    const divisionDefault = asTeamCalendarVisibility(division?.settings.calendarTeamVisibilityDefault);
+    const divisionForced = asTeamCalendarVisibility(division?.settings.calendarTeamVisibilityForced);
+    const teamSetting = asTeamCalendarVisibility(meta.teamSettings.calendarTeamVisibility);
+    const forcedValue = divisionForced ?? programForced ?? null;
+    const forcedBy = divisionForced ? "division" : programForced ? "program" : null;
+    const effectiveVisibility = forcedValue ?? teamSetting ?? divisionDefault ?? programDefault ?? "team_members";
+    const divisionSourceId = meta.divisionId ? divisionSourceIdByDivisionId.get(meta.divisionId) ?? null : null;
+    const syntheticDivisionSourceId = meta.divisionId ? `division:${meta.divisionId}` : null;
+    const parentSourceId =
+      divisionSourceId ?? syntheticDivisionSourceId ?? programSourceIdByProgramId.get(meta.programId) ?? source.parentSourceId;
+
+    if (meta.divisionId && division && !divisionSourceId) {
+      syntheticDivisionSources.set(meta.divisionId, {
+        id: `division:${meta.divisionId}`,
+        orgId,
+        name: division.name || "Division",
+        scopeType: "division",
+        scopeId: meta.divisionId,
+        scopeLabel: division.name || null,
+        parentSourceId: programSourceIdByProgramId.get(meta.programId) ?? "group:programs",
+        purposeDefaults: source.purposeDefaults,
+        audienceDefaults: source.audienceDefaults,
+        isCustomCalendar: false,
+        isActive: true,
+        displayJson: {
+          synthetic: true,
+          kind: "division_group",
+          programId: meta.programId
+        },
+        createdBy: source.createdBy,
+        updatedBy: source.updatedBy,
+        createdAt: source.createdAt,
+        updatedAt: source.updatedAt
+      });
+    }
+
+    return {
+      ...source,
+      parentSourceId,
+      displayJson: {
+        ...source.displayJson,
+        programId: meta.programId,
+        programName: program?.name ?? null,
+        divisionId: meta.divisionId,
+        divisionName: division?.name ?? null,
+        teamNodeName: meta.teamNodeName,
+        teamCalendarVisibility: effectiveVisibility,
+        teamCalendarVisibilityForcedBy: forcedBy
+      }
+    };
+  });
+
+  const withProgramGroup = enrichedSources.map((source) => {
+    if (source.scopeType === "program") {
+      return {
+        ...source,
+        parentSourceId: "group:programs"
+      };
+    }
+    if (source.scopeType === "division") {
+      const divisionProgramId =
+        (source.scopeId ? divisionById.get(source.scopeId)?.programId ?? null : null) ??
+        (typeof source.displayJson.programId === "string" ? source.displayJson.programId : null);
+      return {
+        ...source,
+        parentSourceId: divisionProgramId ? (programSourceIdByProgramId.get(divisionProgramId) ?? "group:programs") : "group:programs",
+        displayJson: {
+          ...source.displayJson,
+          ...(divisionProgramId ? { programId: divisionProgramId } : {})
+        }
+      };
+    }
+    if (source.scopeType === "organization" || source.scopeType === "custom") {
+      return {
+        ...source,
+        parentSourceId: "group:organization"
+      };
+    }
+    return source;
+  });
+
+  const syntheticGroups: CalendarSource[] = [
+    {
+      id: "group:programs",
+      orgId,
+      name: "Programs",
+      scopeType: "custom",
+      scopeId: null,
+      scopeLabel: "Programs",
+      parentSourceId: null,
+      purposeDefaults: [],
+      audienceDefaults: [],
+      isCustomCalendar: false,
+      isActive: true,
+      displayJson: { synthetic: true, kind: "group_programs" },
+      createdBy: null,
+      updatedBy: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "group:organization",
+      orgId,
+      name: "Organization Calendars",
+      scopeType: "custom",
+      scopeId: null,
+      scopeLabel: "Organization Calendars",
+      parentSourceId: null,
+      purposeDefaults: [],
+      audienceDefaults: [],
+      isCustomCalendar: false,
+      isActive: true,
+      displayJson: { synthetic: true, kind: "group_org" },
+      createdBy: null,
+      updatedBy: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ];
+
+  const allSources = [...syntheticGroups, ...withProgramGroup, ...Array.from(syntheticDivisionSources.values())];
+  const usageByColor = new Map<string, number>();
+  for (const color of calendarColorPalette) {
+    usageByColor.set(color.toLowerCase(), 0);
+  }
+
+  for (const source of allSources) {
+    const color = readSourceColor(source.displayJson);
+    if (!color) {
+      continue;
+    }
+    if (!usageByColor.has(color)) {
+      continue;
+    }
+    usageByColor.set(color, (usageByColor.get(color) ?? 0) + 1);
+  }
+
+  return allSources.map((source) => {
+    if (hasSourceColor(source.displayJson)) {
+      return source;
+    }
+
+    const nextColor = [...calendarColorPalette]
+      .map((color) => color.toLowerCase())
+      .sort((left, right) => {
+        const leftCount = usageByColor.get(left) ?? 0;
+        const rightCount = usageByColor.get(right) ?? 0;
+        if (leftCount !== rightCount) {
+          return leftCount - rightCount;
+        }
+        return left.localeCompare(right);
+      })[0];
+
+    usageByColor.set(nextColor, (usageByColor.get(nextColor) ?? 0) + 1);
+
+    return {
+      ...source,
+      displayJson: {
+        ...source.displayJson,
+        color: nextColor
+      }
+    };
+  });
+}
+
 export async function listCalendarReadModel(orgId: string): Promise<CalendarReadModel> {
   const [sources, entries, rules, occurrences, exceptions, configurations, allocations, ruleAllocations, invites] = await Promise.all([
     listCalendarSources(orgId).catch(() => []),
@@ -1671,9 +1989,10 @@ export async function listCalendarReadModel(orgId: string): Promise<CalendarRead
     listCalendarRuleFacilityAllocations(orgId),
     listOccurrenceTeamInvites(orgId, { includeInactive: true })
   ]);
+  const hierarchicalSources = await buildCalendarSourceHierarchy(orgId, sources);
 
   return {
-    sources,
+    sources: hierarchicalSources,
     entries,
     rules,
     occurrences,

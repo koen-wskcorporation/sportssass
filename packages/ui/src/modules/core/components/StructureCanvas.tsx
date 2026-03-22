@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import type { CanvasViewportHandle } from "@orgframe/ui/ui/canvas-viewport";
 import { StructureCanvasShell, type StructureSearchItem } from "@orgframe/ui/modules/core/components/StructureCanvasShell";
 import { StructureNode } from "@orgframe/ui/modules/core/components/StructureNode";
+import { getFacilityPolygonGeometry } from "@orgframe/ui/modules/facilities/lib/polygon-geometry";
 import type { FacilitySpace } from "@/modules/facilities/types";
 import type { ProgramNode } from "@/modules/programs/types";
 
@@ -81,12 +82,18 @@ function getRoomLayout(space: FacilitySpace, index: number) {
   const fallbackY = CANVAS_GRID_PITCH + Math.floor(index / 6) * 150;
   const rawWidth = Math.max(NODE_MIN_SIZE, asNumber(floorPlan.width, CANVAS_GRID_SIZE * 8));
   const rawHeight = Math.max(NODE_MIN_SIZE, asNumber(floorPlan.height, CANVAS_GRID_SIZE * 5));
+  const geometry = getFacilityPolygonGeometry(floorPlan, {
+    x: fallbackX,
+    y: fallbackY,
+    width: rawWidth,
+    height: rawHeight
+  });
 
   return {
-    x: snapToGrid(asNumber(floorPlan.x, fallbackX)),
-    y: snapToGrid(asNumber(floorPlan.y, fallbackY)),
-    width: snapSizeToGrid(rawWidth),
-    height: snapSizeToGrid(rawHeight)
+    x: snapToGrid(geometry.bounds.left),
+    y: snapToGrid(geometry.bounds.top),
+    width: snapSizeToGrid(geometry.bounds.width),
+    height: snapSizeToGrid(geometry.bounds.height)
   };
 }
 
@@ -348,6 +355,9 @@ export function StructureCanvas(props: StructureCanvasProps) {
     if (viewContent) {
       return viewContent;
     }
+    if (editContent) {
+      return editContent;
+    }
     if (mapMode === "facility") {
       return (
         <>
@@ -393,6 +403,7 @@ export function StructureCanvas(props: StructureCanvasProps) {
     return children ?? null;
   }, [
     children,
+    editContent,
     facilityConflictedIds,
     facilityRooms,
     facilitySelectedIds,
@@ -403,7 +414,7 @@ export function StructureCanvas(props: StructureCanvasProps) {
     viewContent
   ]);
 
-  const resolvedEditContent = editContent ?? children ?? null;
+  const resolvedEditContent = editContent ?? viewContent ?? children ?? null;
 
   const resolvedOnViewNodeSelect =
     onViewNodeSelect ??

@@ -60,7 +60,7 @@ Best for:
 - `packages/ui/src/shared/AccountMenu.tsx` -> `Popover`
 
 ### Kept as panel (contextual editing)
-- `packages/ui/src/calendar/UnifiedCalendar.tsx` and `packages/ui/src/modules/calendar/components/UnifiedCalendar.tsx` (`Create event`)
+- `packages/ui/src/calendar/Calendar.tsx` and `packages/ui/src/modules/calendar/components/CalendarWorkspace.tsx` (`Create event`)
 - `packages/ui/src/modules/ai/components/AiAssistantLauncher.tsx` (`AI Assistant`)
 - `packages/ui/src/modules/events/components/EventsManagePanel.tsx` (`Create/Edit event`)
 - `packages/ui/src/modules/facilities/components/FacilitySchedulePanel.tsx` (`Create/Edit rule`)

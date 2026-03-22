@@ -9,12 +9,15 @@ type PopoverPlacement = "bottom-start" | "bottom-end" | "top-start" | "top-end";
 type PopoverProps = {
   open: boolean;
   onClose: () => void;
-  anchorRef: React.RefObject<HTMLElement | null>;
+  anchorRef?: React.RefObject<HTMLElement | null>;
+  anchorPoint?: { x: number; y: number } | null;
   children: React.ReactNode;
   className?: string;
   placement?: PopoverPlacement;
   offset?: number;
   viewportPadding?: number;
+  dismissOnAnchorPointerDown?: boolean;
+  portal?: boolean;
 };
 
 function resolveVerticalPlacement(preferred: PopoverPlacement, anchorRect: DOMRect, popoverHeight: number, viewportPadding: number, offset: number) {
@@ -38,11 +41,14 @@ export function Popover({
   open,
   onClose,
   anchorRef,
+  anchorPoint,
   children,
   className,
   placement = "bottom-end",
   offset = 8,
-  viewportPadding = 12
+  viewportPadding = 12,
+  dismissOnAnchorPointerDown = false,
+  portal = true
 }: PopoverProps) {
   const popoverRef = React.useRef<HTMLDivElement | null>(null);
   const onCloseRef = React.useRef(onClose);
@@ -69,14 +75,24 @@ export function Popover({
 
     setPosition((current) => ({ ...current, visible: false }));
 
-    const anchor = anchorRef.current;
     const popover = popoverRef.current;
-    if (!anchor || !popover) {
+    if (!popover) {
       return;
     }
 
     const updatePosition = () => {
-      const anchorRect = anchor.getBoundingClientRect();
+      const anchorRect =
+        anchorPoint !== null && anchorPoint !== undefined
+          ? ({
+              left: anchorPoint.x,
+              right: anchorPoint.x,
+              top: anchorPoint.y,
+              bottom: anchorPoint.y
+            } as DOMRect)
+          : anchorRef?.current?.getBoundingClientRect();
+      if (!anchorRect) {
+        return;
+      }
       const popoverWidth = popover.offsetWidth;
       const popoverHeight = popover.offsetHeight;
       const verticalPlacement = resolveVerticalPlacement(placement, anchorRect, popoverHeight, viewportPadding, offset);
@@ -104,12 +120,12 @@ export function Popover({
         onCloseRef.current();
       }
     };
-    const onPointerDown = (event: MouseEvent) => {
+    const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (popoverRef.current?.contains(target)) {
         return;
       }
-      if (anchorRef.current?.contains(target)) {
+      if (!dismissOnAnchorPointerDown && anchorRef?.current?.contains(target)) {
         return;
       }
       onCloseRef.current();
@@ -118,21 +134,21 @@ export function Popover({
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, { passive: true });
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("pointerdown", onPointerDown);
 
     return () => {
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition);
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [anchorRef, mounted, offset, open, placement, viewportPadding]);
+  }, [anchorPoint, anchorRef, dismissOnAnchorPointerDown, mounted, offset, open, placement, viewportPadding]);
 
   if (!open || !mounted) {
     return null;
   }
 
-  return createPortal(
+  const content = (
     <div
       className={cn(
         "fixed z-[1300] w-[20rem] max-w-[calc(100vw-1.5rem)] origin-top-left rounded-card border bg-surface p-2 shadow-card transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none",
@@ -147,7 +163,12 @@ export function Popover({
       }}
     >
       {children}
-    </div>,
-    document.body
+    </div>
   );
+
+  if (!portal) {
+    return content;
+  }
+
+  return createPortal(content, document.body);
 }

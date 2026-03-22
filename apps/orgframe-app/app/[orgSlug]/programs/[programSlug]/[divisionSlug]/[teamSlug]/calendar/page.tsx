@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
 import { Alert } from "@orgframe/ui/ui/alert";
 import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { CalendarWorkspace } from "@orgframe/ui/modules/calendar/components/CalendarWorkspace";
-import { listCalendarReadModel, listOrgActiveTeams } from "@/modules/calendar/db/queries";
-import { listFacilityReservationReadModel } from "@/modules/facilities/db/queries";
+import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
 import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
 import { can } from "@/lib/permissions/can";
+import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
+import { scopeCalendarReadModelByContext } from "@/modules/calendar/read-model-scope";
 import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
 
 type TeamCalendarPageProps = {
@@ -46,29 +46,27 @@ export default async function ProgramTeamCalendarPage({ params }: TeamCalendarPa
     notFound();
   }
 
-  const [calendarReadModel, facilityReadModel, activeTeams] = canReadPrograms
-    ? await Promise.all([
-        listCalendarReadModel(orgRequest.org.orgId).catch(() => null),
-        listFacilityReservationReadModel(orgRequest.org.orgId).catch(() => null),
-        listOrgActiveTeams(orgRequest.org.orgId).catch(() => [])
-      ])
-    : [null, null, []];
+  const workspaceData = canReadPrograms ? await getCalendarWorkspaceDataAction({ orgSlug }) : null;
+  const scopedReadModel =
+    workspaceData?.ok
+      ? scopeCalendarReadModelByContext({
+          readModel: workspaceData.data.readModel,
+          teamId: team.id
+        })
+      : null;
 
   return (
     <main className="app-page-shell w-full pb-8 pt-0 md:pb-10 md:pt-0">
       <div className="ui-stack-page">
         <PageHeader description={`Team in ${division.name}.`} title={team.name} />
         {!canReadPrograms ? <Alert variant="info">Team calendar visibility is limited to team staff.</Alert> : null}
-        {canReadPrograms && calendarReadModel ? (
-          <CalendarWorkspace
-            activeTeams={activeTeams}
+        {canReadPrograms && workspaceData?.ok && scopedReadModel ? (
+          <ManageCalendarSection
+            activeTeams={workspaceData.data.activeTeams}
             canWrite={canWritePrograms}
-            initialFacilityReadModel={facilityReadModel ?? undefined}
-            initialReadModel={calendarReadModel}
-            mode="team"
+            initialFacilityReadModel={workspaceData.data.facilityReadModel}
+            initialReadModel={scopedReadModel}
             orgSlug={orgSlug}
-            teamId={team.id}
-            teamLabel={`${division.name}/${team.name}`}
           />
         ) : null}
       </div>

@@ -1,4 +1,4 @@
-# Sports SaaS
+# OrgFrame
 
 Early-stage Next.js App Router project for multi-tenant sports organizations.
 

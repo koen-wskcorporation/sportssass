@@ -1,7 +1,7 @@
 "use client";
 
 import { Copy, Lock, Settings2, Trash2 } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@orgframe/ui/ui/button";
 import { Popover } from "@orgframe/ui/ui/popover";
@@ -30,7 +30,13 @@ export type StructureNodeProps = {
     canDuplicate?: boolean;
     canDelete?: boolean;
   };
+  quickActionsTrigger?: "click" | "doubleClick";
+  quickActionsHitTest?: (event: React.MouseEvent<HTMLDivElement>) => boolean;
   forceSingleLine?: boolean;
+  chromeless?: boolean;
+  centerContent?: boolean;
+  chipsAboveTitle?: boolean;
+  centerContentPosition?: { left: string; top: string };
   className?: string;
   style?: React.CSSProperties;
   onClick?: React.MouseEventHandler<HTMLDivElement>;
@@ -56,7 +62,13 @@ export function StructureNode({
   draggable = false,
   dragHandleProps,
   quickActions,
+  quickActionsTrigger = "click",
+  quickActionsHitTest,
   forceSingleLine = false,
+  chromeless = false,
+  centerContent = false,
+  chipsAboveTitle = false,
+  centerContentPosition,
   className,
   style,
   onClick,
@@ -68,97 +80,140 @@ export function StructureNode({
   children
 }: StructureNodeProps) {
   const [actionsOpen, setActionsOpen] = useState(false);
-  const actionAnchorRef = useRef<HTMLDivElement | null>(null);
-  const actionPointerAnchorRef = useRef<HTMLSpanElement | null>(null);
+  const nodeRef = useRef<HTMLDivElement | null>(null);
   const [actionPointer, setActionPointer] = useState<{ x: number; y: number } | null>(null);
+  const actionOwnerId = useId();
   const hasQuickActions = Boolean(quickActions && (quickActions.onEdit || quickActions.onDuplicate || quickActions.onDelete));
+
+  const openQuickActions = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasQuickActions) {
+      return;
+    }
+    if (quickActionsHitTest && !quickActionsHitTest(event)) {
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("structure-node-actions-open", { detail: { ownerId: actionOwnerId } }));
+    setActionPointer({
+      x: Math.round(event.clientX + 10),
+      y: Math.round(event.clientY + 10)
+    });
+    setActionsOpen(true);
+  };
+
+  useEffect(() => {
+    if (!actionsOpen) {
+      return;
+    }
+
+    const closeOnExternalOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ ownerId?: string }>).detail;
+      if (!detail?.ownerId || detail.ownerId === actionOwnerId) {
+        return;
+      }
+      setActionsOpen(false);
+      setActionPointer(null);
+    };
+
+    window.addEventListener("structure-node-actions-open", closeOnExternalOpen as EventListener);
+    return () => {
+      window.removeEventListener("structure-node-actions-open", closeOnExternalOpen as EventListener);
+    };
+  }, [actionOwnerId, actionsOpen]);
 
   return (
     <>
       <div
         className={cn(
-          "rounded-control border bg-surface px-2 py-1 shadow-sm transition-[left,top,width,height,transform,box-shadow,border-color,background-color] duration-100 ease-out",
-          "hover:-translate-y-[1px] hover:shadow-floating",
-          selected ? "border-accent bg-accent/10" : structural ? "border-dashed border-border/80 bg-surface/70" : "border-border",
-          focused ? "ring-2 ring-accent/60" : "",
-          conflicted ? "border-destructive/70 bg-destructive/10" : "",
+          chromeless
+            ? "relative px-3 py-2"
+            : "rounded-control border bg-surface px-3 py-2 shadow-sm transition-[box-shadow,border-color,background-color] duration-100 ease-out",
+          chromeless ? "" : "hover:shadow-floating",
+          chromeless ? "" : selected ? "border-accent bg-accent/10" : structural ? "border-dashed border-border/80 bg-surface/70" : "border-border",
+          chromeless ? "" : focused ? "ring-2 ring-accent/60" : "",
+          chromeless ? "" : conflicted ? "border-destructive/70 bg-destructive/10" : "",
           className
         )}
         data-canvas-pan-ignore="true"
         data-structure-node-id={nodeId}
         onClick={(event) => {
           onClick?.(event);
-          if (hasQuickActions) {
-            setActionPointer({
-              x: Math.round(event.clientX + 10),
-              y: Math.round(event.clientY + 10)
-            });
-            setActionsOpen(true);
+          if (quickActionsTrigger === "click") {
+            openQuickActions(event);
           }
         }}
-        onDoubleClick={onDoubleClick}
+        onDoubleClick={(event) => {
+          onDoubleClick?.(event);
+          if (quickActionsTrigger === "doubleClick") {
+            openQuickActions(event);
+          }
+        }}
         onPointerDown={onPointerDown}
         onPointerEnter={onPointerEnter}
         onPointerLeave={onPointerLeave}
         onPointerMove={onPointerMove}
-        ref={actionAnchorRef}
+        ref={nodeRef}
         style={style}
         {...(draggable ? (dragHandleProps?.attributes ?? {}) : {})}
         {...(draggable ? (dragHandleProps?.listeners ?? {}) : {})}
       >
-      <div className="pointer-events-none absolute inset-0">
-        <div className="pointer-events-none flex h-full w-full items-center justify-center" data-canvas-pan-ignore="true">
-          <div className="group relative inline-flex max-w-[86%] items-center rounded-full border border-border/70 bg-surface/95 px-4 py-1.5 text-center shadow-sm">
-            <div className="min-w-0 px-1.5 text-center">
-              {forceSingleLine ? (
-                <span className="flex w-full max-w-[22rem] items-center justify-center gap-2">
-                  <span className="min-w-0 truncate text-center text-xs font-semibold text-text" title={typeof title === "string" ? title : undefined}>
-                    {title}
-                  </span>
-                  {chips ? <span className="flex flex-nowrap items-center gap-1 overflow-hidden [&>*]:shrink-0">{chips}</span> : null}
-                </span>
-              ) : (
-                <span className="flex min-w-0 w-full max-w-[16rem] flex-col items-center leading-tight">
-                  <span className="block w-full truncate text-center text-xs font-semibold text-text" title={typeof title === "string" ? title : undefined}>
-                    {title}
-                  </span>
-                  {subtitle ? <span className="block w-full truncate text-center text-[11px] text-text-muted">{subtitle}</span> : null}
-                  {chips ? <span className="mt-1 flex flex-wrap items-center justify-center gap-1">{chips}</span> : null}
-                </span>
-              )}
-            </div>
+      {centerContent ? (
+        <div
+          className="pointer-events-none absolute z-[2]"
+          data-canvas-pan-ignore="true"
+          style={{
+            left: centerContentPosition?.left ?? "50%",
+            top: centerContentPosition?.top ?? "50%",
+            transform: "translate(-50%, -50%)"
+          }}
+        >
+          <div className="w-max max-w-[110%] rounded-full border border-border/70 bg-surface/95 px-3 py-2 text-center shadow-sm">
+            <span className="flex min-w-0 w-full flex-col items-center leading-tight">
+              {chips ? (
+                <span className={`flex flex-wrap items-center justify-center gap-1 ${chipsAboveTitle ? "mb-1" : ""}`}>{chips}</span>
+              ) : null}
+              <span className="block min-w-0 max-w-full truncate text-xs font-semibold text-text" title={typeof title === "string" ? title : undefined}>
+                {title}
+              </span>
+              {subtitle ? <span className="block w-full truncate text-[11px] text-text-muted">{subtitle}</span> : null}
+            </span>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="relative z-[1] min-w-0 text-left" data-canvas-pan-ignore="true">
+          {forceSingleLine ? (
+            <span className="flex min-w-0 w-full items-center gap-2">
+              <span className="min-w-0 truncate text-xs font-semibold text-text" title={typeof title === "string" ? title : undefined}>
+                {title}
+              </span>
+              {chips ? <span className="flex flex-nowrap items-center gap-1 overflow-hidden [&>*]:shrink-0">{chips}</span> : null}
+            </span>
+          ) : (
+            <span className="flex min-w-0 w-full flex-col leading-tight">
+              <span className="flex w-full flex-wrap items-center gap-1">
+                <span className="min-w-0 max-w-full truncate text-xs font-semibold text-text" title={typeof title === "string" ? title : undefined}>
+                  {title}
+                </span>
+                {chips ? <span className="flex flex-wrap items-center gap-1">{chips}</span> : null}
+              </span>
+              {subtitle ? <span className="block w-full truncate text-[11px] text-text-muted">{subtitle}</span> : null}
+            </span>
+          )}
+        </div>
+      )}
 
         {(movementLocked || sizeLocked) ? (
-          <span className="absolute right-1 top-1 inline-flex items-center gap-1 rounded-control border bg-surface/95 px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">
+          <span className="absolute bottom-1 right-1 inline-flex items-center rounded-control border bg-surface/95 p-1 text-text-muted" aria-label="Locked" title="Locked">
             <Lock className="h-3 w-3" />
-            Locked
           </span>
         ) : null}
 
         {hasQuickActions ? (
           <>
-            <span
-              aria-hidden
-              className="pointer-events-none fixed h-px w-px"
-              ref={actionPointerAnchorRef}
-              style={
-                actionPointer
-                  ? {
-                      left: `${actionPointer.x}px`,
-                      top: `${actionPointer.y}px`
-                    }
-                  : {
-                      left: "-9999px",
-                      top: "-9999px"
-                    }
-              }
-            />
             <Popover
-              anchorRef={actionPointer ? actionPointerAnchorRef : actionAnchorRef}
+              anchorPoint={actionPointer}
+              anchorRef={nodeRef}
               className="w-auto rounded-[999px] border border-border/70 bg-surface/95 p-1 shadow-floating backdrop-blur animate-in fade-in zoom-in-95 duration-150 ease-out"
+              dismissOnAnchorPointerDown
               offset={6}
               onClose={() => {
                 setActionsOpen(false);

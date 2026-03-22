@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@orgframe/ui/ui/button";
-import { Panel } from "@orgframe/ui/ui/panel";
+import { Popup } from "@orgframe/ui/ui/popup";
 import { cn } from "@/lib/utils";
 
 type EditorSettingsDialogProps = {
@@ -24,26 +24,27 @@ export function EditorSettingsDialog({
   children,
   className,
   contentClassName,
-  size: _size = "md",
+  size = "md",
   footer
 }: EditorSettingsDialogProps) {
   return (
-    <Panel
+    <Popup
       contentClassName={cn("break-words [&_*]:max-w-full [&_*]:min-w-0", contentClassName)}
       footer={
         footer ?? (
-          <Button onClick={onClose} size="sm" variant="secondary">
-            Done
+          <Button onClick={onClose} size="sm">
+            Save
           </Button>
         )
       }
       onClose={onClose}
       open={open}
-      panelClassName={className}
+      popupClassName={className}
+      size={size}
       subtitle={description}
       title={title}
     >
       <div className="min-w-0">{children}</div>
-    </Panel>
+    </Popup>
   );
 }

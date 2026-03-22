@@ -52,6 +52,15 @@ type ProgramEditorPanelProps = {
   };
 };
 
+type TeamCalendarVisibility = "team_members" | "program_members" | "org_members";
+
+function parseTeamCalendarVisibility(value: unknown): TeamCalendarVisibility | null {
+  if (value === "team_members" || value === "program_members" || value === "org_members") {
+    return value;
+  }
+  return null;
+}
+
 function slugify(value: string) {
   return value
     .trim()
@@ -573,6 +582,12 @@ export function ProgramEditorPanel({
   const [startDate, setStartDate] = useState(data.program.startDate ?? "");
   const [endDate, setEndDate] = useState(data.program.endDate ?? "");
   const [coverImagePath, setCoverImagePath] = useState(data.program.coverImagePath ?? "");
+  const [programTeamCalendarVisibilityDefault, setProgramTeamCalendarVisibilityDefault] = useState<TeamCalendarVisibility>(
+    parseTeamCalendarVisibility(data.program.settingsJson.calendarTeamVisibilityDefault) ?? "team_members"
+  );
+  const [programTeamCalendarVisibilityForced, setProgramTeamCalendarVisibilityForced] = useState<TeamCalendarVisibility | "">(
+    parseTeamCalendarVisibility(data.program.settingsJson.calendarTeamVisibilityForced) ?? ""
+  );
 
   const [nodeName, setNodeName] = useState("");
   const [nodeSlug, setNodeSlug] = useState("");
@@ -587,6 +602,8 @@ export function ProgramEditorPanel({
   const [editingCapacity, setEditingCapacity] = useState("");
   const [editingWaitlistEnabled, setEditingWaitlistEnabled] = useState(true);
   const [editingPublished, setEditingPublished] = useState(true);
+  const [editingTeamCalendarVisibilityDefault, setEditingTeamCalendarVisibilityDefault] = useState<TeamCalendarVisibility>("team_members");
+  const [editingTeamCalendarVisibilityForced, setEditingTeamCalendarVisibilityForced] = useState<TeamCalendarVisibility | "">("");
 
   const [scheduleType, setScheduleType] = useState<"date_range" | "meeting_pattern" | "one_off">("date_range");
   const [scheduleTitle, setScheduleTitle] = useState("");
@@ -723,7 +740,9 @@ export function ProgramEditorPanel({
         endDate,
         coverImagePath,
         registrationOpenAt: data.program.registrationOpenAt ?? undefined,
-        registrationCloseAt: data.program.registrationCloseAt ?? undefined
+        registrationCloseAt: data.program.registrationCloseAt ?? undefined,
+        calendarTeamVisibilityDefault: programTeamCalendarVisibilityDefault,
+        calendarTeamVisibilityForced: programTeamCalendarVisibilityForced || null
       });
 
       if (!result.ok) {
@@ -840,6 +859,8 @@ export function ProgramEditorPanel({
     setEditingCapacity(node.capacity?.toString() ?? "");
     setEditingWaitlistEnabled(node.waitlistEnabled);
     setEditingPublished(isProgramNodePublished(node));
+    setEditingTeamCalendarVisibilityDefault(parseTeamCalendarVisibility(node.settingsJson.calendarTeamVisibilityDefault) ?? "team_members");
+    setEditingTeamCalendarVisibilityForced(parseTeamCalendarVisibility(node.settingsJson.calendarTeamVisibilityForced) ?? "");
     setIsNodeEditOpen(true);
   }
 
@@ -866,7 +887,9 @@ export function ProgramEditorPanel({
         nodeKind: editingNodeKind,
         capacity: editingCapacity ? Number.parseInt(editingCapacity, 10) : null,
         waitlistEnabled: editingWaitlistEnabled,
-        isPublished: editingPublished
+        isPublished: editingPublished,
+        calendarTeamVisibilityDefault: editingNodeKind === "division" ? editingTeamCalendarVisibilityDefault : undefined,
+        calendarTeamVisibilityForced: editingNodeKind === "division" ? editingTeamCalendarVisibilityForced || null : undefined
       });
 
       if (!result.ok) {
@@ -1426,6 +1449,10 @@ export function ProgramEditorPanel({
                   initialPath={coverImagePath || null}
                   initialUrl={getOrgAssetPublicUrl(coverImagePath)}
                   kind="org"
+                  entityContext={{
+                    type: "program",
+                    id: data.program.id
+                  }}
                   onChange={(asset) => setCoverImagePath(asset.path)}
                   onRemove={() => setCoverImagePath("")}
                   orgSlug={orgSlug}
@@ -1439,6 +1466,29 @@ export function ProgramEditorPanel({
               </FormField>
               <FormField label="End date">
                 <CalendarPicker onChange={setEndDate} value={endDate} />
+              </FormField>
+              <FormField label="Default team calendar visibility">
+                <Select
+                  onChange={(event) => setProgramTeamCalendarVisibilityDefault(event.target.value as TeamCalendarVisibility)}
+                  options={[
+                    { value: "team_members", label: "Team members only" },
+                    { value: "program_members", label: "Program members" },
+                    { value: "org_members", label: "Everyone in organization" }
+                  ]}
+                  value={programTeamCalendarVisibilityDefault}
+                />
+              </FormField>
+              <FormField hint="When set, team-level visibility is locked to this value." label="Force team visibility">
+                <Select
+                  onChange={(event) => setProgramTeamCalendarVisibilityForced(event.target.value as TeamCalendarVisibility | "")}
+                  options={[
+                    { value: "", label: "No override" },
+                    { value: "team_members", label: "Force team members only" },
+                    { value: "program_members", label: "Force program members" },
+                    { value: "org_members", label: "Force everyone in organization" }
+                  ]}
+                  value={programTeamCalendarVisibilityForced}
+                />
               </FormField>
             </form>
           </CardContent>
@@ -1628,6 +1678,33 @@ export function ProgramEditorPanel({
             <Checkbox checked={editingPublished} onChange={(event) => setEditingPublished(event.target.checked)} />
             Published
           </label>
+          {editingNodeKind === "division" ? (
+            <>
+              <FormField label="Division default team visibility">
+                <Select
+                  onChange={(event) => setEditingTeamCalendarVisibilityDefault(event.target.value as TeamCalendarVisibility)}
+                  options={[
+                    { value: "team_members", label: "Team members only" },
+                    { value: "program_members", label: "Program members" },
+                    { value: "org_members", label: "Everyone in organization" }
+                  ]}
+                  value={editingTeamCalendarVisibilityDefault}
+                />
+              </FormField>
+              <FormField hint="When set, teams in this division cannot override visibility." label="Force team visibility">
+                <Select
+                  onChange={(event) => setEditingTeamCalendarVisibilityForced(event.target.value as TeamCalendarVisibility | "")}
+                  options={[
+                    { value: "", label: "No override" },
+                    { value: "team_members", label: "Force team members only" },
+                    { value: "program_members", label: "Force program members" },
+                    { value: "org_members", label: "Force everyone in organization" }
+                  ]}
+                  value={editingTeamCalendarVisibilityForced}
+                />
+              </FormField>
+            </>
+          ) : null}
         </form>
           </Panel>
 
