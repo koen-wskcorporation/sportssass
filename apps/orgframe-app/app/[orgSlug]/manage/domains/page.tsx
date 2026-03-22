@@ -6,6 +6,7 @@ import { PageStack } from "@orgframe/ui/ui/layout";
 import { PageHeader } from "@orgframe/ui/ui/page-header";
 import { getPlatformHost } from "@/lib/domains/customDomains";
 import { buildGoDaddyQuickConnect, type GoDaddyQuickConnect } from "@/lib/domains/domainConnect";
+import { getVercelDomainDnsInstructions, type VercelDnsInstruction } from "@/lib/domains/vercelProjectDomains";
 import { can } from "@/lib/permissions/can";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { createSupabaseServer } from "@/lib/supabase/server";
@@ -39,6 +40,13 @@ type DomainRecord = {
   verification_token: string;
   verified_at: string | null;
   last_error: string | null;
+};
+
+type RequiredDnsRecord = {
+  type: string;
+  host: string;
+  value: string;
+  note: string | null;
 };
 
 const defaultQuickConnect: GoDaddyQuickConnect = {
@@ -85,6 +93,38 @@ export default async function OrgManageDomainsPage({
           verificationToken: customDomain.verification_token
         })
       : defaultQuickConnect;
+  const requiredDnsRecords: RequiredDnsRecord[] = customDomain
+    ? [
+        {
+          type: "TXT",
+          host: `_orgframe-verification.${customDomain.domain}`,
+          value: customDomain.verification_token,
+          note: "OrgFrame ownership verification"
+        }
+      ]
+    : [];
+
+  if (customDomain) {
+    const vercelRecords = await getVercelDomainDnsInstructions(customDomain.domain);
+
+    if (vercelRecords.ok && vercelRecords.records.length > 0) {
+      vercelRecords.records.forEach((record: VercelDnsInstruction) => {
+        requiredDnsRecords.push({
+          type: record.type,
+          host: record.host,
+          value: record.value,
+          note: record.reason ?? "Required by Vercel"
+        });
+      });
+    } else if (vercelRecords.ok && vercelRecords.records.length === 0) {
+      requiredDnsRecords.push({
+        type: "CNAME",
+        host: customDomain.domain,
+        value: platformHost,
+        note: "Fallback routing target"
+      });
+    }
+  }
 
   return (
     <PageStack>
@@ -164,6 +204,7 @@ export default async function OrgManageDomainsPage({
         initialOpen={setupOpen}
         initialStep={setupStep}
         quickConnect={quickConnect}
+        requiredDnsRecords={requiredDnsRecords}
         orgSlug={orgSlug}
         platformHost={platformHost}
         saveAction={saveOrgCustomDomainAction.bind(null, orgSlug)}

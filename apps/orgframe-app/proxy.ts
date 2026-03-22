@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   normalizeHost,
+  getPlatformHost,
   getPlatformHosts,
   getTenantBaseHosts,
   shouldSkipCustomDomainRoutingPath,
@@ -83,6 +84,15 @@ export async function proxy(request: NextRequest) {
     const orgSlug = await resolveOrgSlugForDomain(host);
 
     if (orgSlug) {
+      if (shouldForceOrgDashboardHost(request.nextUrl.pathname)) {
+        const protocol = getRequestProtocol(request);
+        const dashboardHost = `${orgSlug}.${getPlatformHost()}`;
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.protocol = `${protocol}:`;
+        redirectUrl.hostname = dashboardHost;
+        return NextResponse.redirect(redirectUrl, { status: 307 });
+      }
+
       const prefix = `/${orgSlug}`;
       const currentPathname = request.nextUrl.pathname;
       const alreadyOrgPrefixed = currentPathname === prefix || currentPathname.startsWith(`${prefix}/`);
@@ -145,4 +155,17 @@ function stripOrgPrefixPath(pathname: string, prefix: string) {
 
   const stripped = pathname.slice(prefix.length);
   return stripped.startsWith("/") ? stripped : `/${stripped}`;
+}
+
+function getRequestProtocol(request: NextRequest) {
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (forwardedProto === "http" || forwardedProto === "https") {
+    return forwardedProto;
+  }
+
+  return request.nextUrl.protocol === "https:" ? "https" : "http";
+}
+
+function shouldForceOrgDashboardHost(pathname: string) {
+  return pathname.startsWith("/manage") || pathname.startsWith("/tools");
 }

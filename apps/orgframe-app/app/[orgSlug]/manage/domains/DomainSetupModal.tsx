@@ -26,6 +26,13 @@ type GoDaddyQuickConnect = {
   providerLabel: string;
 };
 
+type RequiredDnsRecord = {
+  type: string;
+  host: string;
+  value: string;
+  note: string | null;
+};
+
 type RegistrarOption = {
   key: string;
   label: string;
@@ -96,6 +103,7 @@ export function DomainSetupModal({
   initialOpen,
   initialStep,
   quickConnect,
+  requiredDnsRecords,
   orgSlug,
   platformHost,
   saveAction,
@@ -109,6 +117,7 @@ export function DomainSetupModal({
   initialStep: number;
   initialMethod: string | null;
   quickConnect: GoDaddyQuickConnect;
+  requiredDnsRecords: RequiredDnsRecord[];
   saveAction: (formData: FormData) => void;
   verifyAction: (formData: FormData) => void;
 }) {
@@ -272,35 +281,35 @@ export function DomainSetupModal({
                   </div>
                 ) : null}
 
-                <details className="rounded-card border bg-surface p-3">
-                  <summary className="cursor-pointer text-sm font-semibold text-text">Need manual DNS values instead?</summary>
+                <div className="rounded-card border bg-surface p-3">
+                  <p className="text-sm font-semibold text-text">DNS records to add</p>
+                  <p className="mt-1 text-xs text-text-muted">Add every record below exactly as shown at your DNS provider.</p>
                   <div className="mt-3 space-y-3">
-                    <FormField label="Verification TXT host">
-                      <div className="flex items-center gap-2">
-                        <Input readOnly value={verificationHost} />
-                        <Button onClick={() => copyValue(verificationHost, "TXT host")} size="sm" type="button" variant="secondary">
-                          Copy
-                        </Button>
+                    {requiredDnsRecords.map((record, index) => (
+                      <div className="space-y-2 rounded-control border bg-surface-muted p-3" key={`${record.type}-${record.host}-${index}`}>
+                        <p className="text-xs font-semibold text-text">{record.type}</p>
+                        <FormField label="Host / Name">
+                          <div className="flex items-center gap-2">
+                            <Input readOnly value={record.host} />
+                            <Button onClick={() => copyValue(record.host, `${record.type} host`)} size="sm" type="button" variant="secondary">
+                              Copy
+                            </Button>
+                          </div>
+                        </FormField>
+                        <FormField label="Value / Points to">
+                          <div className="flex items-center gap-2">
+                            <Input readOnly value={record.value} />
+                            <Button onClick={() => copyValue(record.value, `${record.type} value`)} size="sm" type="button" variant="secondary">
+                              Copy
+                            </Button>
+                          </div>
+                        </FormField>
+                        {record.note ? <p className="text-xs text-text-muted">{record.note}</p> : null}
                       </div>
-                    </FormField>
-                    <FormField label="Verification TXT value">
-                      <div className="flex items-center gap-2">
-                        <Input readOnly value={customDomain.verification_token} />
-                        <Button onClick={() => copyValue(customDomain.verification_token, "TXT value")} size="sm" type="button" variant="secondary">
-                          Copy
-                        </Button>
-                      </div>
-                    </FormField>
-                    <FormField label="CNAME target">
-                      <div className="flex items-center gap-2">
-                        <Input readOnly value={platformHost} />
-                        <Button onClick={() => copyValue(platformHost, "CNAME target")} size="sm" type="button" variant="secondary">
-                          Copy
-                        </Button>
-                      </div>
-                    </FormField>
+                    ))}
+                    {requiredDnsRecords.length === 0 ? <Alert variant="warning">No DNS records were generated yet. Save the domain first.</Alert> : null}
                   </div>
-                </details>
+                </div>
 
                 {customDomain.last_error ? <Alert variant="warning">Latest check: {customDomain.last_error}</Alert> : null}
               </>
