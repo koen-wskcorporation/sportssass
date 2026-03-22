@@ -49,6 +49,10 @@ type RequiredDnsRecord = {
   note: string | null;
 };
 
+function isLikelyApexDomain(domain: string) {
+  return !domain.startsWith("www.");
+}
+
 const defaultQuickConnect: GoDaddyQuickConnect = {
   available: false,
   reason: null,
@@ -123,6 +127,22 @@ export default async function OrgManageDomainsPage({
         value: platformHost,
         note: "Fallback routing target"
       });
+    } else {
+      if (isLikelyApexDomain(customDomain.domain)) {
+        requiredDnsRecords.push({
+          type: "A",
+          host: "@",
+          value: process.env.VERCEL_APEX_A_RECORD?.trim() || "216.198.79.1",
+          note: "Apex/root fallback for Vercel. If Vercel dashboard shows a different IP, use Vercel's value."
+        });
+      } else {
+        requiredDnsRecords.push({
+          type: "CNAME",
+          host: customDomain.domain,
+          value: platformHost,
+          note: "Subdomain fallback routing target"
+        });
+      }
     }
   }
 

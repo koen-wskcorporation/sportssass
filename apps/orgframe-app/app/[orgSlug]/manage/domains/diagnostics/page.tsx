@@ -6,6 +6,7 @@ import { PageStack } from "@orgframe/ui/ui/layout";
 import { PageHeader } from "@orgframe/ui/ui/page-header";
 import { getPlatformHost } from "@/lib/domains/customDomains";
 import { getDomainConnectTemplateDefinition, getGoDaddyQuickConnectDiagnostics } from "@/lib/domains/domainConnect";
+import { getVercelDomainDebugInfo } from "@/lib/domains/vercelProjectDomains";
 import { requireOrgPermission } from "@/lib/permissions/requireOrgPermission";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -62,6 +63,7 @@ export default async function DomainDiagnosticsPage({ params }: { params: Promis
     verificationHost,
     verificationToken: customDomain.verification_token
   });
+  const vercelDebug = await getVercelDomainDebugInfo(customDomain.domain);
   const template = getDomainConnectTemplateDefinition();
 
   return (
@@ -124,6 +126,41 @@ export default async function DomainDiagnosticsPage({ params }: { params: Promis
           <div className="space-y-1">
             <p className="ui-kv-label">Apply URL</p>
             <p className="ui-kv-value break-all">{diagnostics.apply.url ?? "Not available yet"}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Vercel Debug Panel</CardTitle>
+          <CardDescription>Raw Vercel domain API debug data for this exact domain.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-2">
+            <div className="rounded-card border bg-surface p-3 text-xs">
+              <p className="font-semibold text-text">Config</p>
+              <p className="mt-1 text-text-muted">Has token: {vercelDebug.configured.hasToken ? "yes" : "no"}</p>
+              <p className="text-text-muted">Token preview: {vercelDebug.configured.tokenPreview ?? "missing"}</p>
+              <p className="text-text-muted">Project: {vercelDebug.configured.projectIdOrName ?? "missing"}</p>
+              <p className="text-text-muted">Team ID: {vercelDebug.configured.teamId ?? "not set"}</p>
+              <p className="text-text-muted">Team Slug: {vercelDebug.configured.teamSlug ?? "not set"}</p>
+            </div>
+            <div className="rounded-card border bg-surface p-3 text-xs">
+              <p className="font-semibold text-text">Response</p>
+              <p className="mt-1 text-text-muted">Status: {vercelDebug.response.status ?? "n/a"}</p>
+              <p className="text-text-muted">OK: {vercelDebug.response.ok ? "yes" : "no"}</p>
+              <p className="text-text-muted">Verified: {vercelDebug.response.verified === null ? "n/a" : vercelDebug.response.verified ? "yes" : "no"}</p>
+              <p className="text-text-muted">Verification records: {vercelDebug.response.verificationCount ?? "n/a"}</p>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="ui-kv-label">Request URL</p>
+            <p className="ui-kv-value break-all">{vercelDebug.request.url ?? "Not available"}</p>
+          </div>
+          {vercelDebug.response.error ? <Alert variant="warning">{vercelDebug.response.error}</Alert> : null}
+          <div className="rounded-card border bg-surface-muted p-3">
+            <p className="mb-2 text-xs font-semibold text-text">Raw Payload</p>
+            <pre className="overflow-auto text-xs text-text">{vercelDebug.response.rawPayload ?? "No payload returned."}</pre>
           </div>
         </CardContent>
       </Card>

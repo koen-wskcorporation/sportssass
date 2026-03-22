@@ -39,6 +39,28 @@ type DnsInstructionsResult =
       message: string;
     };
 
+export type VercelDomainDebugInfo = {
+  domain: string;
+  configured: {
+    hasToken: boolean;
+    tokenPreview: string | null;
+    projectIdOrName: string | null;
+    teamId: string | null;
+    teamSlug: string | null;
+  };
+  request: {
+    url: string | null;
+  };
+  response: {
+    ok: boolean;
+    status: number | null;
+    verified: boolean | null;
+    verificationCount: number | null;
+    rawPayload: string | null;
+    error: string | null;
+  };
+};
+
 type VerifyResult =
   | {
       ok: true;
@@ -129,6 +151,18 @@ function getVercelProjectConfig() {
     token,
     projectIdOrName
   };
+}
+
+function maskToken(token: string) {
+  if (!token) {
+    return null;
+  }
+
+  if (token.length <= 8) {
+    return "*".repeat(token.length);
+  }
+
+  return `${token.slice(0, 4)}...${token.slice(-4)}`;
 }
 
 export async function attachDomainToVercelProject(domain: string): Promise<AttachResult> {
@@ -338,6 +372,85 @@ export async function verifyDomainOnVercel(domain: string): Promise<VerifyResult
       ok: false,
       reason: "api_error",
       message: "Unable to reach Vercel verification API."
+    };
+  }
+}
+
+export async function getVercelDomainDebugInfo(domain: string): Promise<VercelDomainDebugInfo> {
+  const normalizedDomain = normalizeDomain(domain);
+  const token = getEnv("VERCEL_API_TOKEN");
+  const projectIdOrName = getEnv("VERCEL_PROJECT_ID") || getEnv("VERCEL_PROJECT_NAME");
+  const teamId = getEnv("VERCEL_TEAM_ID");
+  const teamSlug = getEnv("VERCEL_TEAM_SLUG");
+
+  const configured = {
+    hasToken: Boolean(token),
+    tokenPreview: maskToken(token),
+    projectIdOrName: projectIdOrName || null,
+    teamId: teamId || null,
+    teamSlug: teamSlug || null
+  };
+
+  if (!normalizedDomain || !token || !projectIdOrName) {
+    return {
+      domain: normalizedDomain,
+      configured,
+      request: {
+        url: null
+      },
+      response: {
+        ok: false,
+        status: null,
+        verified: null,
+        verificationCount: null,
+        rawPayload: null,
+        error: "Missing Vercel config for debug request."
+      }
+    };
+  }
+
+  const url = buildProjectDomainUrl(projectIdOrName, normalizedDomain);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000)
+    });
+
+    const payload = (await response.json().catch(() => null)) as VercelProjectDomainResponse | unknown;
+    const rawPayload = payload ? JSON.stringify(payload, null, 2) : null;
+    const data = payload as VercelProjectDomainResponse;
+
+    return {
+      domain: normalizedDomain,
+      configured,
+      request: { url },
+      response: {
+        ok: response.ok,
+        status: response.status,
+        verified: typeof data?.verified === "boolean" ? data.verified : null,
+        verificationCount: Array.isArray(data?.verification) ? data.verification.length : null,
+        rawPayload,
+        error: response.ok ? null : parseApiError(payload)
+      }
+    };
+  } catch (error) {
+    return {
+      domain: normalizedDomain,
+      configured,
+      request: { url },
+      response: {
+        ok: false,
+        status: null,
+        verified: null,
+        verificationCount: null,
+        rawPayload: null,
+        error: error instanceof Error ? error.message : "Unknown debug request error."
+      }
     };
   }
 }
