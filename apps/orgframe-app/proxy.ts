@@ -34,19 +34,27 @@ function getLookupClient() {
 
 async function resolveOrgSlugForDomain(host: string) {
   const supabase = getLookupClient();
-  const { data, error } = await supabase.rpc("resolve_org_slug_for_domain", {
-    target_domain: host
-  });
+  const candidates = getDomainLookupCandidates(host);
 
-  if (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("Custom domain lookup failed:", error.message);
+  for (const candidate of candidates) {
+    const { data, error } = await supabase.rpc("resolve_org_slug_for_domain", {
+      target_domain: candidate
+    });
+
+    if (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Custom domain lookup failed:", error.message);
+      }
+
+      continue;
     }
 
-    return null;
+    if (typeof data === "string" && data.trim().length > 0) {
+      return data.trim();
+    }
   }
 
-  return typeof data === "string" && data.trim().length > 0 ? data.trim() : null;
+  return null;
 }
 
 export async function proxy(request: NextRequest) {
@@ -168,4 +176,16 @@ function getRequestProtocol(request: NextRequest) {
 
 function shouldForceOrgDashboardHost(pathname: string) {
   return pathname.startsWith("/manage") || pathname.startsWith("/tools");
+}
+
+function getDomainLookupCandidates(host: string) {
+  const candidates = new Set<string>([host]);
+
+  if (host.startsWith("www.")) {
+    candidates.add(host.slice("www.".length));
+  } else {
+    candidates.add(`www.${host}`);
+  }
+
+  return Array.from(candidates).filter(Boolean);
 }

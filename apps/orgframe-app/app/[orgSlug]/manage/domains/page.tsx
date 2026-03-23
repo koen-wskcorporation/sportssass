@@ -121,12 +121,21 @@ export default async function OrgManageDomainsPage({
         });
       });
     } else if (vercelRecords.ok && vercelRecords.records.length === 0) {
-      requiredDnsRecords.push({
-        type: "CNAME",
-        host: customDomain.domain,
-        value: platformHost,
-        note: "Fallback routing target"
-      });
+      if (isLikelyApexDomain(customDomain.domain)) {
+        requiredDnsRecords.push({
+          type: "A",
+          host: "@",
+          value: process.env.VERCEL_APEX_A_RECORD?.trim() || "216.198.79.1",
+          note: "Apex/root fallback for Vercel. If Vercel dashboard shows a different IP, use Vercel's value."
+        });
+      } else {
+        requiredDnsRecords.push({
+          type: "CNAME",
+          host: customDomain.domain,
+          value: platformHost,
+          note: "Subdomain fallback routing target"
+        });
+      }
     } else {
       if (isLikelyApexDomain(customDomain.domain)) {
         requiredDnsRecords.push({
