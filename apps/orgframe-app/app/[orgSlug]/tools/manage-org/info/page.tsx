@@ -25,5 +25,5 @@ export default async function OrgInfoLegacyPage({
   }
 
   const suffix = nextQuery.toString();
-  redirect(`/${orgSlug}/manage/info${suffix ? `?${suffix}` : ""}`);
+  redirect(`/tools/info${suffix ? `?${suffix}` : ""}`);
 }

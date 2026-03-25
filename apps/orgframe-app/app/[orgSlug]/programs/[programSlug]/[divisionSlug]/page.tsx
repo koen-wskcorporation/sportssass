@@ -1,15 +1,16 @@
 import { notFound } from "next/navigation";
-import { Alert } from "@orgframe/ui/ui/alert";
-import { Button } from "@orgframe/ui/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
-import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
-import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
-import { can } from "@/lib/permissions/can";
-import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
-import { scopeCalendarReadModelByContext } from "@/modules/calendar/read-model-scope";
-import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
-import { listProgramScheduleTimelineWithFallback } from "@/modules/programs/schedule/db/queries";
+import type { Metadata } from "next";
+import { Alert } from "@orgframe/ui/primitives/alert";
+import { Button } from "@orgframe/ui/primitives/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/primitives/card";
+import { PageHeader } from "@orgframe/ui/primitives/page-header";
+import { ManageCalendarSection } from "@/app/[orgSlug]/tools/calendar/ManageCalendarSection";
+import { getOrgRequestContext } from "@/src/shared/org/getOrgRequestContext";
+import { can } from "@/src/shared/permissions/can";
+import { getCalendarWorkspaceDataAction } from "@/src/features/calendar/actions";
+import { scopeCalendarReadModelByContext } from "@/src/features/calendar/read-model-scope";
+import { getProgramDetailsBySlug } from "@/src/features/programs/db/queries";
+import { listProgramScheduleTimelineWithFallback } from "@/src/features/programs/schedule/db/queries";
 
 type DivisionPageProps = {
   params: Promise<{ orgSlug: string; programSlug: string; divisionSlug: string }>;
@@ -41,6 +42,24 @@ function formatOccurrenceLine(input: { startsAtUtc: string; endsAtUtc: string; t
     hour: "numeric",
     minute: "2-digit"
   })} (${input.timezone})`;
+}
+
+function titleFromSlug(slug: string) {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export async function generateMetadata({ params }: DivisionPageProps): Promise<Metadata> {
+  const { divisionSlug, programSlug } = await params;
+  const divisionTitle = titleFromSlug(divisionSlug) || "Division";
+  const programTitle = titleFromSlug(programSlug) || "Program";
+
+  return {
+    title: `${divisionTitle} (${programTitle})`
+  };
 }
 
 export default async function ProgramDivisionPage({ params, searchParams }: DivisionPageProps) {
@@ -145,7 +164,7 @@ export default async function ProgramDivisionPage({ params, searchParams }: Divi
                     <p className="font-medium text-text">{team.name}</p>
                     <p className="text-xs text-text-muted">Team · {team.slug}</p>
                   </div>
-                  <Button href={`/${orgSlug}/programs/${details.program.slug}/${division.slug}/${team.slug}`} size="sm" variant="secondary">
+                  <Button href={`/programs/${details.program.slug}/${division.slug}/${team.slug}`} size="sm" variant="secondary">
                     View team
                   </Button>
                 </div>

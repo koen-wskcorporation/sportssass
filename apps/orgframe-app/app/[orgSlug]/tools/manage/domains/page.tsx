@@ -1,2 +1,6 @@
-export { metadata } from "@/app/[orgSlug]/manage/domains/page";
-export { default } from "@/app/[orgSlug]/manage/domains/page";
+import { redirect } from "next/navigation";
+
+export default async function OrgToolsManageDomainsLegacyPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  redirect(`/tools/domains`);
+}

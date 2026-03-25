@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
-import { DashboardSection, DashboardShell } from "@orgframe/ui/dashboard/DashboardShell";
-import { EmptyState } from "@orgframe/ui/dashboard/EmptyState";
-import { Button } from "@orgframe/ui/ui/button";
-import { SubmitButton } from "@orgframe/ui/ui/submit-button";
+import { DashboardSection, DashboardShell } from "@/src/features/core/dashboard/components/DashboardShell";
+import { EmptyState } from "@/src/features/core/dashboard/components/EmptyState";
+import { Button } from "@orgframe/ui/primitives/button";
+import { SubmitButton } from "@orgframe/ui/primitives/submit-button";
 import { signOutAction } from "@/app/auth/actions";
-import { getDashboardContext } from "@/lib/dashboard/getDashboardContext";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { getTenantBaseHosts, normalizeHost, resolveOrgSubdomain } from "@/lib/domains/customDomains";
+import { getDashboardContext } from "@/src/features/core/dashboard/getDashboardContext";
+import { getSessionUser } from "@/src/features/core/auth/server/getSessionUser";
+import { getPlatformHost, getTenantBaseHosts, normalizeHost, resolveOrgSubdomain } from "@/src/shared/domains/customDomains";
 import { OrganizationsRepeater } from "@/app/OrganizationsRepeater";
 
 export const metadata: Metadata = {
@@ -50,7 +50,7 @@ export default async function HomePage() {
   const host = normalizeHost(forwardedHost || headerStore.get("host"));
   const tenantBaseHosts = getTenantBaseHosts();
   const orgSubdomain = resolveOrgSubdomain(host, tenantBaseHosts);
-  const tenantBaseHost = orgSubdomain?.baseHost ?? (tenantBaseHosts.has(host) ? host : null);
+  const tenantBaseHost = orgSubdomain?.baseHost ?? (tenantBaseHosts.has(host) ? host : getPlatformHost());
   const forwardedProto = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
   const protocol =
     forwardedProto === "http" || forwardedProto === "https" ? forwardedProto : process.env.NODE_ENV === "production" ? "https" : "http";
@@ -78,7 +78,7 @@ export default async function HomePage() {
         ) : (
           <OrganizationsRepeater
             organizations={organizations.map((organization) => ({
-              href: tenantBaseHost ? `${protocol}://${organization.orgSlug}.${tenantBaseHost}/` : `/${organization.orgSlug}`,
+              href: `${protocol}://${organization.orgSlug}.${tenantBaseHost}/`,
               iconUrl: organization.iconUrl,
               orgId: organization.orgId,
               orgName: organization.orgName,

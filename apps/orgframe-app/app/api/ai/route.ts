@@ -1,14 +1,14 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import { createActAuditLog, getActAuditLogForActor, updateActAuditLog } from "@/modules/ai/audit";
-import { MissingOpenAiKeyError } from "@/modules/ai/config";
-import { resolveAiContext } from "@/modules/ai/context";
-import { runActPlanningConversation, runAskConversation } from "@/modules/ai/openai";
-import { consumeAiRateLimit } from "@/modules/ai/rate-limit";
-import { aiRequestSchema } from "@/modules/ai/schemas";
-import { createSseResponse } from "@/modules/ai/sse";
-import { runAiTool } from "@/modules/ai/tools";
-import type { AiActAuditDetail, AiConversationMessage, AiMode } from "@/modules/ai/types";
+import { createActAuditLog, getActAuditLogForActor, updateActAuditLog } from "@/src/features/ai/audit";
+import { MissingOpenAiKeyError } from "@/src/features/ai/config";
+import { resolveAiContext } from "@/src/features/ai/context";
+import { runActPlanningConversation, runAskConversation } from "@/src/features/ai/openai";
+import { consumeAiRateLimit } from "@/src/features/ai/rate-limit";
+import { aiRequestSchema } from "@/src/features/ai/schemas";
+import { createSseResponse } from "@/src/features/ai/sse";
+import { runAiTool } from "@/src/features/ai/tools";
+import type { AiActAuditDetail, AiConversationMessage, AiMode } from "@/src/features/ai/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

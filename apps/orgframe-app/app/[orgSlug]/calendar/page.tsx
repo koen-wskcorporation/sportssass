@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Alert } from "@orgframe/ui/ui/alert";
-import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
-import { CalendarWorkspace } from "@orgframe/ui/modules/calendar/components/CalendarWorkspace";
-import { listPublishedCalendarCatalog } from "@/modules/calendar/db/queries";
+import { Alert } from "@orgframe/ui/primitives/alert";
+import { PageHeader } from "@orgframe/ui/primitives/page-header";
+import { getOrgPublicContext } from "@/src/shared/org/getOrgPublicContext";
+import { CalendarWorkspace } from "@/src/features/calendar/components/CalendarWorkspace";
+import { listPublishedCalendarCatalog } from "@/src/features/calendar/db/queries";
 
 export const metadata: Metadata = {
   title: "Calendar"

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isReservedOrgSlug } from "@/lib/org/reservedSlugs";
-import { createSupabaseServer } from "@/lib/supabase/server";
-import { isReservedPageSlug } from "@/modules/site-builder/blocks/helpers";
+import { isReservedOrgSlug } from "@/src/shared/org/reservedSlugs";
+import { createSupabaseServer } from "@/src/shared/supabase/server";
+import { isReservedPageSlug } from "@/src/features/site/blocks/helpers";
 
 type SlugKind = "org" | "page" | "program" | "form";
 

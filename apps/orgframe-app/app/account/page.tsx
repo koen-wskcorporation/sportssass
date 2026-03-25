@@ -1,15 +1,15 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Alert } from "@orgframe/ui/ui/alert";
-import { AssetTile } from "@orgframe/ui/ui/asset-tile";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
-import { FormField } from "@orgframe/ui/ui/form-field";
-import { Input } from "@orgframe/ui/ui/input";
-import { PageStack } from "@orgframe/ui/ui/layout";
-import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { SubmitButton } from "@orgframe/ui/ui/submit-button";
-import { getCurrentUser } from "@/lib/auth/getCurrentUser";
-import { requireAuth } from "@/lib/auth/requireAuth";
+import { Alert } from "@orgframe/ui/primitives/alert";
+import { AssetTile } from "@orgframe/ui/primitives/asset-tile";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/primitives/card";
+import { FormField } from "@orgframe/ui/primitives/form-field";
+import { Input } from "@orgframe/ui/primitives/input";
+import { PageStack } from "@orgframe/ui/primitives/layout";
+import { PageHeader } from "@orgframe/ui/primitives/page-header";
+import { SubmitButton } from "@orgframe/ui/primitives/submit-button";
+import { getCurrentUser } from "@/src/features/core/account/server/getCurrentUser";
+import { requireAuth } from "@/src/features/core/auth/server/requireAuth";
 
 export const metadata: Metadata = {
   title: "Account"

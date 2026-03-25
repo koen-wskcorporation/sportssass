@@ -2,6 +2,8 @@
 
 Generated: 2026-03-22 (America/Detroit)
 
+> Note: This is a historical training snapshot. It intentionally contains pre-refactor paths (for example `apps/orgframe-app/modules/*`) and should not be used as the current architecture source of truth. Use `docs/architecture/folder-architecture.md` for current structure rules.
+
 ## 1) Purpose
 This document is a high-fidelity internal map of the OrgFrame/Sports SaaS codebase for training an assistant that can reason about architecture, product behavior, and implementation details without hallucinating. It is grounded in current repository code and migrations.
 
@@ -92,7 +94,7 @@ Header behavior:
 
 ### 6.3 Manage Layout (`apps/orgframe-app/app/[orgSlug]/manage/layout.tsx`)
 - Resolves org auth context and capabilities.
-- Enforces manage access; redirects forbidden users.
+- Enforces access; redirects forbidden users.
 - Uses `UniversalAppShell` + `ManageSidebar`.
 
 ### 6.4 Tools Aliasing
@@ -1408,10 +1410,10 @@ apps/orgframe-app/modules/forms/types.ts:7:export type TargetMode = "locked" | "
 apps/orgframe-app/modules/forms/types.ts:98:export type OrgFormVersion = {
 apps/orgframe-app/modules/forms/types.ts:9:export type SubmissionStatus = "submitted" | "in_review" | "approved" | "rejected" | "waitlisted" | "cancelled";
 
---- manage-access ---
-apps/orgframe-app/modules/manage-access/actions.ts:71:export type AccessMember = {
-apps/orgframe-app/modules/manage-access/actions.ts:82:export type AccessRoleDefinition = {
-apps/orgframe-app/modules/manage-access/actions.ts:91:export type AccountsAccessPageData = {
+--- access ---
+apps/orgframe-app/modules/access/actions.ts:71:export type AccessMember = {
+apps/orgframe-app/modules/access/actions.ts:82:export type AccessRoleDefinition = {
+apps/orgframe-app/modules/access/actions.ts:91:export type AccountsAccessPageData = {
 
 --- orders ---
 apps/orgframe-app/modules/orders/OrderPanelProvider.tsx:12:export const OrderPanelContext = createContext<OrderPanelContextValue | null>(null);

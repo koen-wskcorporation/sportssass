@@ -1,18 +1,18 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Alert } from "@orgframe/ui/ui/alert";
-import { Button } from "@orgframe/ui/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
-import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
-import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
-import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
-import { can } from "@/lib/permissions/can";
-import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
-import { scopeCalendarReadModelByContext } from "@/modules/calendar/read-model-scope";
-import { listPublishedFormsForProgram } from "@/modules/forms/db/queries";
-import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
-import { listProgramScheduleTimelineWithFallback } from "@/modules/programs/schedule/db/queries";
+import { Alert } from "@orgframe/ui/primitives/alert";
+import { Button } from "@orgframe/ui/primitives/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/primitives/card";
+import { PageHeader } from "@orgframe/ui/primitives/page-header";
+import { ManageCalendarSection } from "@/app/[orgSlug]/tools/calendar/ManageCalendarSection";
+import { getOrgAssetPublicUrl } from "@/src/shared/branding/getOrgAssetPublicUrl";
+import { getOrgRequestContext } from "@/src/shared/org/getOrgRequestContext";
+import { can } from "@/src/shared/permissions/can";
+import { getCalendarWorkspaceDataAction } from "@/src/features/calendar/actions";
+import { scopeCalendarReadModelByContext } from "@/src/features/calendar/read-model-scope";
+import { listPublishedFormsForProgram } from "@/src/features/forms/db/queries";
+import { getProgramDetailsBySlug } from "@/src/features/programs/db/queries";
+import { listProgramScheduleTimelineWithFallback } from "@/src/features/programs/schedule/db/queries";
 
 function titleFromSlug(slug: string) {
   return slug
@@ -160,7 +160,7 @@ export default async function OrgProgramDetailPage({
                   <p className="font-semibold text-text">{form.name}</p>
                   <p className="text-xs text-text-muted">/{orgSlug}/register/{form.slug}</p>
                   <div className="mt-2">
-                    <Button href={`/${orgSlug}/register/${form.slug}`} size="sm">
+                    <Button href={`/register/${form.slug}`} size="sm">
                       Register
                     </Button>
                   </div>
@@ -196,9 +196,9 @@ export default async function OrgProgramDetailPage({
                   const parent = node.parentId ? nodeById.get(node.parentId) ?? null : null;
                   const href =
                     node.nodeKind === "division"
-                      ? `/${orgSlug}/programs/${details.program.slug}/${node.slug}`
+                      ? `/programs/${details.program.slug}/${node.slug}`
                       : parent
-                        ? `/${orgSlug}/programs/${details.program.slug}/${parent.slug}/${node.slug}`
+                        ? `/programs/${details.program.slug}/${parent.slug}/${node.slug}`
                         : null;
 
                   return (

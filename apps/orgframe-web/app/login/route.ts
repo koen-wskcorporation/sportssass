@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabasePublicConfig } from "@/lib/supabase/config";
-import { isHttpsRequest, normalizeSupabaseCookieOptions, type SupabaseCookieToSet } from "@/lib/supabase/cookies";
+import { getSupabasePublicConfig } from "@/src/shared/supabase/config";
+import { isHttpsRequest, normalizeSupabaseCookieOptions, type SupabaseCookieToSet } from "@/src/shared/supabase/cookies";
 
 function getAppOrigin() {
   const configuredOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? process.env.ORGFRAME_APP_ORIGIN ?? "https://orgframe.app";

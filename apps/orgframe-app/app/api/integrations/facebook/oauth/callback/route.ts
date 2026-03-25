@@ -1,14 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveOrgRolePermissions } from "@/lib/org/customRoles";
-import { can } from "@/lib/permissions/can";
-import { createSupabaseServerForRequest } from "@/lib/supabase/server";
+import { resolveOrgRolePermissions } from "@/src/shared/org/customRoles";
+import { can } from "@/src/shared/permissions/can";
+import { createSupabaseServerForRequest } from "@/src/shared/supabase/server";
 import {
   exchangeFacebookCodeForUserToken,
   getFacebookOauthConfig,
   listFacebookPagesForUserToken,
   verifySignedFacebookOauthState
-} from "@/modules/communications/integrations/facebook-oauth";
-import type { OrgRole } from "@/modules/core/access";
+} from "@/src/features/communications/integrations/facebook-oauth";
+import type { OrgRole } from "@/src/features/core/access";
 
 export const runtime = "nodejs";
 

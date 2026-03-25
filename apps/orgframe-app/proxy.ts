@@ -9,9 +9,9 @@ import {
   shouldSkipCustomDomainRoutingPath,
   resolveOrgSubdomain,
   isReservedSubdomain
-} from "@/lib/domains/customDomains";
-import { updateSupabaseSessionFromProxy } from "@/lib/supabase/proxy";
-import { getSupabasePublicConfig } from "@/lib/supabase/config";
+} from "@/src/shared/domains/customDomains";
+import { updateSupabaseSessionFromProxy } from "@/src/shared/supabase/proxy";
+import { getSupabasePublicConfig } from "@/src/shared/supabase/config";
 
 let lookupClient: ReturnType<typeof createClient<any>> | null = null;
 
@@ -30,6 +30,38 @@ function getLookupClient() {
   });
 
   return lookupClient;
+}
+
+function parseHostWithPort(value: string | null | undefined) {
+  const raw = value?.split(",")[0]?.trim() ?? "";
+  if (!raw) {
+    return {
+      host: "",
+      port: ""
+    };
+  }
+
+  try {
+    const parsed = new URL(`http://${raw}`);
+    return {
+      host: normalizeHost(parsed.hostname),
+      port: parsed.port.trim()
+    };
+  } catch {
+    const host = normalizeHost(raw);
+    const portMatch = raw.match(/:(\d+)$/);
+    return {
+      host,
+      port: portMatch?.[1]?.trim() ?? ""
+    };
+  }
+}
+
+function applyRedirectHostname(url: URL, hostname: string, port: string) {
+  url.hostname = hostname;
+  if (port) {
+    url.port = port;
+  }
 }
 
 async function resolveOrgSlugForDomain(host: string) {
@@ -58,8 +90,10 @@ async function resolveOrgSlugForDomain(host: string) {
 }
 
 export async function proxy(request: NextRequest) {
-  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = normalizeHost(forwardedHost || request.headers.get("host"));
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const hostHeader = forwardedHost || request.headers.get("host");
+  const parsedHost = parseHostWithPort(hostHeader);
+  const host = parsedHost.host;
   const tenantBaseHosts = getTenantBaseHosts();
   const platformHosts = getPlatformHosts();
   const orgSubdomain = resolveOrgSubdomain(host, tenantBaseHosts);
@@ -67,7 +101,7 @@ export async function proxy(request: NextRequest) {
   const legacyOrgPathRedirect = getLegacyOrgPathRedirect(host, request.nextUrl.pathname, tenantBaseHosts);
   if (legacyOrgPathRedirect) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.hostname = `${legacyOrgPathRedirect.orgSlug}.${legacyOrgPathRedirect.baseHost}`;
+    applyRedirectHostname(redirectUrl, `${legacyOrgPathRedirect.orgSlug}.${legacyOrgPathRedirect.baseHost}`, parsedHost.port);
     redirectUrl.pathname = legacyOrgPathRedirect.pathname;
     return NextResponse.redirect(redirectUrl, { status: 301 });
   }
@@ -81,39 +115,42 @@ export async function proxy(request: NextRequest) {
 
     if (alreadyOrgPrefixed) {
       const redirectUrl = request.nextUrl.clone();
-      redirectUrl.hostname = host;
+      applyRedirectHostname(redirectUrl, host, parsedHost.port);
       redirectUrl.pathname = stripOrgPrefixPath(currentPathname, prefix);
       return NextResponse.redirect(redirectUrl, { status: 308 });
     }
 
     rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = currentPathname === "/" ? prefix : `${prefix}${currentPathname}`;
-  } else if (host && !platformHosts.has(host) && !shouldSkipCustomDomainRoutingPath(request.nextUrl.pathname)) {
+  } else if (host && !platformHosts.has(host)) {
     const orgSlug = await resolveOrgSlugForDomain(host);
 
     if (orgSlug) {
-      if (shouldForceOrgDashboardHost(request.nextUrl.pathname)) {
+      const redirectHost = getCustomDomainRedirectHost(request.nextUrl.pathname, orgSlug);
+
+      if (redirectHost) {
         const protocol = getRequestProtocol(request);
-        const dashboardHost = `${orgSlug}.${getPlatformHost()}`;
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.protocol = `${protocol}:`;
-        redirectUrl.hostname = dashboardHost;
+        applyRedirectHostname(redirectUrl, redirectHost, parsedHost.port);
         return NextResponse.redirect(redirectUrl, { status: 307 });
       }
 
-      const prefix = `/${orgSlug}`;
-      const currentPathname = request.nextUrl.pathname;
-      const alreadyOrgPrefixed = currentPathname === prefix || currentPathname.startsWith(`${prefix}/`);
+      if (!shouldSkipCustomDomainRoutingPath(request.nextUrl.pathname)) {
+        const prefix = `/${orgSlug}`;
+        const currentPathname = request.nextUrl.pathname;
+        const alreadyOrgPrefixed = currentPathname === prefix || currentPathname.startsWith(`${prefix}/`);
 
-      if (alreadyOrgPrefixed) {
-        const redirectUrl = request.nextUrl.clone();
-        redirectUrl.hostname = host;
-        redirectUrl.pathname = stripOrgPrefixPath(currentPathname, prefix);
-        return NextResponse.redirect(redirectUrl, { status: 308 });
+        if (alreadyOrgPrefixed) {
+          const redirectUrl = request.nextUrl.clone();
+          applyRedirectHostname(redirectUrl, host, parsedHost.port);
+          redirectUrl.pathname = stripOrgPrefixPath(currentPathname, prefix);
+          return NextResponse.redirect(redirectUrl, { status: 308 });
+        }
+
+        rewriteUrl = request.nextUrl.clone();
+        rewriteUrl.pathname = currentPathname === "/" ? prefix : `${prefix}${currentPathname}`;
       }
-
-      rewriteUrl = request.nextUrl.clone();
-      rewriteUrl.pathname = currentPathname === "/" ? prefix : `${prefix}${currentPathname}`;
     }
   }
 
@@ -174,8 +211,38 @@ function getRequestProtocol(request: NextRequest) {
   return request.nextUrl.protocol === "https:" ? "https" : "http";
 }
 
-function shouldForceOrgDashboardHost(pathname: string) {
-  return pathname.startsWith("/manage") || pathname.startsWith("/tools");
+const ORG_SCOPED_ROOT_SEGMENTS = new Set(["manage", "tools"]);
+const PLATFORM_ONLY_ROOT_SEGMENTS = new Set(["account", "api", "auth", "brand", "forbidden", "x"]);
+
+export function getCustomDomainRedirectHost(pathname: string, orgSlug: string) {
+  const trimmedPath = pathname.replace(/^\/+/, "");
+  if (!trimmedPath) {
+    return null;
+  }
+
+  const [firstSegment, secondSegment] = trimmedPath.split("/");
+  const platformHost = getPlatformHost();
+
+  if (firstSegment && ORG_SCOPED_ROOT_SEGMENTS.has(firstSegment)) {
+    return `${orgSlug}.${platformHost}`;
+  }
+
+  if (firstSegment && PLATFORM_ONLY_ROOT_SEGMENTS.has(firstSegment)) {
+    return platformHost;
+  }
+
+  if (
+    firstSegment &&
+    secondSegment &&
+    firstSegment !== orgSlug &&
+    ORG_SEGMENT_PATTERN.test(firstSegment) &&
+    !NON_ORG_PATH_SEGMENTS.has(firstSegment) &&
+    !isReservedSubdomain(firstSegment)
+  ) {
+    return platformHost;
+  }
+
+  return null;
 }
 
 function getDomainLookupCandidates(host: string) {

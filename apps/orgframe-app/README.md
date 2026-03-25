@@ -110,17 +110,17 @@ Org routes (`orgSlug` is always first segment):
 - `/[orgSlug]`
 - `/[orgSlug]/[pageSlug]`
 - `/[orgSlug]/icon`
-- `/[orgSlug]/manage`
-- `/[orgSlug]/manage/site`
-- `/[orgSlug]/manage/info`
-- `/[orgSlug]/manage/branding`
-- `/[orgSlug]/manage/access`
-- `/[orgSlug]/manage/billing`
-- `/[orgSlug]/manage/programs`
-- `/[orgSlug]/manage/programs/[programId]`
-- `/[orgSlug]/manage/forms`
-- `/[orgSlug]/manage/forms/[formId]`
-- `/[orgSlug]/manage/forms/[formId]/submissions`
+- `/[orgSlug]/tools`
+- `/[orgSlug]/tools/site`
+- `/[orgSlug]/tools/info`
+- `/[orgSlug]/tools/branding`
+- `/[orgSlug]/tools/access`
+- `/[orgSlug]/tools/billing`
+- `/[orgSlug]/tools/programs`
+- `/[orgSlug]/tools/programs/[programId]`
+- `/[orgSlug]/tools/forms`
+- `/[orgSlug]/tools/forms/[formId]`
+- `/[orgSlug]/tools/forms/[formId]/submissions`
 - `/[orgSlug]/programs`
 - `/[orgSlug]/programs/[programSlug]`
 - `/[orgSlug]/register/[formSlug]`
@@ -182,10 +182,10 @@ Execution model:
 
 ### Adding a new AI Tool/Intent
 
-1. Add a Zod input schema in [`modules/ai/schemas.ts`](/Users/koenstewart/Documents/Sports SaaS/modules/ai/schemas.ts).
-2. Implement tool handler in [`modules/ai/tools/`](/Users/koenstewart/Documents/Sports SaaS/modules/ai/tools).
+1. Add a Zod input schema in [`src/features/ai/schemas.ts`](/Users/koenstewart/Documents/Sports SaaS/apps/orgframe-app/src/features/ai/schemas.ts).
+2. Implement tool handler in [`src/features/ai/tools/`](/Users/koenstewart/Documents/Sports SaaS/apps/orgframe-app/src/features/ai/tools).
 3. Define required permission(s), dry-run behavior, and execute behavior.
-4. Register in [`modules/ai/tools/registry.ts`](/Users/koenstewart/Documents/Sports SaaS/modules/ai/tools/registry.ts) and expose JSON schema for OpenAI tool calling.
+4. Register in [`src/features/ai/tools/registry.ts`](/Users/koenstewart/Documents/Sports SaaS/apps/orgframe-app/src/features/ai/tools/registry.ts) and expose JSON schema for OpenAI tool calling.
 5. For executable actions, emit a versioned `AiChangesetV1` and wire confirm-time execution through `execute_changes`.
 6. Add/extend migrations or RPCs as needed for transactional writes and stale-precondition checks.
 
@@ -205,7 +205,7 @@ The app still needs its runtime Sheets identity for ongoing sync/reconcile after
 
 ## Site Management
 
-- Use `/{orgSlug}/manage/site` to manage pages and navigation.
+- Use `/{orgSlug}/tools/site` to manage pages and navigation.
 - Page content is powered by `org_pages` + `org_page_blocks`.
 - Navigation is powered by `org_nav_items`.
 

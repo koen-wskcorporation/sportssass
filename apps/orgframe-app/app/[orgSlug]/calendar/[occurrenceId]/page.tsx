@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { BackButton } from "@orgframe/ui/ui/back-button";
-import { Card, CardContent, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
-import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
-import { getCalendarOccurrenceReadModel } from "@/modules/calendar/db/queries";
+import { BackButton } from "@orgframe/ui/primitives/back-button";
+import { Card, CardContent, CardHeader, CardTitle } from "@orgframe/ui/primitives/card";
+import { PageHeader } from "@orgframe/ui/primitives/page-header";
+import { getOrgPublicContext } from "@/src/shared/org/getOrgPublicContext";
+import { getCalendarOccurrenceReadModel } from "@/src/features/calendar/db/queries";
 
 export const metadata: Metadata = {
   title: "Calendar Item"

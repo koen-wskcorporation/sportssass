@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { buttonVariants } from "@orgframe/ui";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser } from "@/src/features/auth/server/getSessionUser";
 
 function getAppOrigin() {
   const configuredOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? process.env.ORGFRAME_APP_ORIGIN ?? "https://orgframe.app";

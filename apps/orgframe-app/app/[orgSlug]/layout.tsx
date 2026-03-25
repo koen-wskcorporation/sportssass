@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { BrandingCssVarsBridge } from "@orgframe/ui/shared/BrandingCssVarsBridge";
-import { OrgHeader } from "@orgframe/ui/shared/OrgHeader";
-import { applyBrandingVars } from "@/lib/branding/applyBrandingVars";
-import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
-import { shouldShowBranchHeaders } from "@/lib/env/branchVisibility";
-import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
-import { listOrgPagesForHeader, listOrgSiteStructureNodesForManage, resolveOrgSiteStructureForHeader } from "@/modules/site-builder/db/queries";
+import { BrandingCssVarsBridge } from "@/src/features/core/layout/components/BrandingCssVarsBridge";
+import { OrgHeader } from "@/src/features/core/layout/components/OrgHeader";
+import { applyBrandingVars } from "@/src/shared/branding/applyBrandingVars";
+import { getOrgAssetPublicUrl } from "@/src/shared/branding/getOrgAssetPublicUrl";
+import { shouldShowBranchHeaders } from "@/src/shared/env/branchVisibility";
+import { getOrgRequestContext } from "@/src/shared/org/getOrgRequestContext";
+import { listOrgPagesForHeader, listOrgSiteStructureNodesForManage, resolveOrgSiteStructureForHeader } from "@/src/features/site/db/queries";
 
 export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
   const { orgSlug } = await params;
@@ -15,10 +15,10 @@ export async function generateMetadata({ params }: { params: Promise<{ orgSlug: 
   return {
     title: {
       default: "Home",
-      template: `%s | ${orgName}`
+      template: `%s | ${orgName} | OrgFrame`
     },
     icons: {
-      icon: `/${orgSlug}/icon`
+      icon: "/icon"
     }
   };
 }

@@ -1,16 +1,34 @@
 import { notFound } from "next/navigation";
-import { Alert } from "@orgframe/ui/ui/alert";
-import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { ManageCalendarSection } from "@/app/[orgSlug]/manage/calendar/ManageCalendarSection";
-import { getOrgRequestContext } from "@/lib/org/getOrgRequestContext";
-import { can } from "@/lib/permissions/can";
-import { getCalendarWorkspaceDataAction } from "@/modules/calendar/actions";
-import { scopeCalendarReadModelByContext } from "@/modules/calendar/read-model-scope";
-import { getProgramDetailsBySlug } from "@/modules/programs/db/queries";
+import type { Metadata } from "next";
+import { Alert } from "@orgframe/ui/primitives/alert";
+import { PageHeader } from "@orgframe/ui/primitives/page-header";
+import { ManageCalendarSection } from "@/app/[orgSlug]/tools/calendar/ManageCalendarSection";
+import { getOrgRequestContext } from "@/src/shared/org/getOrgRequestContext";
+import { can } from "@/src/shared/permissions/can";
+import { getCalendarWorkspaceDataAction } from "@/src/features/calendar/actions";
+import { scopeCalendarReadModelByContext } from "@/src/features/calendar/read-model-scope";
+import { getProgramDetailsBySlug } from "@/src/features/programs/db/queries";
 
 type TeamCalendarPageProps = {
   params: Promise<{ orgSlug: string; programSlug: string; divisionSlug: string; teamSlug: string }>;
 };
+
+function titleFromSlug(slug: string) {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export async function generateMetadata({ params }: TeamCalendarPageProps): Promise<Metadata> {
+  const { teamSlug } = await params;
+  const teamTitle = titleFromSlug(teamSlug) || "Team";
+
+  return {
+    title: `${teamTitle} Calendar`
+  };
+}
 
 export default async function ProgramTeamCalendarPage({ params }: TeamCalendarPageProps) {
   const { orgSlug, programSlug, divisionSlug, teamSlug } = await params;

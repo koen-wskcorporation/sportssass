@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveOrgRolePermissions } from "@/lib/org/customRoles";
-import { can } from "@/lib/permissions/can";
-import { createSupabaseServerForRequest } from "@/lib/supabase/server";
+import { resolveOrgRolePermissions } from "@/src/shared/org/customRoles";
+import { can } from "@/src/shared/permissions/can";
+import { createSupabaseServerForRequest } from "@/src/shared/supabase/server";
 import {
   buildGoogleSheetsOauthDialogUrl,
   createSignedGoogleSheetsOauthState,
   getGoogleSheetsOauthConfig
-} from "@/modules/forms/integrations/google-sheets/oauth";
-import type { OrgRole } from "@/modules/core/access";
+} from "@/src/features/forms/integrations/google-sheets/oauth";
+import type { OrgRole } from "@/src/features/core/access";
 
 export const runtime = "nodejs";
 

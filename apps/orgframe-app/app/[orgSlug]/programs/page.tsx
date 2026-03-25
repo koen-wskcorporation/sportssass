@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Alert } from "@orgframe/ui/ui/alert";
-import { PageHeader } from "@orgframe/ui/ui/page-header";
-import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
-import { getOrgPublicContext } from "@/lib/org/getOrgPublicContext";
-import { listPublishedProgramsForCatalog } from "@/modules/programs/db/queries";
+import { Alert } from "@orgframe/ui/primitives/alert";
+import { PageHeader } from "@orgframe/ui/primitives/page-header";
+import { getOrgAssetPublicUrl } from "@/src/shared/branding/getOrgAssetPublicUrl";
+import { getOrgPublicContext } from "@/src/shared/org/getOrgPublicContext";
+import { listPublishedProgramsForCatalog } from "@/src/features/programs/db/queries";
 import { ProgramsCatalogRepeater } from "./ProgramsCatalogRepeater";
 
 export const metadata: Metadata = {

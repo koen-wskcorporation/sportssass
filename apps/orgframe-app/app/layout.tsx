@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
-import { AppFooter } from "@orgframe/ui/shared/AppFooter";
-import { PrimaryHeader } from "@orgframe/ui/shared/PrimaryHeader";
-import { ConfirmDialogProvider } from "@orgframe/ui/ui/confirm-dialog";
-import { ThemeModeProvider } from "@orgframe/ui/ui/theme-mode";
-import { ToastProvider } from "@orgframe/ui/ui/toast";
-import { shouldShowBranchHeaders } from "@/lib/env/branchVisibility";
-import { getTenantBaseHosts, normalizeHost, resolveOrgSubdomain } from "@/lib/domains/customDomains";
-import { FileManagerProvider } from "@/modules/file-manager";
-import { UploadProvider } from "@/modules/uploads";
-import { OrderPanelProvider } from "@/modules/orders";
+import { AppFooter } from "@/src/features/core/layout/components/AppFooter";
+import { PrimaryHeader } from "@/src/features/core/layout/components/PrimaryHeader";
+import { ConfirmDialogProvider } from "@orgframe/ui/primitives/confirm-dialog";
+import { ThemeModeProvider } from "@orgframe/ui/primitives/theme-mode";
+import { ToastProvider } from "@orgframe/ui/primitives/toast";
+import { shouldShowBranchHeaders } from "@/src/shared/env/branchVisibility";
+import { getTenantBaseHosts, normalizeHost, resolveOrgSubdomain } from "@/src/shared/domains/customDomains";
+import { FileManagerProvider } from "@/src/features/files/manager";
+import { UploadProvider } from "@/src/features/files/uploads";
+import { OrderPanelProvider } from "@/src/features/orders";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
@@ -21,10 +21,44 @@ export const metadata: Metadata = {
   description: "Multi-tenant sports operations suite"
 };
 
+function parseHeaderHostWithPort(value: string | null | undefined) {
+  const raw = value?.split(",")[0]?.trim() ?? "";
+  if (!raw) {
+    return {
+      host: "",
+      hostWithPort: "",
+      port: ""
+    };
+  }
+
+  try {
+    const parsed = new URL(`http://${raw}`);
+    const host = normalizeHost(parsed.hostname);
+    const port = parsed.port.trim();
+    return {
+      host,
+      hostWithPort: port ? `${host}:${port}` : host,
+      port
+    };
+  } catch {
+    const host = normalizeHost(raw);
+    const portMatch = raw.match(/:(\d+)$/);
+    const port = portMatch?.[1]?.trim() ?? "";
+    return {
+      host,
+      hostWithPort: port ? `${host}:${port}` : host,
+      port
+    };
+  }
+}
+
 async function getHeaderRoutingContext() {
   const headerStore = await headers();
-  const forwardedHost = headerStore.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = normalizeHost(forwardedHost || headerStore.get("host"));
+  const forwardedHost = headerStore.get("x-forwarded-host");
+  const hostHeader = forwardedHost || headerStore.get("host");
+  const parsedHost = parseHeaderHostWithPort(hostHeader);
+  const host = parsedHost.host;
+  const hostWithPort = parsedHost.hostWithPort || host;
   const tenantBaseHosts = getTenantBaseHosts();
   const orgSubdomain = resolveOrgSubdomain(host, tenantBaseHosts);
 
@@ -33,7 +67,8 @@ async function getHeaderRoutingContext() {
     forwardedProto === "http" || forwardedProto === "https" ? forwardedProto : process.env.NODE_ENV === "production" ? "https" : "http";
 
   if (orgSubdomain) {
-    const tenantBaseOrigin = `${protocol}://${orgSubdomain.baseHost}`;
+    const baseHostWithPort = parsedHost.port ? `${orgSubdomain.baseHost}:${parsedHost.port}` : orgSubdomain.baseHost;
+    const tenantBaseOrigin = `${protocol}://${baseHostWithPort}`;
     return {
       currentOrgSlug: orgSubdomain.orgSlug,
       homeHref: `${tenantBaseOrigin}/`,
@@ -45,7 +80,7 @@ async function getHeaderRoutingContext() {
     return {
       currentOrgSlug: null,
       homeHref: "/",
-      tenantBaseOrigin: `${protocol}://${host}`
+      tenantBaseOrigin: `${protocol}://${hostWithPort}`
     };
   }
 

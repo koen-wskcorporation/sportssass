@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { createSupabaseServer } from "@/lib/supabase/server";
+import { getSessionUser } from "@/src/features/core/auth/server/getSessionUser";
+import { createSupabaseServer } from "@/src/shared/supabase/server";
 import {
   getFolderById,
   insertUploadedFileRecord,
   uploadBinaryToStorage
-} from "@/modules/file-manager/server";
-import { uploadPurposeConfigByPurpose } from "@/modules/uploads/config";
+} from "@/src/features/files/manager/server";
+import { uploadPurposeConfigByPurpose } from "@/src/features/files/uploads/config";
 import type {
   FileManagerAccessTag,
   FileManagerEntityType,
@@ -15,7 +15,7 @@ import type {
   FileManagerUploadPayload,
   FileManagerUploadResult,
   FileManagerVisibility
-} from "@/modules/file-manager/types";
+} from "@/src/features/files/manager/types";
 
 const payloadSchema = z.object({
   scope: z.enum(["organization", "personal"] satisfies FileManagerScope[]),

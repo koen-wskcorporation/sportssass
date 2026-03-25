@@ -1,7 +1,7 @@
 "use client";
 
-import { OrgCard } from "@orgframe/ui/dashboard/OrgCard";
-import { Repeater } from "@orgframe/ui/ui/repeater";
+import { OrgCard } from "@/src/features/core/dashboard/components/OrgCard";
+import { Repeater } from "@orgframe/ui/primitives/repeater";
 
 type OrganizationItem = {
   orgId: string;

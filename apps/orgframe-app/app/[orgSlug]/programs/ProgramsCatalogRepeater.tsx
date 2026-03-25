@@ -1,8 +1,8 @@
 "use client";
 
-import { Button } from "@orgframe/ui/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/ui/card";
-import { Repeater } from "@orgframe/ui/ui/repeater";
+import { Button } from "@orgframe/ui/primitives/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@orgframe/ui/primitives/card";
+import { Repeater } from "@orgframe/ui/primitives/repeater";
 
 type ProgramCatalogItem = {
   id: string;

@@ -2,8 +2,8 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createSupabaseServer } from "@/lib/supabase/server";
-import { createOptionalSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import { createSupabaseServer } from "@/src/shared/supabase/server";
+import { createOptionalSupabaseServiceRoleClient } from "@/src/shared/supabase/service-role";
 
 function cleanValue(value: FormDataEntryValue | null) {
   if (typeof value !== "string") {

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { ConfirmDialogProvider } from "@orgframe/ui/ui/confirm-dialog";
+import { ConfirmDialogProvider } from "@orgframe/ui/primitives/confirm-dialog";
 
 export const metadata: Metadata = {
   title: 'OrgFrame | Sports Operations Platform',

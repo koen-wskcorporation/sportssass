@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getSignedProfileAvatarUrl } from "@/lib/account/getSignedProfileAvatarUrl";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { getOrgAssetPublicUrl } from "@/lib/branding/getOrgAssetPublicUrl";
-import { listUserOrgs } from "@/lib/org/listUserOrgs";
-import { createSupabaseServer } from "@/lib/supabase/server";
+import { getSignedProfileAvatarUrl } from "@/src/features/core/account/storage/getSignedProfileAvatarUrl";
+import { getSessionUser } from "@/src/features/core/auth/server/getSessionUser";
+import { getOrgAssetPublicUrl } from "@/src/shared/branding/getOrgAssetPublicUrl";
+import { listUserOrgs } from "@/src/shared/org/listUserOrgs";
+import { createSupabaseServer } from "@/src/shared/supabase/server";
 
 export async function GET() {
   const sessionUser = await getSessionUser();
